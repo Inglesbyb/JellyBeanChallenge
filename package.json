@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "vite --port 5173 --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:sync": "npm run build && cap sync android",
+    "cap:open": "cap open android"
   },
   "devDependencies": {
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "matter-js": "^0.20.0"
   }
 }

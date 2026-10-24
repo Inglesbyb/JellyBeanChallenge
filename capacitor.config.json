@@ -1,0 +1,6 @@
+{
+  "appId": "com.jellybeans.gamereels",
+  "appName": "Game Reels",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
