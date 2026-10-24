@@ -19,33 +19,30 @@ export class MultiplierRunner extends Game {
     id: 'multiplier-runner',
     title: 'Albert Dock Rush',
     icon: '⚓',
-    hint: 'DRAG left/right! Dodge central posts, pick blue gates, clash with gangs & climb victory stairs!',
-    baseLikes: 4180,
+    hint: 'DRAG left/right! Pick +2/-2 gates, dodge dock hazards & build your squad to defeat the 10, 20 & 30 Bean Bosses!',
+    baseLikes: 4320,
   };
 
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
-    this.count = saved ? Math.max(8, saved.count) : 10;
+    this.count = 10; // Exactly 10 starting jellybeans as requested!
     this.dist = saved ? saved.dist : 0;
-    this.crowdX = MID; // Center line: requires active steering to avoid central spike posts!
+    this.crowdX = MID;
     this.targetX = this.crowdX;
     this.rows = [];
-    this.farD = this.dist + 480;
     this.t = 0;
-    this.speed = 195; // 25% slower running speed for tactical readability
+    this.speed = 195; // Tactically readable speed
     this.boostTimer = 0;
     this.feverRush = 0;
-    this.shield = 0;
-    this.nextMilestone = Math.floor(this.dist / 2200) * 2200 + 2200;
 
-    // Active boss & victory stairs state
-    this.activeBoss = null;
-    this.bossState = 'none'; // 'none' | 'fighting' | 'stairs'
+    // Stage progression: Boss 1: 10, Boss 2: 20, Boss 3: 30, etc.
+    this.stage = saved?.stage || 1;
+    this.bossState = 'none'; // 'none' | 'stairs'
     this.stairsProgress = 0;
     this.stairsScoreMult = 1;
 
-    // Visual scenery props
+    // Visual scenery props along the quayside
     this.quaysideProps = [
       { d: 120, type: 'bollard' },
       { d: 280, type: 'lamp' },
@@ -58,69 +55,88 @@ export class MultiplierRunner extends Game {
     ];
 
     if (saved) this.grace = 1.5;
-    this.spawnRows();
+    this.initStage(this.stage);
   }
 
   serialize() {
     return {
       count: Math.round(this.count),
       dist: this.dist,
-      rowIdx: this.rowIdx,
+      stage: this.stage,
     };
   }
 
   restoreLabel() {
-    return `${Math.round(this.count)} dock runners`;
+    return `${Math.round(this.count)} dock runners (Stage ${this.stage})`;
   }
 
   crowdRadius() {
-    return clamp(6 + 4.6 * Math.sqrt(Math.min(this.count, 220)), 12, 85);
+    return clamp(8 + 3.8 * Math.sqrt(Math.min(this.count, 60)), 16, 52);
   }
 
-  /* ------------------------------------------------------------ Procedural Track Generation */
-  spawnRows() {
-    while (this.farD < this.dist + 1600) {
-      // Milestone Boss & Victory Stairs every ~2200m
-      if (this.farD >= this.nextMilestone && !this.rows.some((r) => r.kind === 'boss' && Math.abs(r.d - this.nextMilestone) < 400)) {
-        this.rows.push(this.makeBossRow(this.nextMilestone));
-        this.nextMilestone += 2400;
-        this.farD += ROW_GAP * 2.8;
-        this.rowIdx++;
-        continue;
+  /* ------------------------------------------------------------ Stage & Boss Progression */
+  initStage(stage) {
+    this.stage = stage;
+    this.bossReq = stage * 10; // Boss 1 = 10, Boss 2 = 20, Boss 3 = 30...
+    this.stageStartDist = this.dist;
+    this.stageLength = 2200;
+    this.bossDist = this.stageStartDist + this.stageLength;
+    this.spawnStageRows(stage);
+  }
+
+  spawnStageRows(stage) {
+    const startD = this.stageStartDist + 350;
+    const endD = this.bossDist - 250;
+    const gap = 270;
+    let curD = startD;
+    let step = 0;
+
+    while (curD < endD) {
+      if (step % 2 === 0) {
+        this.rows.push(this.makeStageGate(curD, stage, step));
+      } else {
+        this.rows.push(this.makeStageObstacle(curD, stage, step));
       }
-
-      this.rows.push(this.makeRow(this.farD));
-      this.farD += ROW_GAP;
-      this.rowIdx++;
+      curD += gap;
+      step++;
     }
+
+    // Boss waiting at the end of the stage
+    this.rows.push(this.makeBossRow(this.bossDist, stage));
   }
 
-  makeBossRow(d) {
-    const tier = Math.floor(d / 2200);
-    let title, req, hp, color, type;
+  makeBossRow(d, stage) {
+    const req = stage * 10;
+    const hp = req;
+    let title, color, type;
 
-    if (tier <= 1) {
+    if (stage === 1) {
       type = 'captain';
       title = 'PIRATE CAPTAIN CRUMP';
-      req = 30;
-      hp = 35;
       color = '#e63946';
-    } else if (tier === 2) {
+    } else if (stage === 2) {
       type = 'kraken';
       title = 'MERSEY KRAKEN MECHA';
-      req = 55;
-      hp = 65;
       color = '#7209b7';
-    } else {
+    } else if (stage === 3) {
       type = 'colossus';
       title = 'ROYAL DOCK LEVIATHAN';
-      req = 90;
-      hp = 110;
       color = '#f72585';
+    } else {
+      const bossTypes = [
+        { type: 'captain', title: `DREAD PIRATE CRUMP Mk.${stage}`, color: '#e63946' },
+        { type: 'kraken', title: `MERSEY CYBER KRAKEN Mk.${stage}`, color: '#7209b7' },
+        { type: 'colossus', title: `ROYAL ALBERT COLOSSUS Mk.${stage}`, color: '#f72585' },
+      ];
+      const b = bossTypes[(stage - 1) % 3];
+      type = b.type;
+      title = b.title;
+      color = b.color;
     }
 
     return {
       d,
+      stage,
       kind: 'boss',
       done: false,
       type,
@@ -130,94 +146,101 @@ export class MultiplierRunner extends Game {
       maxHp: hp,
       x: MID,
       y: 0,
-      r: 64,
+      r: 68,
       slamTimer: 0,
       shockwaves: [],
       defeated: false,
+      clashing: false,
+      clashTimer: 0,
     };
   }
 
-  makeRow(d) {
-    const cycle = this.rowIdx % 9;
+  /* ------------------------------------------------------------ Tactical Math Gates (+2 / -2) */
+  makeStageGate(d, stage, step) {
+    const isMoving = stage >= 2 && Math.random() < 0.3;
+    let leftGate, rightGate;
 
-    // Pattern 0 & 4: Dual Multiplier Gates with Central Spike Divider
-    if (cycle === 0 || cycle === 4) {
-      const isMoving = Math.random() < 0.28;
-      const roll = Math.random();
-      let leftGate, rightGate;
+    // Tactical calculated values:
+    const baseAdd = Math.min(5, 2 + Math.floor(stage * 0.6)); // 2 for stg 1, 3 for stg 2, 4 for stg 3
+    const bigAdd = baseAdd + 1;
+    const smallAdd = Math.max(1, baseAdd - 1);
+    const penVal = Math.min(4, 2 + Math.floor(stage * 0.4)); // 2 for stg 1, 3 for stg 2
 
-      if (roll < 0.35) {
-        // High Stakes: Blue Multiplier vs Red Penalty
-        const mult = Math.random() < 0.4 ? 3 : 2;
-        const pen = Math.round(rand(6, 14) + this.dist / 350);
-        const multLeft = Math.random() < 0.5;
-
-        if (multLeft) {
-          leftGate = { op: '×', v: mult, good: true };
-          rightGate = { op: '−', v: pen, good: false };
-        } else {
-          leftGate = { op: '−', v: pen, good: false };
-          rightGate = { op: '×', v: mult, good: true };
-        }
-      } else if (roll < 0.7) {
-        // Dilemma: Safe Addition vs Multiplier
-        const add = Math.round(rand(8, 16) + Math.min(20, this.dist / 200));
-        const mult = 2;
-        const addLeft = Math.random() < 0.5;
-
-        if (addLeft) {
-          leftGate = { op: '+', v: add, good: true };
-          rightGate = { op: '×', v: mult, good: true };
-        } else {
-          leftGate = { op: '×', v: mult, good: true };
-          rightGate = { op: '+', v: add, good: true };
-        }
-      } else {
-        // Lesser of Two Evils (Both red! Player must pick smallest loss)
-        const penSmall = Math.round(rand(4, 8));
-        const penLarge = Math.round(rand(14, 24));
-        const smallLeft = Math.random() < 0.5;
-
-        if (smallLeft) {
-          leftGate = { op: '−', v: penSmall, good: false };
-          rightGate = { op: '÷', v: 2, good: false };
-        } else {
-          leftGate = { op: '÷', v: 2, good: false };
-          rightGate = { op: '−', v: penSmall, good: false };
-        }
-      }
-
-      return {
-        d,
-        kind: 'gate',
-        gates: [leftGate, rightGate],
-        isMoving,
-        movePhase: Math.random() * TAU,
-        moveAmp: 30,
-        done: false,
-      };
+    const roll = Math.random();
+    if (roll < 0.45) {
+      // Dilemma: Boost vs Penalty (+3 vs -2 or +2 vs -2)
+      const isLeftGood = Math.random() < 0.5;
+      const goodGate = { op: '+', v: Math.random() < 0.5 ? baseAdd : bigAdd, good: true };
+      const badGate = { op: '−', v: penVal, good: false };
+      leftGate = isLeftGood ? goodGate : badGate;
+      rightGate = isLeftGood ? badGate : goodGate;
+    } else if (roll < 0.8) {
+      // Choice: Big Boost vs Small Boost (+3 vs +1)
+      const isLeftBig = Math.random() < 0.5;
+      const g1 = { op: '+', v: bigAdd, good: true };
+      const g2 = { op: '+', v: smallAdd, good: true };
+      leftGate = isLeftBig ? g1 : g2;
+      rightGate = isLeftBig ? g2 : g1;
+    } else {
+      // Lesser Penalty: Small loss vs Larger loss (-1 vs -3)
+      const isLeftSmall = Math.random() < 0.5;
+      const g1 = { op: '−', v: Math.max(1, penVal - 1), good: false };
+      const g2 = { op: '−', v: penVal + 1, good: false };
+      leftGate = isLeftSmall ? g1 : g2;
+      rightGate = isLeftSmall ? g2 : g1;
     }
 
-    // Pattern 1: Rotating Quayside Sweeper Beam (Center hazard!)
-    if (cycle === 1) {
+    return {
+      d,
+      kind: 'gate',
+      gates: [leftGate, rightGate],
+      isMoving,
+      movePhase: Math.random() * TAU,
+      moveAmp: 28,
+      done: false,
+    };
+  }
+
+  /* ------------------------------------------------------------ Stage Obstacles */
+  makeStageObstacle(d, stage, step) {
+    const obsTypes = ['boulder', 'tnt', 'sweeper', 'drawbridge', 'gang', 'powerup', 'coins'];
+    const typeIdx = (step + stage * 2) % obsTypes.length;
+    const kind = obsTypes[typeIdx];
+
+    if (kind === 'boulder') {
+      const lane = Math.random() < 0.4 ? MID : Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
+      return { d, kind: 'boulder', done: false, x: lane, r: 32, rot: 0 };
+    }
+    if (kind === 'tnt') {
+      const centerTnt = Math.random() < 0.5;
+      const barrels = [];
+      if (centerTnt) {
+        barrels.push({ x: MID, r: 22, fuseT: 0 });
+      } else {
+        barrels.push({ x: TRACK_L + 75, r: 22, fuseT: 0 });
+        barrels.push({ x: TRACK_R - 75, r: 22, fuseT: 0 });
+      }
+      return { d, kind: 'tnt', done: false, barrels };
+    }
+    if (kind === 'sweeper') {
       return {
         d,
         kind: 'sweeper',
         done: false,
         angle: Math.random() * TAU,
-        rotSpeed: rand(2.2, 3.4),
-        beamLen: 170,
-        gapDist: rand(45, 95), // Opening gap in the beam that player must pass through!
+        rotSpeed: 2.2 + stage * 0.3,
+        beamLen: 165,
+        gapDist: 65,
       };
     }
-
-    // Pattern 2: Tough Rival Dock Gang (Requires army to overpower!)
-    if (cycle === 2) {
-      // Gang size scales with distance, creating real stakes
-      const baseGang = Math.round(rand(12, 22) + (this.dist / 280) * 4);
-      const gangCount = clamp(baseGang, 14, 95);
-      const lane = Math.random() < 0.35 ? MID : Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
-
+    if (kind === 'drawbridge') {
+      const bridgeW = 120;
+      const bridgeX = rand(TRACK_L + bridgeW / 2 + 20, TRACK_R - bridgeW / 2 - 20);
+      return { d, kind: 'drawbridge', done: false, x: bridgeX, w: bridgeW, length: 180 };
+    }
+    if (kind === 'gang') {
+      const gangCount = 2 + Math.min(3, Math.floor(stage * 0.7)); // 2-4 scallywags
+      const lane = Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
       return {
         d,
         kind: 'gang',
@@ -225,88 +248,32 @@ export class MultiplierRunner extends Game {
         x: lane,
         n: gangCount,
         maxN: gangCount,
-        r: clamp(18 + Math.sqrt(gangCount) * 5.2, 22, 68),
+        r: 24,
         clashing: false,
         clashT: 0,
       };
     }
-
-    // Pattern 3: Albert Dock Drawbridge (Narrow plank over water canal!)
-    if (cycle === 3) {
-      const bridgeW = rand(105, 140);
-      const bridgeX = rand(TRACK_L + bridgeW / 2 + 15, TRACK_R - bridgeW / 2 - 15);
-      return {
-        d,
-        kind: 'drawbridge',
-        done: false,
-        x: bridgeX,
-        w: bridgeW,
-        length: 180,
-      };
-    }
-
-    // Pattern 5: Explosive Gunpowder Barrels (TNT) in Center & Side Lanes
-    if (cycle === 5) {
-      const centerTnt = Math.random() < 0.65; // High chance of dead-center TNT!
-      const barrels = [];
-      if (centerTnt) {
-        barrels.push({ x: MID, r: 24, fuseT: 0 });
-        if (Math.random() < 0.5) {
-          barrels.push({ x: Math.random() < 0.5 ? TRACK_L + 60 : TRACK_R - 60, r: 22, fuseT: 0 });
-        }
-      } else {
-        barrels.push({ x: TRACK_L + 75, r: 22, fuseT: 0 });
-        barrels.push({ x: TRACK_R - 75, r: 22, fuseT: 0 });
-      }
-
-      return {
-        d,
-        kind: 'tnt',
-        done: false,
-        barrels,
-      };
-    }
-
-    // Pattern 6: Golden Duplicator Cannon / Powerup
-    if (cycle === 6) {
-      const type = Math.random() < 0.55 ? 'cannon' : 'nitro';
+    if (kind === 'powerup') {
+      const type = Math.random() < 0.6 ? 'cannon' : 'nitro';
       const x = Math.random() < 0.5 ? TRACK_L + 85 : TRACK_R - 85;
-      return {
-        d,
-        kind: 'powerup',
-        type,
-        done: false,
-        x,
-        w: 68,
-        h: 46,
-      };
+      return { d, kind: 'powerup', type, done: false, x, w: 68, h: 46 };
     }
-
-    // Pattern 7: Giant Rolling Jawbreaker Boulder
-    if (cycle === 7) {
-      const lane = Math.random() < 0.45 ? MID : Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
-      return {
-        d,
-        kind: 'boulder',
-        done: false,
-        x: lane,
-        r: 34,
-        rot: 0,
-      };
-    }
-
-    // Pattern 8: Golden Sovereign Coins Line (High Risk, High Reward)
-    const coinLane = Math.random() < 0.5 ? TRACK_L + 45 : TRACK_R - 45;
+    // coins
+    const coinLane = Math.random() < 0.5 ? TRACK_L + 50 : TRACK_R - 50;
     return {
       d,
       kind: 'coins',
       done: false,
       coins: [
-        { x: coinLane, yOff: -30, collected: false },
+        { x: coinLane, yOff: -25, collected: false },
         { x: coinLane, yOff: 0, collected: false },
-        { x: coinLane, yOff: 30, collected: false },
+        { x: coinLane, yOff: 25, collected: false },
       ],
     };
+  }
+
+  getUpcomingBoss() {
+    return this.rows.find((r) => r.kind === 'boss' && !r.defeated) || null;
   }
 
   /* ------------------------------------------------------------ Update Loop */
@@ -320,15 +287,15 @@ export class MultiplierRunner extends Game {
       return;
     }
 
-    // Speed & Fever calculation (25% slower for tactical, addictive crowd steering)
+    // Speed calculation
     if (this.boostTimer > 0) {
       this.boostTimer -= dt;
-      this.speed = 345; // 460 * 0.75
+      this.speed = 330;
     } else if (this.feverRush > 0) {
       this.feverRush -= dt;
-      this.speed = 270; // 360 * 0.75
+      this.speed = 265;
     } else {
-      this.speed = 188 + Math.min(95, this.dist / 95); // 250 * 0.75
+      this.speed = 195 + Math.min(50, this.stage * 10);
     }
 
     this.dist += this.speed * dt;
@@ -336,18 +303,16 @@ export class MultiplierRunner extends Game {
 
     const rad = this.crowdRadius();
 
-    // Highly Agile & Responsive Drag & Arrow Steering
+    // Responsive Drag & Arrow Steering
     const minX = TRACK_L + rad * 0.75;
     const maxX = TRACK_R - rad * 0.75;
 
     if (this.input.down) {
-      // Direct instant & smooth pointer tracking
       const target = clamp(this.input.x, minX, maxX);
       this.crowdX += (target - this.crowdX) * Math.min(1, dt * 55);
       this.targetX = this.crowdX;
     } else {
       let steerVel = 0;
-      // High-speed nimble arrow/AD steering (quick lane switching)
       if (this.input.key('arrowleft', 'a')) steerVel -= 820;
       if (this.input.key('arrowright', 'd')) steerVel += 820;
       if (this.input.frameDX) steerVel += this.input.frameDX * 65;
@@ -356,35 +321,18 @@ export class MultiplierRunner extends Game {
       this.targetX = this.crowdX;
     }
 
-    this.spawnRows();
-
     // Process Track Rows
     for (const r of this.rows) {
       if (r.done) continue;
 
-      // Real-time animation / update for active obstacles
       if (r.kind === 'sweeper') {
         r.angle += r.rotSpeed * dt;
       } else if (r.kind === 'boulder') {
         r.rot += dt * 8;
-      } else if (r.kind === 'gang') {
-        // Smart Gang Lateral Movement: larger gangs intercept, smaller gangs scatter!
-        const distToPlayer = r.d - this.dist;
-        if (!r.clashing && distToPlayer < 520 && distToPlayer > 0) {
-          const gangSpd = 145 * dt;
-          if (r.n > this.count) {
-            r.x += clamp(this.crowdX - r.x, -gangSpd, gangSpd);
-          } else {
-            const dirAway = r.x >= MID ? 1 : -1;
-            r.x += dirAway * gangSpd * 0.75;
-          }
-          r.x = clamp(r.x, TRACK_L + r.r, TRACK_R - r.r);
-        }
-        if (r.clashing) this.updateGangClash(r, dt);
       } else if (r.kind === 'boss') {
         const distToBoss = r.d - this.dist;
-        if (distToBoss < 550 && distToBoss > -50 && !r.defeated) {
-          const bossSpd = 95 * dt;
+        if (distToBoss < 500 && distToBoss > -50 && !r.defeated) {
+          const bossSpd = 75 * dt;
           r.x += clamp(this.crowdX - r.x, -bossSpd, bossSpd);
           r.x = clamp(r.x, TRACK_L + 60, TRACK_R - 60);
         }
@@ -393,7 +341,7 @@ export class MultiplierRunner extends Game {
 
       // Check collision when row reaches player height
       if (r.d <= this.dist) {
-        if (!r.done && r.kind !== 'boss' && (!r.clashing || r.n <= 0)) {
+        if (!r.done && r.kind !== 'boss') {
           r.done = true;
           this.resolveRow(r, rad);
           if (this.dead) break;
@@ -401,8 +349,8 @@ export class MultiplierRunner extends Game {
       }
     }
 
-    // Cleanup old rows
-    this.rows = this.rows.filter((r) => r.d > this.dist - 400 || (r.kind === 'boss' && !r.defeated));
+    // Prune completed rows behind the camera
+    this.rows = this.rows.filter((r) => r.d > this.dist - 350 || (r.kind === 'boss' && !r.defeated));
     this.fx.update(dt);
   }
 
@@ -412,18 +360,19 @@ export class MultiplierRunner extends Game {
 
     // 1. Dual Multiplier Gates with Central Spike Divider
     if (r.kind === 'gate') {
+      const midX = MID + (r.isMoving ? Math.sin(this.t * 3 + r.movePhase) * r.moveAmp : 0);
       const dividerW = 26;
-      const dividerLeft = MID - dividerW / 2;
-      const dividerRight = MID + dividerW / 2;
+      const dividerLeft = midX - dividerW / 2;
+      const dividerRight = midX + dividerW / 2;
 
-      // ANTI-AFK CHECK: Did player crash directly into the central iron post?
+      // Crashed into central post?
       if (this.crowdX > dividerLeft - rad * 0.45 && this.crowdX < dividerRight + rad * 0.45) {
-        const cut = Math.max(5, Math.ceil(this.count * 0.5));
+        const cut = 2; // Clean deduction of 2 beans
         this.count = Math.max(0, this.count - cut);
 
         this.fx.text(this.crowdX, y - 30, `IMPALED ON POST! −${cut}`, '#ff0054', 28, 1.1);
-        this.fx.burst(MID, CROWD_Y, '#ff0054', 28, 260, 0.7, 4);
-        this.fx.shake(12, 0.4);
+        this.fx.burst(midX, CROWD_Y, '#ff0054', 22, 240, 0.6, 4);
+        this.fx.shake(10, 0.35);
         this.sounds.hit();
         this.haptics.heavy();
 
@@ -433,32 +382,22 @@ export class MultiplierRunner extends Game {
         }
       }
 
-      // Determine which lane gate was chosen
-      const chosenIdx = this.crowdX < MID ? 0 : 1;
+      // Determine which gate was chosen
+      const chosenIdx = this.crowdX < midX ? 0 : 1;
       const g = r.gates[chosenIdx];
-      const before = this.count;
-      let after = before;
 
-      if (g.op === '+') after = before + g.v;
-      else if (g.op === '×') after = before * g.v;
-      else if (g.op === '−') after = before - g.v;
-      else if (g.op === '÷') after = Math.floor(before / g.v);
-
-      after = Math.min(9999, Math.max(0, Math.round(after)));
-      const isGood = after >= before;
-      this.count = after;
-
-      if (isGood) {
-        this.score += 45;
-        this.fx.text(this.crowdX, y - rad - 28, `${g.op}${g.v}! 🎉`, '#38bdf8', 34, 1.0);
+      if (g.op === '+') {
+        this.count += g.v;
+        this.score += 50 * this.stage;
+        this.fx.text(this.crowdX, y - rad - 28, `+${g.v} BEANS! ✨`, '#38bdf8', 34, 1.0);
         this.fx.ring(this.crowdX, CROWD_Y, '#38bdf8', rad * 2.8, 0.5, 5);
-        this.fx.burst(this.crowdX, CROWD_Y, '#38bdf8', 22, 240, 0.6, 4);
+        this.fx.burst(this.crowdX, CROWD_Y, '#38bdf8', 20, 220, 0.55, 4);
         this.sounds.gate(true);
         this.haptics.medium();
       } else {
-        const loss = before - after;
-        this.fx.text(this.crowdX, y - rad - 28, `PENALTY! −${loss}`, '#ff0054', 32, 1.0);
-        this.fx.burst(this.crowdX, CROWD_Y, '#ff0054', 24, 240, 0.6, 4);
+        this.count = Math.max(0, this.count - g.v);
+        this.fx.text(this.crowdX, y - rad - 28, `PENALTY! −${g.v}`, '#ff0054', 32, 1.0);
+        this.fx.burst(this.crowdX, CROWD_Y, '#ff0054', 22, 220, 0.55, 4);
         this.fx.shake(8, 0.3);
         this.sounds.gate(false);
         this.haptics.heavy();
@@ -478,17 +417,15 @@ export class MultiplierRunner extends Game {
         return;
       }
 
-      // Check distance from beam gap
       const armCos = Math.cos(r.angle);
-      const armSin = Math.sin(r.angle);
       const beamX = MID + armCos * r.gapDist;
 
       if (Math.abs(this.crowdX - beamX) > rad + 24) {
-        const loss = Math.max(4, Math.ceil(this.count * 0.38));
+        const loss = 2; // Exactly 2 beans
         this.count = Math.max(0, this.count - loss);
 
         this.fx.text(this.crowdX, y - 24, `SWEPT OFF QUAY! −${loss}`, '#ff7a88', 26, 0.9);
-        this.fx.burst(this.crowdX, CROWD_Y, '#6a040f', 24, 260, 0.6, 4);
+        this.fx.burst(this.crowdX, CROWD_Y, '#6a040f', 20, 220, 0.5, 4);
         this.fx.shake(9, 0.35);
         this.sounds.hit();
         this.haptics.heavy();
@@ -498,57 +435,80 @@ export class MultiplierRunner extends Game {
           return;
         }
       } else {
-        this.score += 40;
-        this.fx.text(this.crowdX, y - 26, 'CLEARED GAP! +40', '#3dffa2', 20, 0.8);
-        this.sounds.survive();
+        this.score += 25;
+        this.fx.text(this.crowdX, y - 22, 'PERFECT TIMING! +25', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 3. Albert Dock Drawbridge (Narrow plank over water)
-    else if (r.kind === 'drawbridge') {
-      const halfW = r.w / 2;
-      const bLeft = r.x - halfW;
-      const bRight = r.x + halfW;
+    // 3. Rival Dock Gang
+    else if (r.kind === 'gang') {
+      const hit = Math.abs(r.x - this.crowdX) < rad + r.r * 0.85;
+      if (hit) {
+        if (this.boostTimer > 0) {
+          this.score += r.maxN * 50;
+          this.fx.text(r.x, y - 30, 'GANG CRUSHED! 🚀', '#ffd166', 26, 0.9);
+          this.fx.burst(r.x, CROWD_Y, '#ef4444', 24, 240, 0.6, 4);
+          this.sounds.hit();
+        } else {
+          const loss = Math.min(this.count, r.n);
+          this.count = Math.max(0, this.count - loss);
+          this.fx.text(this.crowdX, y - 30, `GANG CLASH! −${loss}`, '#ff0054', 28, 1.0);
+          this.fx.burst(r.x, CROWD_Y, '#ef4444', 20, 200, 0.5, 3.5);
+          this.fx.shake(8, 0.3);
+          this.sounds.hit();
+          this.haptics.heavy();
 
-      // Beans outside the bridge plunge into the canal
-      if (this.crowdX < bLeft || this.crowdX > bRight) {
-        const loss = Math.max(5, Math.ceil(this.count * 0.45));
-        this.count = Math.max(0, this.count - loss);
-
-        this.fx.text(this.crowdX, y - 26, `CANAL PLUNGE! −${loss} 💦`, '#4cc9f0', 26, 1.0);
-        this.fx.burst(this.crowdX, CROWD_Y, '#0077b6', 28, 280, 0.7, 4);
-        this.fx.shake(9, 0.35);
-        this.sounds.bubble();
-        this.haptics.heavy();
-
-        if (this.count <= 0) {
-          this.die('Fell off narrow boardwalk into the dock basin!');
-          return;
+          if (this.count <= 0) {
+            this.die('Overwhelmed by rival dock gang!');
+            return;
+          }
         }
       } else {
-        this.score += 35;
-        this.fx.text(this.crowdX, y - 24, 'BRIDGE CROSSED! +35', '#3dffa2', 20, 0.7);
+        this.score += 30;
+        this.fx.text(this.crowdX, y - 20, 'OUTMANEUVERED! +30', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 4. Explosive Gunpowder Barrels (TNT)
+    // 4. Albert Dock Drawbridge
+    else if (r.kind === 'drawbridge') {
+      if (this.crowdX < r.x - r.w / 2 || this.crowdX > r.x + r.w / 2) {
+        if (this.boostTimer <= 0) {
+          const loss = 2;
+          this.count = Math.max(0, this.count - loss);
+          this.fx.text(this.crowdX, y - 24, `FELL IN WATER! −${loss} 💦`, '#38bdf8', 26, 0.9);
+          this.fx.burst(this.crowdX, CROWD_Y, '#0077b6', 20, 180, 0.5, 3.5);
+          this.sounds.drop();
+          this.haptics.medium();
+
+          if (this.count <= 0) {
+            this.die('Fell off the drawbridge into the Mersey Basin!');
+            return;
+          }
+        }
+      } else {
+        this.score += 30;
+        this.fx.text(this.crowdX, y - 20, 'SAFE CROSSING! +30', '#3dffa2', 18, 0.6);
+      }
+    }
+
+    // 5. TNT Barrels
     else if (r.kind === 'tnt') {
       for (const b of r.barrels) {
-        if (Math.abs(b.x - this.crowdX) < rad + b.r * 0.8) {
+        if (Math.abs(b.x - this.crowdX) < rad + b.r * 0.85) {
           if (this.boostTimer > 0) {
-            this.score += 100;
-            this.fx.text(b.x, y - 24, 'BOOM! TNT DEFUSED! 💥', '#ffd166', 24, 1.0);
-            this.fx.burst(b.x, CROWD_Y, '#ffbe0b', 32, 320, 0.7, 5);
+            this.score += 60;
+            this.fx.text(b.x, y - 24, 'BARREL DEFUSED! 💥', '#ffd166', 24, 0.9);
+            this.fx.burst(b.x, CROWD_Y, '#ff0054', 24, 260, 0.5, 4);
             continue;
           }
 
-          const loss = Math.max(6, Math.ceil(this.count * 0.4));
-          this.count = Math.max(0, this.count - loss);
+          const cut = 3; // Exactly 3 beans
+          this.count = Math.max(0, this.count - cut);
 
-          this.fx.text(b.x, y - 24, `TNT EXPLOSION! −${loss} 💣`, '#ff0054', 28, 1.1);
-          this.fx.burst(b.x, CROWD_Y, '#e63946', 36, 360, 0.8, 5);
-          this.fx.ring(b.x, CROWD_Y, '#ffd166', 260, 0.6, 6);
-          this.fx.shake(14, 0.45);
+          this.fx.text(b.x, y - 28, `BARREL BOOM! −${cut}`, '#ff0054', 28, 1.0);
+          this.fx.burst(b.x, CROWD_Y, '#ff0054', 26, 280, 0.6, 5);
+          this.fx.ring(b.x, CROWD_Y, '#ffd166', 220, 0.5, 5);
+          this.fx.shake(12, 0.4);
           this.sounds.hit();
           this.haptics.heavy();
 
@@ -560,47 +520,45 @@ export class MultiplierRunner extends Game {
       }
     }
 
-    // 5. Golden Duplicator Cannon / Nitro Powerup
+    // 6. Powerup
     else if (r.kind === 'powerup') {
       if (Math.abs(r.x - this.crowdX) < rad + r.w * 0.5) {
         if (r.type === 'cannon') {
-          const bonus = Math.round(rand(12, 18));
+          const bonus = 3; // Exactly 3 recruits
           this.count += bonus;
-          this.score += 120;
-          this.fx.text(this.crowdX, y - 30, `CANNON RECRUITS! +${bonus} 🚀`, '#ffd166', 30, 1.2);
-          this.fx.burst(this.crowdX, CROWD_Y, '#ffd166', 30, 300, 0.7, 4);
-          this.fx.ring(this.crowdX, CROWD_Y, '#ffd166', 280, 0.5, 5);
+          this.score += 150;
+          this.fx.text(this.crowdX, y - 30, `CANNON RECRUITS! +${bonus} 🚀`, '#ffd166', 30, 1.1);
+          this.fx.burst(this.crowdX, CROWD_Y, '#ffd166', 24, 240, 0.6, 4);
           this.sounds.up();
           this.haptics.heavy();
         } else {
-          this.boostTimer = 3.2; // Invincible Nitro Rush!
-          this.score += 80;
-          this.fx.text(this.crowdX, y - 30, 'NITRO TURBO RUSH! ⚡⚡', '#3dffa2', 32, 1.3);
-          this.fx.ring(this.crowdX, CROWD_Y, '#3dffa2', 320, 0.6, 6);
-          this.fx.burst(this.crowdX, CROWD_Y, '#3dffa2', 34, 320, 0.7, 4);
+          this.boostTimer = 2.8;
+          this.score += 100;
+          this.fx.text(this.crowdX, y - 30, 'NITRO TURBO! ⚡⚡', '#3dffa2', 30, 1.2);
+          this.fx.ring(this.crowdX, CROWD_Y, '#3dffa2', 260, 0.5, 5);
           this.sounds.up();
           this.haptics.heavy();
         }
       }
     }
 
-    // 6. Giant Rolling Jawbreaker Boulder
+    // 7. Boulder
     else if (r.kind === 'boulder') {
       if (Math.abs(r.x - this.crowdX) < rad + r.r * 0.85) {
         if (this.boostTimer > 0) {
           this.score += 90;
           this.fx.text(this.crowdX, y - 24, 'BOULDER CRUSHED! 💥', '#ffd166', 24, 0.9);
-          this.fx.burst(r.x, CROWD_Y, '#ff0054', 28, 300, 0.6, 4);
+          this.fx.burst(r.x, CROWD_Y, '#ff0054', 28, 280, 0.6, 4);
           this.sounds.hit();
           return;
         }
 
-        const loss = Math.max(6, Math.ceil(this.count * 0.42));
+        const loss = 2; // Exactly 2 beans
         this.count = Math.max(0, this.count - loss);
 
         this.fx.text(r.x, y - 24, `RUN OVER! −${loss}`, '#ff7a88', 26, 0.9);
-        this.fx.burst(r.x, CROWD_Y, '#ff0054', 24, 260, 0.6, 4);
-        this.fx.shake(10, 0.38);
+        this.fx.burst(r.x, CROWD_Y, '#ff0054', 22, 240, 0.55, 4);
+        this.fx.shake(10, 0.35);
         this.sounds.hit();
         this.haptics.heavy();
 
@@ -609,12 +567,12 @@ export class MultiplierRunner extends Game {
           return;
         }
       } else {
-        this.score += 30;
-        this.fx.text(this.crowdX, y - 26, 'CLOSE DODGE! +30', '#3dffa2', 18, 0.6);
+        this.score += 25;
+        this.fx.text(this.crowdX, y - 22, 'CLOSE DODGE! +25', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 7. Golden Coins
+    // 8. Coins
     else if (r.kind === 'coins') {
       for (const c of r.coins) {
         if (!c.collected && Math.abs(c.x - this.crowdX) < rad + 18) {
@@ -628,121 +586,63 @@ export class MultiplierRunner extends Game {
     }
   }
 
-  /* ------------------------------------------------------------ Real-Time Mob Brawl */
-  updateGangClash(r, dt) {
-    r.clashT += dt;
-    const rad = this.crowdRadius();
-    const hit = Math.abs(r.x - this.crowdX) < rad + r.r * 0.85;
-
-    if (!hit) {
-      r.done = true;
-      r.clashing = false;
-      this.score += 40;
-      this.fx.text(this.crowdX, CROWD_Y - 40, 'OUTMANEUVERED! +40', '#3dffa2', 22, 0.8);
-      return;
-    }
-
-    if (this.boostTimer > 0) {
-      // Steamroll through in nitro mode!
-      r.n = 0;
-      r.done = true;
-      r.clashing = false;
-      this.score += r.maxN * 8;
-      this.fx.text(r.x, CROWD_Y - 40, `MOB OBLITERATED! +${r.maxN * 8} 👑`, '#ffd166', 28, 1.2);
-      this.fx.burst(r.x, CROWD_Y, '#ff4b5c', 36, 320, 0.7, 4);
-      this.fx.shake(12, 0.4);
-      this.sounds.hit();
-      return;
-    }
-
-    // Active Tug-of-War Drain Rate (24 beans/second clash)
-    const drain = Math.ceil(24 * dt);
-    const playerLoss = Math.min(this.count, drain);
-    const enemyLoss = Math.min(r.n, drain);
-
-    this.count -= playerLoss;
-    r.n -= enemyLoss;
-
-    this.fx.burst((this.crowdX + r.x) / 2, CROWD_Y, '#ff0054', 4, 140, 0.35, 3);
-    this.fx.burst((this.crowdX + r.x) / 2, CROWD_Y, '#25e6ff', 4, 140, 0.35, 3);
-    this.fx.shake(4, 0.1);
-
-    if (r.clashT % 0.15 < dt) {
-      this.sounds.chomp();
-      this.haptics.light();
-    }
-
-    // Resolution: Player wiped out!
-    if (this.count <= 0) {
-      r.done = true;
-      r.clashing = false;
-      this.die(`Overwhelmed by rival dock gang! (Needed ${r.maxN} beans)`);
-      return;
-    }
-
-    // Resolution: Enemy gang defeated!
-    if (r.n <= 0) {
-      r.done = true;
-      r.clashing = false;
-      this.score += r.maxN * 6;
-      this.fx.text(this.crowdX, CROWD_Y - 40, `VICTORY! GANG DEFEATED! +${r.maxN * 6} 👑`, '#3dffa2', 28, 1.3);
-      this.fx.burst(r.x, CROWD_Y, '#ff4b5c', 30, 280, 0.7, 4);
-      this.fx.shake(10, 0.35);
-      this.sounds.survive();
-      this.haptics.heavy();
-    }
-  }
-
   /* ------------------------------------------------------------ Milestone Boss & Victory Stairs */
   updateBoss(r, dt) {
     if (r.defeated) return;
 
-    // Check if boss reached engagement range
     const distToBoss = r.d - this.dist;
-    if (distToBoss <= 180 && distToBoss >= -80) {
-      // Boss battle active
-      r.slamTimer += dt;
-      if (r.slamTimer > 1.2) {
-        r.slamTimer = 0;
-        // Boss slams ground, creating a shockwave ring
-        r.shockwaves.push({ r: 20, maxR: 240, life: 0.8 });
+
+    // Check if player reached boss engagement range
+    if (distToBoss <= 100 && !r.clashing) {
+      if (this.count < r.req) {
+        this.die(`Crushed by ${r.title}! Needed ${r.req} beans, but only brought ${Math.round(this.count)}!`);
+        return;
+      }
+      r.clashing = true;
+      r.clashTimer = 0;
+      this.sounds.up();
+      this.haptics.heavy();
+      this.fx.text(MID, CROWD_Y - 90, '⚔️ SQUAD CHARGE! ⚔️', '#ffd166', 34, 1.2);
+    }
+
+    if (r.clashing) {
+      r.clashTimer += dt;
+      const drainRate = Math.max(14, r.maxHp * 1.6);
+      const dmg = Math.min(r.hp, drainRate * dt);
+      r.hp -= dmg;
+
+      this.fx.burst(r.x + (Math.random() - 0.5) * 80, CROWD_Y - 50 + (Math.random() - 0.5) * 40, r.color, 3, 140, 0.3, 3);
+      this.fx.shake(4, 0.1);
+      if (Math.random() < 0.35) {
         this.sounds.hit();
-        this.fx.shake(8, 0.3);
+        this.haptics.medium();
       }
-
-      // Update shockwaves
-      for (const sw of r.shockwaves) {
-        sw.r += 260 * dt;
-        sw.life -= dt;
-        // Shockwave damages squad if caught on the outer ring without dodging
-        if (Math.abs(sw.r - Math.abs(this.crowdX - r.x)) < 15 && this.boostTimer <= 0) {
-          const cut = Math.max(2, Math.ceil(this.count * 0.15));
-          this.count = Math.max(0, this.count - cut);
-          this.fx.text(this.crowdX, CROWD_Y - 20, `SHOCKWAVE! −${cut}`, '#ff0054', 22, 0.7);
-          this.fx.burst(this.crowdX, CROWD_Y, '#ff0054', 12, 180, 0.4, 3);
-          this.sounds.hit();
-        }
-      }
-      r.shockwaves = r.shockwaves.filter((sw) => sw.life > 0);
-
-      // Squad swarm attack against boss
-      const attackPower = Math.ceil(18 * dt);
-      r.hp -= attackPower;
-      this.fx.burst(r.x, CROWD_Y - 40, r.color, 4, 160, 0.35, 3);
 
       if (r.hp <= 0) {
-        // Boss Shattered!
+        r.hp = 0;
         r.defeated = true;
         r.done = true;
-        this.score += 1000;
-        this.fx.text(MID, CROWD_Y - 80, `👑 ${r.title} DEFEATED! +1000`, '#ffd166', 32, 1.8);
+        r.clashing = false;
+
+        this.score += 1000 * this.stage;
+        this.fx.text(MID, CROWD_Y - 90, `👑 ${r.title} DEFEATED! +${1000 * this.stage}`, '#ffd166', 32, 1.8);
         this.fx.ring(MID, CROWD_Y, '#ffd166', 380, 0.8, 8);
         this.fx.burst(MID, CROWD_Y, r.color, 50, 360, 0.9, 6);
+        this.fx.burst(MID, CROWD_Y, '#ffd166', 40, 300, 0.8, 5);
         this.fx.shake(16, 0.6);
-        this.sounds.up();
+        this.sounds.survive();
         this.haptics.heavy();
 
-        // Launch Iconic Victory Multiplier Stairs!
+        // Rescued recruits bonus
+        const rescueBonus = 3 + this.stage * 2;
+        this.count += rescueBonus;
+        // Floor guarantee for next stage
+        const targetNext = (this.stage + 1) * 10;
+        this.count = Math.max(this.count, targetNext - 8);
+
+        this.fx.text(MID, CROWD_Y - 40, `+${rescueBonus} RESCUED RECRUITS! 🎖️`, '#38bdf8', 26, 1.5);
+
+        // Victory Multiplier Podium
         this.bossState = 'stairs';
         this.stairsProgress = 0;
         this.stairsScoreMult = 1.0;
@@ -751,34 +651,31 @@ export class MultiplierRunner extends Game {
   }
 
   updateStairs(dt) {
-    this.stairsProgress += dt * 1.5;
+    this.stairsProgress += dt * 2.2;
     const steps = [
-      { step: 1, mult: 1.2, req: 8 },
-      { step: 2, mult: 1.5, req: 16 },
-      { step: 3, mult: 2.0, req: 28 },
-      { step: 4, mult: 3.0, req: 45 },
-      { step: 5, mult: 5.0, req: 70 },
-      { step: 6, mult: 10.0, req: 100 },
+      { step: 1, mult: 1.2 },
+      { step: 2, mult: 1.5 },
+      { step: 3, mult: 2.0 },
     ];
-
     const curStepIdx = Math.min(steps.length - 1, Math.floor(this.stairsProgress));
     const step = steps[curStepIdx];
 
-    if (this.stairsScoreMult < step.mult && this.count >= step.req) {
+    if (this.stairsScoreMult < step.mult) {
       this.stairsScoreMult = step.mult;
-      this.score += Math.round(300 * step.mult);
-      this.fx.text(MID, 320 - curStepIdx * 45, `STAIR ${step.step} · ×${step.mult}! 🎉`, '#ffd166', 30, 1.2);
-      this.fx.burst(MID, 320 - curStepIdx * 45, '#ffd166', 22, 220, 0.6, 4);
+      this.score += Math.round(250 * step.mult);
+      this.fx.text(MID, 320 - curStepIdx * 45, `STEP ${step.step} · ×${step.mult}! 🎉`, '#ffd166', 30, 0.8);
+      this.fx.burst(MID, 320 - curStepIdx * 45, '#ffd166', 16, 180, 0.5, 3.5);
       this.sounds.stack(step.step);
       this.haptics.medium();
     }
 
-    if (this.stairsProgress >= steps.length + 1) {
-      // Conquered victory stairs! Return to running with fever speed
+    if (this.stairsProgress >= steps.length + 0.6) {
       this.bossState = 'none';
-      this.feverRush = 4.0;
-      this.fx.text(MID, CROWD_Y - 40, 'FEVER DASH UNLOCKED! 🔥', '#3dffa2', 32, 1.5);
-      this.sounds.survive();
+      this.stage++;
+      this.feverRush = 3.0;
+      this.sounds.upgrade();
+      this.fx.text(MID, CROWD_Y - 50, `STAGE ${this.stage}: TARGET ${this.stage * 10} BEANS! ⚡`, '#3dffa2', 28, 1.8);
+      this.initStage(this.stage);
     }
   }
 
@@ -817,7 +714,24 @@ export class MultiplierRunner extends Game {
         else if (r.kind === 'powerup') this.drawPowerup(r, y);
         else if (r.kind === 'boulder') this.drawBoulder(r, y);
         else if (r.kind === 'coins') this.drawCoins(r, y);
-        else if (r.kind === 'boss') this.drawBoss(r, y);
+        else if (r.kind === 'boss') {
+          this.drawBoss(r, y);
+          // Approaching warning banner on the quayside
+          const ready = this.count >= r.req;
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 16px Outfit, system-ui, sans-serif';
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = '#140924';
+          const txt = ready
+            ? `🟢 SQUAD READY! (${Math.round(this.count)} / ${r.req} BEANS) 🟢`
+            : `⚠️ ${r.title} · NEED ${r.req} BEANS! ⚠️`;
+          ctx.strokeText(txt, MID, y + r.r + 62);
+          ctx.fillStyle = ready ? '#3dffa2' : '#facc15';
+          ctx.fillText(txt, MID, y + r.r + 62);
+          ctx.restore();
+        }
       }
     }
 
@@ -1053,9 +967,17 @@ export class MultiplierRunner extends Game {
       ctx.lineWidth = 7;
       ctx.strokeStyle = '#140924';
       const label = `${g.op}${g.v}`;
-      ctx.strokeText(label, (x0 + x1) / 2, y + 8);
+      ctx.strokeText(label, (x0 + x1) / 2, y + 5);
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(label, (x0 + x1) / 2, y + 8);
+      ctx.fillText(label, (x0 + x1) / 2, y + 5);
+
+      // Subtitle badge
+      ctx.font = '900 12px Outfit, system-ui, sans-serif';
+      ctx.lineWidth = 3.5;
+      const subLabel = g.op === '+' ? `+${g.v} BEANS` : `−${g.v} BEANS`;
+      ctx.strokeText(subLabel, (x0 + x1) / 2, y + 30);
+      ctx.fillStyle = g.good ? '#fef08a' : '#fca5a5';
+      ctx.fillText(subLabel, (x0 + x1) / 2, y + 30);
 
       ctx.restore();
     });
@@ -1220,7 +1142,7 @@ export class MultiplierRunner extends Game {
 
       ctx.font = '900 24px Outfit, system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('🚀 +15 BEANS', 0, 6);
+      ctx.fillText('🚀 +3 BEANS', 0, 6);
     } else {
       // Nitro Speed Pad
       ctx.fillStyle = 'rgba(74, 222, 128, 0.25)';
@@ -1897,40 +1819,82 @@ export class MultiplierRunner extends Game {
   renderHUD(ctx, W, H) {
     const pillX = 14;
     const pillY = 105;
-    const distM = Math.round(this.dist / 10);
+    const pillW = 295;
+    const pillH = 74;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    // Glassmorphic dark badge
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
     ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.roundRect(pillX, pillY, 230, 52, 14);
+    ctx.roundRect(pillX, pillY, pillW, pillH, 16);
     ctx.fill();
     ctx.stroke();
 
+    // Stage & Boss Title (Truncated cleanly if needed)
+    const curBoss = this.getUpcomingBoss();
+    const bossTitle = curBoss
+      ? (curBoss.type === 'captain' ? 'CAPTAIN CRUMP' : curBoss.type === 'kraken' ? 'KRAKEN MECHA' : 'SUGAR COLOSSUS')
+      : `BOSS ${this.stage}`;
+
     ctx.fillStyle = '#38bdf8';
-    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.font = '900 12.5px Outfit, system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`⚓ ALBERT DOCK RUSH · ${distM}m`, pillX + 14, pillY + 18);
+    ctx.fillText(`⚓ STAGE ${this.stage} · ${bossTitle}`, pillX + 14, pillY + 18);
 
-    ctx.fillStyle = '#ffffff';
+    // Boss distance on top right
+    const distToBoss = curBoss ? Math.max(0, Math.round((curBoss.d - this.dist) / 10)) : 0;
+    ctx.fillStyle = '#fde047';
     ctx.font = '800 11px Outfit, system-ui, sans-serif';
-    ctx.fillText(`ARMY: ${fmt(this.count)} BEANS`, pillX + 14, pillY + 32);
+    ctx.textAlign = 'right';
+    ctx.fillText(distToBoss > 0 ? `👑 BOSS IN ${distToBoss}m` : '👑 BOSS ENGAGED!', pillX + pillW - 14, pillY + 18);
 
-    if (this.boostTimer > 0) {
+    // Beans Count & Required
+    const ready = this.count >= this.bossReq;
+    ctx.font = '900 15px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('ARMY: ', pillX + 14, pillY + 40);
+
+    ctx.fillStyle = ready ? '#3dffa2' : '#f87171';
+    ctx.fillText(`${Math.round(this.count)}`, pillX + 66, pillY + 40);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '800 13px Outfit, system-ui, sans-serif';
+    ctx.fillText(`/ ${this.bossReq} REQ`, pillX + 96, pillY + 40);
+
+    // Readiness Status Pill on Right
+    ctx.font = '900 11px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    if (ready) {
       ctx.fillStyle = '#3dffa2';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.fillText(`⚡ NITRO RUSH! ${this.boostTimer.toFixed(1)}s`, pillX + 14, pillY + 45);
-    } else if (this.feverRush > 0) {
-      ctx.fillStyle = '#fde047';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.fillText(`🔥 FEVER SPEED! ${this.feverRush.toFixed(1)}s`, pillX + 14, pillY + 45);
+      ctx.fillText('✅ READY FOR BOSS!', pillX + pillW - 14, pillY + 40);
     } else {
       ctx.fillStyle = '#fbbf24';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      const toBoss = Math.max(0, Math.round((this.nextMilestone - this.dist) / 10));
-      ctx.fillText(`● BOSS IN ${toBoss}m`, pillX + 14, pillY + 45);
+      ctx.fillText(`⚠️ NEED ${this.bossReq - Math.round(this.count)} MORE!`, pillX + pillW - 14, pillY + 40);
     }
+
+    // Mini Progress Bar to Boss at bottom of pill
+    const stageTotalDist = curBoss ? (curBoss.d - this.stageStartDist) : 2200;
+    const stageProgress = clamp((this.dist - this.stageStartDist) / stageTotalDist, 0, 1);
+
+    const barX = pillX + 14;
+    const barY = pillY + 54;
+    const barW = pillW - 28;
+    const barH = 7;
+
+    // Track
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 4);
+    ctx.fill();
+
+    // Progress fill
+    ctx.fillStyle = ready ? '#3dffa2' : '#38bdf8';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW * stageProgress, barH, 4);
+    ctx.fill();
 
     ctx.restore();
   }
