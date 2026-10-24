@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#05050c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Game Reels — The Swipe-Style Arcade Gauntlet</title>
+    <meta name="description" content="Five hypercasual games, 90 seconds each. Survive the clock and your progress is frozen until the reel comes back around. Die and you're swiped to the next game." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <main id="stage">
+        <canvas id="game" aria-label="Game area"></canvas>
+        <canvas id="snap" aria-hidden="true"></canvas>
+        <div id="flash"></div>
+
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+          <div class="hud-top">
+            <div class="pips" id="pips"></div>
+            <div class="score-pill"><span class="bean-ico">🫘</span><span id="score">0</span><small>PTS</small></div>
+          </div>
+          <div class="timer">
+            <div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>
+            <div class="timer-text"><span id="cycleLabel">CYCLE 1</span><span id="time">1:30</span></div>
+          </div>
+          <div class="welcome" id="welcome"></div>
+          <div class="bottom">
+            <div class="info">
+              <div class="info-title" id="infoTitle"></div>
+              <div class="info-hint" id="infoHint"></div>
+            </div>
+            <div class="actions">
+              <button class="rbtn" id="btnLike" aria-label="Like this game"><span class="ico">♥</span><span class="cnt" id="likeCount">0</span></button>
+              <button class="rbtn" id="btnMute" aria-label="Toggle sound"><span class="ico" id="muteIco">🔊</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="banner" class="banner">
+          <div class="banner-title"></div>
+          <div class="banner-sub"></div>
+        </div>
+
+        <!-- Menu -->
+        <section id="menu" class="overlay">
+          <div class="menu-inner">
+            <div class="eyebrow">60-SECOND SURVIVAL GAUNTLET</div>
+            <h1 class="logo">JELLY<br />REELS</h1>
+            <p class="tagline">18 games. 60 seconds each.<br />Survive the clock to freeze your progress — die and you're eliminated!</p>
+            <div class="game-icons" id="menuIcons"></div>
+            <ul class="rules">
+              <li><b>⏱</b><span>Every game lasts <em>60 seconds</em>. Survive the countdown to freeze progress and advance.</span></li>
+              <li><b>💀</b><span>Die and that game is <em>ELIMINATED</em> for the duration of the run.</span></li>
+              <li><b>🔁</b><span>Loop back through surviving games with saved progress until <em>no games remain</em>!</span></li>
+            </ul>
+            <button class="btn" id="btnPlay">START RUN</button>
+            <button class="btn ghost hidden" id="btnContinue">CONTINUE RUN</button>
+            <button class="link hidden" id="btnNew">Start fresh run</button>
+          </div>
+        </section>
+
+        <!-- Cycle summary -->
+        <section id="summary" class="overlay hidden">
+          <div class="menu-inner">
+            <div class="eyebrow" id="sumEyebrow">CYCLE 1 COMPLETE</div>
+            <h2 class="sum-title" id="sumTitle">Reel Cleared</h2>
+            <div class="sum-chips" id="sumChips"></div>
+            <div class="mult-card">
+              <div class="mult-label">SURVIVAL MULTIPLIER</div>
+              <div class="mult-val" id="sumMult">×1.0</div>
+              <div class="mult-sub" id="sumSub"></div>
+            </div>
+            <button class="btn" id="btnNext">KEEP GOING →</button>
+            <p class="foot" id="sumFoot">Survive cycles and keep your streak alive.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
