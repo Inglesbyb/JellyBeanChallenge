@@ -930,7 +930,7 @@ export class DeepFeeder extends Game {
       if (c.type === 0) {
         // Rock Candy Crystal Cluster with Bold Cartoon Outlines
         ctx.fillStyle = c.color;
-        ctx.strokeStyle = '#140924';
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3.5;
         ctx.beginPath();
         ctx.moveTo(0, 0);
@@ -951,7 +951,7 @@ export class DeepFeeder extends Game {
         ctx.fill();
       } else if (c.type === 1) {
         // Candy Cane Coral Branch
-        ctx.strokeStyle = '#140924';
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 14;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -969,7 +969,7 @@ export class DeepFeeder extends Game {
       } else {
         // Gumdrop Sea Anemone
         ctx.fillStyle = c.color;
-        ctx.strokeStyle = '#140924';
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.ellipse(0, 0, 22, 14, 0, 0, TAU);
@@ -1007,7 +1007,7 @@ export class DeepFeeder extends Game {
 
       // Chocolate Timber Ship Hull with Bold Cartoon Outlines
       ctx.fillStyle = '#3c2415';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(-180, -40);
@@ -1032,14 +1032,14 @@ export class DeepFeeder extends Game {
 
       // Broken Wooden Main Mast
       ctx.fillStyle = '#2c190d';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 3.5;
       ctx.fillRect(-15, -160, 16, 125);
       ctx.strokeRect(-15, -160, 16, 125);
 
       // Tattered Mint Canvas Sail
       ctx.fillStyle = 'rgba(78, 205, 196, 0.5)';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(-10, -150);
@@ -1050,25 +1050,25 @@ export class DeepFeeder extends Game {
       ctx.stroke();
 
       // Jolly Roger Pirate Flag (Smiling Jellybean Skull!)
-      ctx.fillStyle = '#140924';
+      ctx.fillStyle = '#000000';
       ctx.fillRect(-60, -155, 45, 28);
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(-38, -143, 6, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#140924';
+      ctx.fillStyle = '#000000';
       ctx.beginPath(); ctx.arc(-40, -144, 1.5, 0, TAU); ctx.arc(-36, -144, 1.5, 0, TAU); ctx.fill();
 
       // Golden Candy Portholes
       for (let px = -110; px <= 130; px += 55) {
         ctx.fillStyle = '#ffd166';
-        ctx.strokeStyle = '#140924';
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.arc(px, 15, 9, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#140924';
+        ctx.fillStyle = '#000000';
         ctx.beginPath(); ctx.arc(px, 15, 5, 0, TAU); ctx.fill();
       }
 
       // Chocolate wafer cannon jutting out
-      ctx.fillStyle = '#140924';
+      ctx.fillStyle = '#000000';
       ctx.fillRect(80, -10, 40, 12);
 
       ctx.restore();
@@ -1103,7 +1103,7 @@ export class DeepFeeder extends Game {
     for (const v of this.deepVents) {
       if (Math.abs(v.x - p.x) > halfW + 100) continue;
       ctx.fillStyle = '#2b1005';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 3.5;
       ctx.beginPath();
       ctx.moveTo(v.x - v.w * 0.5, v.y + v.h);
@@ -1141,7 +1141,7 @@ export class DeepFeeder extends Game {
 
       // Chocolate Wafer Chest Body
       ctx.fillStyle = '#4a2810';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 3.5;
       ctx.fillRect(-22, -10, 44, 26);
       ctx.strokeRect(-22, -10, 44, 26);
@@ -1153,10 +1153,10 @@ export class DeepFeeder extends Game {
 
       // Foil-wrapped chocolate coin lock
       ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(0, 3, 5, 0, TAU); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#140924';
+      ctx.fillStyle = '#000000';
       ctx.beginPath(); ctx.arc(0, 2, 2, 0, TAU); ctx.fill();
 
       // Wafer Lid
@@ -1171,7 +1171,7 @@ export class DeepFeeder extends Game {
         ctx.beginPath(); ctx.arc(0, -15, 4 + sparkle, 0, TAU); ctx.fill();
       } else {
         ctx.fillStyle = '#5c3315';
-        ctx.strokeStyle = '#140924';
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3.5;
         ctx.beginPath();
         ctx.arc(0, -10, 22, Math.PI, 0);
@@ -1199,7 +1199,7 @@ export class DeepFeeder extends Game {
 
       // Gold Foil Chocolate Coin
       ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(0, 0, 10, 0, TAU);
@@ -1220,7 +1220,7 @@ export class DeepFeeder extends Game {
       if (Math.abs(k.x - p.x) > halfW + 100) continue;
       const sway = Math.sin(this.time * 1.6 + k.wobPhase) * 28;
 
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 18;
       ctx.lineCap = 'round';
       ctx.beginPath();
@@ -1248,12 +1248,12 @@ export class DeepFeeder extends Game {
     ctx.fill();
 
     // Dark cartoon border
-    ctx.strokeStyle = '#140924';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = Math.max(2.2, er * 0.32);
     ctx.stroke();
 
     // Glossy black pupil
-    ctx.fillStyle = '#140924';
+    ctx.fillStyle = '#000000';
     ctx.beginPath();
     ctx.arc(ex + lookX * er * 0.35, ey, er * 0.52, 0, TAU);
     ctx.fill();
@@ -1267,7 +1267,7 @@ export class DeepFeeder extends Game {
 
     // Determined/predator cartoon brow
     if (angry) {
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = Math.max(2.5, er * 0.35);
       ctx.beginPath();
       ctx.moveTo(ex - er * 1.0, ey - er * 0.7);
@@ -1362,7 +1362,7 @@ export class DeepFeeder extends Game {
 
   // 1. 🍬 Swedish Gummy Fish (Simplified, bold cartoon contour with dark outlines!)
   renderSwedishFish(ctx, s, swing, flavor = '#e63946') {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.2, s * 0.09);
 
     // Chunky Cartoon Tail Fin
@@ -1410,7 +1410,7 @@ export class DeepFeeder extends Game {
 
   // 2. 🍊 Candy Corn Fish (3 Clean cartoon color blocks with bold dark outline!)
   renderCandyCornFish(ctx, s, swing) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.2, s * 0.09);
 
     // Chunky Yellow Tail
@@ -1467,7 +1467,7 @@ export class DeepFeeder extends Game {
 
   // 3. 🍑 Sour Peach Ring Jelly (Bold cartoon donut ring with dark outline!)
   renderSourPeachRing(ctx, s, swing) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.2, s * 0.09);
 
     // Two-tone peach gel ring
@@ -1516,7 +1516,7 @@ export class DeepFeeder extends Game {
 
   // 4. 🍫 Marshmallow Puffer (Bold squishy marshmallow with chunky candy corn spikes!)
   renderMarshmallowPuffer(ctx, s, swing, puffed, isDeadly) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.2, s * 0.09);
     const puffScale = 1.0 + puffed * 0.45;
     const pr = s * 0.62 * puffScale;
@@ -1563,7 +1563,7 @@ export class DeepFeeder extends Game {
 
   // 5. 🐛 Trolli Gummy Worm (Segmented cartoon worm with thick dark outlines!)
   renderGummyWorm(ctx, s, wob) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.0, s * 0.08);
     const segments = 5;
 
@@ -1588,7 +1588,7 @@ export class DeepFeeder extends Game {
 
   // 6. 🍭 Peppermint Razor Barracuda (Sleek cartoon torpedo with bold red spirals!)
   renderPeppermintBarracuda(ctx, s, swing, isDeadly) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.5, s * 0.09);
     const L = s * 1.5;
     const Hh = s * 0.4;
@@ -1649,7 +1649,7 @@ export class DeepFeeder extends Game {
 
   // 7. 🦈 Haribo Two-Tone Shark (Sapphire Blue or Cherry Top + Marshmallow Foam White Belly!)
   renderHariboShark(ctx, s, swing, isDeadly, isStrawberry = false) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.8, s * 0.09);
     const L = s * 1.45;
     const Hh = s * 0.52;
@@ -1730,7 +1730,7 @@ export class DeepFeeder extends Game {
 
   // 8. 🍓 Bioluminescent Gumdrop Jelly (Glowing cartoon bell with bold dark outline!)
   renderBioluminescentGumdrop(ctx, s, wob) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.0, s * 0.08);
     const pulse = 1.0 + Math.sin(wob * 2.5) * 0.14;
     const r = s * 0.72 * pulse;
@@ -1767,7 +1767,7 @@ export class DeepFeeder extends Game {
 
   // 9. 🗡️ Rock Candy Marlin (Sleek cartoon marlin with peppermint spear bill!)
   renderRockCandyMarlin(ctx, s, swing, isDeadly) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.5, s * 0.09);
     const L = s * 1.45;
     const Hh = s * 0.46;
@@ -1809,7 +1809,7 @@ export class DeepFeeder extends Game {
 
   // 10. 🐙 Gumdrop Kraken Squid (Bulbous cartoon head with curly tentacles!)
   renderGumdropKraken(ctx, s, wob, isDeadly) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(3.5, s * 0.09);
 
     // Purple Gumdrop Head
@@ -1839,7 +1839,7 @@ export class DeepFeeder extends Game {
 
   // 11. 🍓 Strawberry Licorice Eel (Undulating red rope with bold dark cartoon borders!)
   renderLicoriceSerpent(ctx, s, wob) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(4.5, s * 0.14);
 
     ctx.strokeStyle = darkInk;
@@ -1868,7 +1868,7 @@ export class DeepFeeder extends Game {
 
   // 12. 👑 Sour Crystal Megalodon (Colossal cartoon titan with thick bold outlines!)
   renderSourMegalodon(ctx, s, swing, isDeadly) {
-    const darkInk = '#140924';
+    const darkInk = '#000000';
     const lineW = Math.max(5.5, s * 0.11);
     const L = s * 1.65;
     const Hh = s * 0.62;
@@ -1981,7 +1981,7 @@ export class DeepFeeder extends Game {
 
       ctx.rotate(ang);
       ctx.fillStyle = '#ff4b5c';
-      ctx.strokeStyle = '#140924';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(12, 0);
@@ -2045,7 +2045,7 @@ export class DeepFeeder extends Game {
     const playerYNorm = clamp(p.y / MAXY, 0, 1);
     const pMarkerY = barY + playerYNorm * barHeight;
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#140924';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(barX + barWidth / 2, pMarkerY, 4, 0, TAU);
@@ -2108,7 +2108,7 @@ export class DeepFeeder extends Game {
     // 1. Stage & Depth Information Pill (positioned safely above bottom reel controls)
     const pillY = H - 148;
     ctx.fillStyle = 'rgba(20, 9, 36, 0.82)';
-    ctx.strokeStyle = '#140924';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2.5;
     this.rr(14, pillY, 242, 54, 14);
     ctx.fill();
@@ -2135,7 +2135,7 @@ export class DeepFeeder extends Game {
     const by = H - 122;
 
     ctx.fillStyle = 'rgba(20, 9, 36, 0.82)';
-    ctx.strokeStyle = '#140924';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2.5;
     this.rr(bx - 8, by - 16, barW + 16, 42, 10);
     ctx.fill();

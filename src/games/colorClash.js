@@ -1059,17 +1059,22 @@ export class ColorClash extends Game {
   renderGrid(ctx) {
     ctx.save();
 
-    // 1. Outer Stadium Border Casing (Rounded white rim just like the screenshot)
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 6;
+    // 1. Outer Stadium Border Casing (Bold black cartoon rim with inner white accent)
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 7;
     ctx.fillStyle = '#1e293b';
-    ctx.shadowColor = 'rgba(0,0,0,0.45)';
-    ctx.shadowBlur = 16;
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 12;
     ctx.beginPath();
     ctx.roundRect(ARENA_X - 4, ARENA_Y - 4, GRID_W + 8, GRID_H + 8, 14);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
+
+    // Inner crisp white rim
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(ARENA_X - 1, ARENA_Y - 1, GRID_W + 2, GRID_H + 2);
 
     // Overtime Gold Neon Border Pulse
     if (this.isOvertime) {
@@ -1148,25 +1153,31 @@ export class ColorClash extends Game {
         // High-Speed Paint Roller Unit
         ctx.rotate(u.angle);
 
-        // Vehicle Chassis
+        // Vehicle Chassis with thick black cartoon outline
         ctx.fillStyle = darkColor;
         ctx.beginPath();
         ctx.roundRect(-10, -14, 20, 28, 6);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
 
         // Glowing Ink Tank
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.roundRect(-8, -6, 16, 14, 4);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
 
         // Front Paint Roller Drum
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#212529';
-        ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(-14, 10, 28, 8, 3);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
         ctx.stroke();
 
         // Roller Ink Texture
@@ -1179,16 +1190,16 @@ export class ColorClash extends Game {
         ctx.beginPath();
         ctx.arc(0, 0, 16, 0, TAU);
         ctx.fill();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 4;
         ctx.stroke();
 
         // Swiveling Gun Turret
         ctx.rotate(u.angle);
         ctx.fillStyle = darkColor;
         ctx.fillRect(4, -5, 16, 10);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
         ctx.strokeRect(4, -5, 16, 10);
 
         // Core Turret Dome
@@ -1196,6 +1207,9 @@ export class ColorClash extends Game {
         ctx.beginPath();
         ctx.arc(0, 0, 9, 0, TAU);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
       } else if (u.cardId === 'blaster') {
         // Triple Blaster Tank
         ctx.rotate(u.angle);
@@ -1205,8 +1219,8 @@ export class ColorClash extends Game {
         ctx.beginPath();
         ctx.roundRect(-14, -12, 28, 24, 6);
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 4;
         ctx.stroke();
 
         // 3 Forward Laser Barrels
@@ -1214,10 +1228,18 @@ export class ColorClash extends Game {
         ctx.fillRect(8, -10, 14, 5);
         ctx.fillRect(10, -2.5, 14, 5);
         ctx.fillRect(8, 5, 14, 5);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(8, -10, 14, 5);
+        ctx.strokeRect(10, -2.5, 14, 5);
+        ctx.strokeRect(8, 5, 14, 5);
 
         // Driver Visor
         ctx.fillStyle = '#ffd166';
         ctx.fillRect(-4, -6, 6, 12);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-4, -6, 6, 12);
       } else if (u.cardId === 'spinner') {
         // Whirlwind Saw Spinner
         ctx.rotate(u.angle);
@@ -1227,8 +1249,8 @@ export class ColorClash extends Game {
         ctx.beginPath();
         ctx.arc(0, 0, 20, 0, TAU);
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
         ctx.stroke();
 
         // Razor Teeth
@@ -1241,6 +1263,9 @@ export class ColorClash extends Game {
           ctx.lineTo(Math.cos(a + 0.5) * 16, Math.sin(a + 0.5) * 16);
           ctx.closePath();
           ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         }
 
         // Inner Core
@@ -1248,6 +1273,9 @@ export class ColorClash extends Game {
         ctx.beginPath();
         ctx.arc(0, 0, 9, 0, TAU);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
       } else if (u.cardId === 'striker') {
         // High-Speed Aerial Jet Bean
         ctx.rotate(u.angle);
@@ -1263,8 +1291,8 @@ export class ColorClash extends Game {
         ctx.lineTo(-10, 14); // Right wingtip
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
         ctx.stroke();
 
         // Fuselage Body
@@ -1272,6 +1300,9 @@ export class ColorClash extends Game {
         ctx.beginPath();
         ctx.ellipse(2, 0, 12, 6, 0, 0, TAU);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
 
         // Cockpit Visor
         ctx.fillStyle = '#ffd166';

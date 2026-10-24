@@ -903,9 +903,9 @@ export class BlockBuster extends Game {
     this.rr(ctx, x + 2, y + 2, bw - 4, bh * 0.48, 6);
     ctx.fill();
 
-    // Dark inset bottom border
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.lineWidth = 2;
+    // Thick black cartoon border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.8;
     this.rr(ctx, x, y, bw, bh, 8);
     ctx.stroke();
 

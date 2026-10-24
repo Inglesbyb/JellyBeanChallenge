@@ -44,8 +44,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     kg.addColorStop(0.5, '#7209b7');
     kg.addColorStop(1, '#f72585');
     ctx.fillStyle = kg;
-    ctx.strokeStyle = '#2b1055';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.8;
     ctx.beginPath();
     ctx.ellipse(0, size * 0.45, size * 0.95, size * 0.32, 0, 0, TAU);
     ctx.fill();
@@ -62,8 +62,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     ctx.beginPath();
     ctx.arc(size * 0.3, size * 0.22, size * 0.16, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = '#3a2000';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.8;
     ctx.stroke();
   }
 
@@ -75,8 +75,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     // Scuba flippers
     if (hat === 'scuba') {
       ctx.fillStyle = '#ff9f1c';
-      ctx.strokeStyle = '#7c3b00';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
       // Left flipper
       ctx.beginPath();
       ctx.ellipse(-w * 0.38, footY + legSwing * 0.5, size * 0.38, size * 0.14, -0.4, 0, TAU);
@@ -88,8 +88,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     } else {
       // Stubby cartoon feet
       ctx.fillStyle = bellyColor || '#1ec0db';
-      ctx.strokeStyle = '#084860';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(3.2, size * 0.09);
 
       // Left foot
       ctx.beginPath();
@@ -119,8 +119,9 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
   bg.addColorStop(1, bellyColor || color);
 
   ctx.fillStyle = bg;
-  ctx.strokeStyle = '#052a38';
-  ctx.lineWidth = Math.max(2.5, size * 0.07);
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = Math.max(3.8, size * 0.12);
+  ctx.lineJoin = 'round';
 
   // Rounded capsule path
   ctx.beginPath();
@@ -155,8 +156,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
 
   if (eyes === 'squish' || dead) {
     // Dizzy X eyes
-    ctx.strokeStyle = '#041f2b';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
     [-eyeSpacing, eyeSpacing].forEach((ex) => {
       ctx.beginPath();
       ctx.moveTo(ex - 4, eyeY - 4); ctx.lineTo(ex + 4, eyeY + 4);
@@ -174,23 +175,23 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     [-eyeSpacing, eyeSpacing].forEach((ex, idx) => {
       if (eyes === 'wink' && idx === 1) {
         // Wink curve
-        ctx.strokeStyle = '#041f2b';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
         ctx.beginPath();
         ctx.arc(ex, eyeY, 5, 0.2, Math.PI - 0.2);
         ctx.stroke();
       } else {
         // Big white outer eye
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#041f2b';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.ellipse(ex, eyeY, radius * 0.26, radius * 0.36, 0, 0, TAU);
         ctx.fill();
         ctx.stroke();
 
         // Dark pupil
-        ctx.fillStyle = '#061a24';
+        ctx.fillStyle = '#000000';
         ctx.beginPath();
         ctx.ellipse(ex + 1, eyeY + 1, radius * 0.16, radius * 0.24, 0, 0, TAU);
         ctx.fill();
@@ -207,16 +208,16 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     });
 
     // Cute smiling mouth
-    ctx.fillStyle = '#800f2f';
-    ctx.strokeStyle = '#041f2b';
-    ctx.lineWidth = 2;
+    ctx.fillStyle = '#ff1744';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
     ctx.arc(0, eyeY + radius * 0.38, radius * 0.22, 0.1, Math.PI - 0.1);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     // Tongue
-    ctx.fillStyle = '#ff758f';
+    ctx.fillStyle = '#ff85a1';
     ctx.beginPath();
     ctx.arc(0, eyeY + radius * 0.52, radius * 0.12, Math.PI, 0);
     ctx.fill();
@@ -226,8 +227,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
   const armY = topY + radius * 0.8;
   const armLen = radius * 0.55;
   ctx.fillStyle = color;
-  ctx.strokeStyle = '#052a38';
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = Math.max(3.2, size * 0.1);
 
   if (holding) {
     // Both arms raised high holding the fruit
@@ -252,8 +253,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
   if (hat === 'crown') {
     const cy = topY - radius * 0.75;
     ctx.fillStyle = '#ffd166';
-    ctx.strokeStyle = '#5a3d00';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(-radius * 0.45, cy + 4);
     ctx.lineTo(-radius * 0.45, cy - 14);
@@ -266,15 +267,15 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     ctx.fill(); ctx.stroke();
 
     // Ruby jewels
-    ctx.fillStyle = '#ff4b5c';
-    ctx.beginPath(); ctx.arc(0, cy - 6, 2.5, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(-radius * 0.3, cy - 3, 2, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(radius * 0.3, cy - 3, 2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ff0055';
+    ctx.beginPath(); ctx.arc(0, cy - 6, 2.8, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(-radius * 0.3, cy - 3, 2.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(radius * 0.3, cy - 3, 2.2, 0, TAU); ctx.fill();
   } else if (hat === 'scuba') {
     // Glass bubble scuba dome
     ctx.fillStyle = 'rgba(180, 240, 255, 0.28)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.arc(0, topY, radius * 1.35, 0, TAU);
     ctx.fill();
@@ -288,8 +289,8 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
 
     // Air hose & tank backpack
     ctx.fillStyle = '#ffbe0b';
-    ctx.strokeStyle = '#5c3a00';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.2;
     ctx.fillRect(-radius * 1.25, topY - radius * 0.2, radius * 0.35, radius * 1.2);
     ctx.strokeRect(-radius * 1.25, topY - radius * 0.2, radius * 0.35, radius * 1.2);
   }

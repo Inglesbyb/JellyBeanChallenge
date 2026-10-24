@@ -703,8 +703,8 @@ export class BallBlast extends Game {
 
     const drawBarrel = (ox, bw) => {
       ctx.fillStyle = barrelGrad;
-      ctx.strokeStyle = '#fef08a';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.roundRect(ox, -barrelH, bw, barrelH, [4, 4, 1, 1]);
       ctx.fill();
@@ -715,6 +715,9 @@ export class BallBlast extends Game {
       ctx.beginPath();
       ctx.roundRect(ox - 1, -barrelH - 2, bw + 2, 4, 2);
       ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ox - 1, -barrelH - 2, bw + 2, 4, 2);
     };
 
     if (barrels === 1) {
@@ -745,8 +748,8 @@ export class BallBlast extends Game {
     chassisGrad.addColorStop(0.5, '#dc2626');
     chassisGrad.addColorStop(1, '#991b1b');
     ctx.fillStyle = chassisGrad;
-    ctx.strokeStyle = '#fca5a5';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.roundRect(-18, -6, 36, 17, [8, 8, 4, 4]);
     ctx.fill();
@@ -829,8 +832,10 @@ export class BallBlast extends Game {
       ctx.fillStyle = grad;
       ctx.fill();
 
-      ctx.strokeStyle = b.stroke;
-      ctx.lineWidth = Math.max(2, b.r * 0.1);
+      // Bold cartoon outline
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(3.8, b.r * 0.12);
+      ctx.lineJoin = 'round';
       ctx.stroke();
 
       // Unrotate for Number Text

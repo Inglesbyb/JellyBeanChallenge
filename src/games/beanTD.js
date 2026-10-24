@@ -1210,6 +1210,9 @@ export class BeanTD extends Game {
       ctx.beginPath();
       ctx.ellipse(0, 14, 20, 10, 0, 0, TAU);
       ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
 
       // Jelly Bean Monkey Mascot
       const beanColor =
@@ -1223,13 +1226,13 @@ export class BeanTD extends Game {
         dir: t.angle > Math.PI / 2 || t.angle < -Math.PI / 2 ? -1 : 1,
       });
 
-      // Turret Weapon Props
+      // Turret Weapon Props with thick black cartoon outlines
       ctx.rotate(t.angle);
       if (t.type === 'dart') {
         // Holding Sharp Dart
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#2b2d42';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(14, -3);
         ctx.lineTo(24, 0);
@@ -1240,8 +1243,8 @@ export class BeanTD extends Game {
       } else if (t.type === 'tack') {
         // Brass Sprinkler Rim
         ctx.fillStyle = '#f4a261';
-        ctx.strokeStyle = '#264653';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
         ctx.beginPath();
         ctx.arc(0, 0, 16, 0, TAU);
         ctx.stroke();
@@ -1249,8 +1252,8 @@ export class BeanTD extends Game {
         // Cannon Barrel
         ctx.fillStyle = '#212529';
         ctx.fillRect(8, -6, 16, 12);
-        ctx.strokeStyle = '#ffbe0b';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
         ctx.strokeRect(8, -6, 16, 12);
       } else if (t.type === 'frost') {
         // Frost Orb
@@ -1258,6 +1261,9 @@ export class BeanTD extends Game {
         ctx.beginPath();
         ctx.arc(16, 0, 7, 0, TAU);
         ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
       }
 
       // Upgrade Stars (★)
@@ -1297,15 +1303,15 @@ export class BeanTD extends Game {
         lg.addColorStop(0.7, '#6c757d');
         lg.addColorStop(1, '#343a40');
         ctx.fillStyle = lg;
-        ctx.strokeStyle = '#212529';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.8;
         ctx.beginPath();
         ctx.ellipse(0, -2, b.r * 0.9, b.r * 1.15, 0, 0, TAU);
         ctx.fill();
         ctx.stroke();
 
         // Armor plate rivets
-        ctx.fillStyle = '#212529';
+        ctx.fillStyle = '#000000';
         const rivetAngles = [-0.6, -0.2, 0.2, 0.6];
         for (const ra of rivetAngles) {
           const rx = Math.sin(ra) * (b.r * 0.7);
@@ -1328,8 +1334,8 @@ export class BeanTD extends Game {
         bg.addColorStop(0.4, '#212529');
         bg.addColorStop(1, '#000000');
         ctx.fillStyle = bg;
-        ctx.strokeStyle = '#495057';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.8;
         ctx.beginPath();
         ctx.ellipse(0, -2, b.r * 0.9, b.r * 1.15, 0, 0, TAU);
         ctx.fill();
@@ -1348,15 +1354,15 @@ export class BeanTD extends Game {
         ctx.textBaseline = 'middle';
         ctx.fillText('💣⃠', 0, -2);
       } else {
-        // Normal colorful balloon
+        // Normal colorful balloon with bold black cartoon outline
         const bg = ctx.createRadialGradient(-b.r * 0.35, -b.r * 0.35, 1, 0, 0, b.r);
         bg.addColorStop(0, '#ffffff');
         bg.addColorStop(0.35, b.color);
         bg.addColorStop(1, b.color);
 
         ctx.fillStyle = bg;
-        ctx.strokeStyle = '#1b1b1b';
-        ctx.lineWidth = b.isMoab ? 3 : 2;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = b.isMoab ? 4.8 : 3.8;
 
         ctx.beginPath();
         ctx.ellipse(0, -2, b.r * 0.9, b.r * 1.15, 0, 0, TAU);
