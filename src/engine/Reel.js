@@ -73,6 +73,10 @@ export class Reel {
     if (targetGame) {
       const idx = GAMES.findIndex((g, i) => g.meta.id === targetGame || String(i + 1) === targetGame || String(i) === targetGame);
       if (idx !== -1) {
+        if (store.data.meta.eliminated) {
+          delete store.data.meta.eliminated[GAMES[idx].meta.id];
+          store.save();
+        }
         setTimeout(() => this.jumpToGame(idx), 50);
       }
     }

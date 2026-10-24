@@ -35,6 +35,7 @@ export class MultiplierRunner extends Game {
     this.speed = 195; // Tactically readable speed
     this.boostTimer = 0;
     this.feverRush = 0;
+    this.slipTimer = 0; // Dynamic slippery fish oil drift state
 
     // Stage progression: Boss 1: 10, Boss 2: 20, Boss 3: 30, etc.
     this.stage = saved?.stage || 1;
@@ -201,64 +202,140 @@ export class MultiplierRunner extends Game {
     };
   }
 
-  /* ------------------------------------------------------------ Stage Obstacles */
+  /* ------------------------------------------------------------ Stage Obstacles (Dynamic Dock Hazards) */
   makeStageObstacle(d, stage, step) {
-    const obsTypes = ['boulder', 'tnt', 'sweeper', 'drawbridge', 'gang', 'powerup', 'coins'];
-    const typeIdx = (step + stage * 2) % obsTypes.length;
-    const kind = obsTypes[typeIdx];
+    let pool;
+    if (stage === 1) {
+      // Stage 1 (10 Bean Boss): Slower pendulum anchors, rolling rum casks, turnstiles, crane drops, and rewarding bonuses
+      pool = ['anchor', 'rum_casks', 'turnstile', 'crane_drop', 'powerup', 'coins'];
+    } else if (stage === 2) {
+      // Stage 2 (20 Bean Boss): Introduce slapping kraken tentacles & seagull slicks, faster anchors and double casks
+      pool = ['tentacle_slap', 'crane_drop', 'rum_casks', 'seagull_slick', 'anchor', 'turnstile', 'powerup', 'coins'];
+    } else {
+      // Stage 3+ (30+ Bean Bosses): High-intensity dynamic gauntlet
+      pool = ['tentacle_slap', 'crane_drop', 'rum_casks', 'turnstile', 'anchor', 'seagull_slick', 'powerup'];
+    }
 
-    if (kind === 'boulder') {
-      const lane = Math.random() < 0.4 ? MID : Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
-      return { d, kind: 'boulder', done: false, x: lane, r: 32, rot: 0 };
-    }
-    if (kind === 'tnt') {
-      const centerTnt = Math.random() < 0.5;
-      const barrels = [];
-      if (centerTnt) {
-        barrels.push({ x: MID, r: 22, fuseT: 0 });
-      } else {
-        barrels.push({ x: TRACK_L + 75, r: 22, fuseT: 0 });
-        barrels.push({ x: TRACK_R - 75, r: 22, fuseT: 0 });
-      }
-      return { d, kind: 'tnt', done: false, barrels };
-    }
-    if (kind === 'sweeper') {
+    const kind = pool[(step + stage * 2) % pool.length];
+
+    // 1. Swinging Ship Anchor (Pendulum Arc)
+    if (kind === 'anchor') {
+      const speed = 2.0 + Math.min(1.6, stage * 0.4);
+      const amp = clamp(70 + stage * 10, 75, 115);
       return {
         d,
-        kind: 'sweeper',
+        kind: 'anchor',
         done: false,
-        angle: Math.random() * TAU,
-        rotSpeed: 2.2 + stage * 0.3,
-        beamLen: 165,
-        gapDist: 65,
+        speed,
+        amp,
+        phase: Math.random() * TAU,
+        x: MID,
+        swingAngle: 0,
+        r: 26,
       };
     }
-    if (kind === 'drawbridge') {
-      const bridgeW = 120;
-      const bridgeX = rand(TRACK_L + bridgeW / 2 + 20, TRACK_R - bridgeW / 2 - 20);
-      return { d, kind: 'drawbridge', done: false, x: bridgeX, w: bridgeW, length: 180 };
+
+    // 2. Victorian Steam Crane Crate Drop (Telegraphed Cargo Smash)
+    if (kind === 'crane_drop') {
+      const lanes = [MID, TRACK_L + 75, TRACK_R - 75];
+      const x = lanes[Math.floor(Math.random() * lanes.length)];
+      const w = 82 + Math.min(22, stage * 5);
+      const h = 70;
+      const warnDur = Math.max(0.45, 0.85 - stage * 0.08);
+      const smashDur = 0.35;
+      const liftDur = 0.7;
+      return {
+        d,
+        kind: 'crane_drop',
+        done: false,
+        x,
+        w,
+        h,
+        warnDur,
+        smashDur,
+        liftDur,
+        cycle: warnDur + smashDur + liftDur,
+        state: 'warn',
+        animT: 0,
+      };
     }
-    if (kind === 'gang') {
-      const gangCount = 2 + Math.min(3, Math.floor(stage * 0.7)); // 2-4 scallywags
+
+    // 3. Rolling Rum Casks (The Mersey Rollers)
+    if (kind === 'rum_casks') {
+      const casks = [];
+      const numCasks = stage === 1 ? 1 : Math.random() < 0.65 ? 2 : 1;
+      if (numCasks === 1) {
+        const lane = Math.random() < 0.4 ? MID : Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
+        casks.push({ x: lane, baseX: lane, r: 24, rot: 0, wobble: Math.random() * TAU, spd: 2.2 + stage * 0.3 });
+      } else {
+        casks.push({ x: TRACK_L + 70, baseX: TRACK_L + 70, r: 24, rot: 0, wobble: 0, spd: 2.4 + stage * 0.3 });
+        casks.push({ x: TRACK_R - 70, baseX: TRACK_R - 70, r: 24, rot: Math.PI, wobble: Math.PI, spd: 2.4 + stage * 0.3 });
+      }
+      return { d, kind: 'rum_casks', done: false, casks };
+    }
+
+    // 4. Slapping Mersey Tentacle (Dockside Ambush)
+    if (kind === 'tentacle_slap') {
+      const side = Math.random() < 0.5 ? 'left' : 'right';
+      const w = 125 + Math.min(30, stage * 8);
+      const telegraph = Math.max(0.5, 0.95 - stage * 0.09);
+      const slamDur = 0.38;
+      const retractDur = 0.65;
+      return {
+        d,
+        kind: 'tentacle_slap',
+        done: false,
+        side,
+        w,
+        telegraph,
+        slamDur,
+        retractDur,
+        cycle: telegraph + slamDur + retractDur,
+        state: 'warn',
+        animT: 0,
+      };
+    }
+
+    // 5. Rotating Dock Turnstile (Padded Customs Revolver)
+    if (kind === 'turnstile') {
+      const rotSpeed = (Math.random() < 0.5 ? 1 : -1) * (2.0 + Math.min(1.8, stage * 0.35));
+      return {
+        d,
+        kind: 'turnstile',
+        done: false,
+        angle: Math.random() * TAU,
+        rotSpeed,
+        armLen: 120,
+        x: MID,
+      };
+    }
+
+    // 6. Seagull Dive-Bomb & Gummy Grease Puddle (Traction Hazard)
+    if (kind === 'seagull_slick') {
       const lane = Math.random() < 0.5 ? TRACK_L + 80 : TRACK_R - 80;
       return {
         d,
-        kind: 'gang',
+        kind: 'seagull_slick',
         done: false,
         x: lane,
-        n: gangCount,
-        maxN: gangCount,
-        r: 24,
-        clashing: false,
-        clashT: 0,
+        w: 96,
+        h: 56,
+        gulls: [
+          { offX: -60, offY: -45, flap: 0 },
+          { offX: 0, offY: -58, flap: 1.4 },
+          { offX: 55, offY: -42, flap: 2.8 },
+        ],
       };
     }
+
+    // 7. Powerup (Cannon +3 Recruits or Nitro Turbo)
     if (kind === 'powerup') {
       const type = Math.random() < 0.6 ? 'cannon' : 'nitro';
       const x = Math.random() < 0.5 ? TRACK_L + 85 : TRACK_R - 85;
       return { d, kind: 'powerup', type, done: false, x, w: 68, h: 46 };
     }
-    // coins
+
+    // 8. Triple Royal Albert Gold Sovereigns
     const coinLane = Math.random() < 0.5 ? TRACK_L + 50 : TRACK_R - 50;
     return {
       d,
@@ -321,11 +398,45 @@ export class MultiplierRunner extends Game {
       this.targetX = this.crowdX;
     }
 
+    // Slippery dock oil drift wobble
+    if (this.slipTimer > 0) {
+      this.slipTimer -= dt;
+      this.crowdX += Math.sin(this.t * 14) * 60 * dt;
+      this.crowdX = clamp(this.crowdX, minX, maxX);
+      if (Math.random() < 0.25) {
+        this.fx.burst(this.crowdX + (Math.random() - 0.5) * rad, CROWD_Y + rad * 0.5, '#38bdf8', 2, 80, 0.25, 2);
+      }
+    }
+
     // Process Track Rows
     for (const r of this.rows) {
       if (r.done) continue;
 
-      if (r.kind === 'sweeper') {
+      if (r.kind === 'anchor') {
+        r.x = MID + Math.sin(this.t * r.speed + r.phase) * r.amp;
+        r.swingAngle = Math.cos(this.t * r.speed + r.phase) * 0.45;
+      } else if (r.kind === 'crane_drop') {
+        const tIn = (this.t * 1.35) % r.cycle;
+        r.animT = tIn;
+        r.state = tIn < r.warnDur ? 'warn' : tIn < r.warnDur + r.smashDur ? 'drop' : 'lift';
+      } else if (r.kind === 'rum_casks') {
+        for (const c of r.casks) {
+          c.rot += dt * 8.5;
+          if (r.casks.length > 1) {
+            c.x = c.baseX + Math.sin(this.t * c.spd + c.wobble) * 16;
+          }
+        }
+      } else if (r.kind === 'tentacle_slap') {
+        const tTent = (this.t * 1.25) % r.cycle;
+        r.animT = tTent;
+        r.state = tTent < r.telegraph ? 'warn' : tTent < r.telegraph + r.slamDur ? 'slam' : 'retract';
+      } else if (r.kind === 'turnstile') {
+        r.angle += r.rotSpeed * dt;
+      } else if (r.kind === 'seagull_slick') {
+        for (const g of r.gulls) {
+          g.flap += dt * 9.5;
+        }
+      } else if (r.kind === 'sweeper') {
         r.angle += r.rotSpeed * dt;
       } else if (r.kind === 'boulder') {
         r.rot += dt * 8;
@@ -408,119 +519,204 @@ export class MultiplierRunner extends Game {
       }
     }
 
-    // 2. Rotating Sweeper Beam
-    else if (r.kind === 'sweeper') {
-      if (this.boostTimer > 0) {
-        this.score += 80;
-        this.fx.text(this.crowdX, y - 20, 'SWEEPER SMASHED! 💥', '#ffd166', 24, 0.9);
-        this.fx.burst(this.crowdX, CROWD_Y, '#ffd166', 24, 260, 0.6, 4);
-        return;
-      }
+    // 2. Swinging Ship Anchor
+    else if (r.kind === 'anchor') {
+      const hit = Math.abs(r.x - this.crowdX) < rad + r.r * 0.85;
+      if (hit) {
+        if (this.boostTimer > 0) {
+          this.score += 80;
+          this.fx.text(this.crowdX, y - 24, 'ANCHOR SHATTERED! 💥', '#ffd166', 24, 0.9);
+          this.fx.burst(this.crowdX, CROWD_Y, '#ffd166', 24, 240, 0.6, 4);
+          return;
+        }
 
-      const armCos = Math.cos(r.angle);
-      const beamX = MID + armCos * r.gapDist;
-
-      if (Math.abs(this.crowdX - beamX) > rad + 24) {
         const loss = 2; // Exactly 2 beans
         this.count = Math.max(0, this.count - loss);
-
-        this.fx.text(this.crowdX, y - 24, `SWEPT OFF QUAY! −${loss}`, '#ff7a88', 26, 0.9);
-        this.fx.burst(this.crowdX, CROWD_Y, '#6a040f', 20, 220, 0.5, 4);
+        this.fx.text(this.crowdX, y - 26, `ANCHOR CLANG! −${loss} ⚓`, '#ff7a88', 26, 0.95);
+        this.fx.burst(this.crowdX, CROWD_Y, '#64748b', 22, 230, 0.55, 4);
         this.fx.shake(9, 0.35);
         this.sounds.hit();
         this.haptics.heavy();
 
         if (this.count <= 0) {
-          this.die('Swept into the Mersey by rotating dock boom!');
+          this.die('Battered into the Mersey by swinging ship anchor!');
           return;
         }
       } else {
         this.score += 25;
-        this.fx.text(this.crowdX, y - 22, 'PERFECT TIMING! +25', '#3dffa2', 18, 0.6);
+        this.fx.text(this.crowdX, y - 20, 'ANCHOR DODGED! +25', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 3. Rival Dock Gang
-    else if (r.kind === 'gang') {
-      const hit = Math.abs(r.x - this.crowdX) < rad + r.r * 0.85;
+    // 3. Victorian Steam Crane Crate Drop
+    else if (r.kind === 'crane_drop') {
+      const inLane = Math.abs(r.x - this.crowdX) < rad + r.w * 0.45;
+      const isSmashed = r.state === 'drop';
+
+      if (inLane && isSmashed) {
+        if (this.boostTimer > 0) {
+          this.score += 90;
+          this.fx.text(this.crowdX, y - 24, 'CRATE SMASHED! 💥', '#ffd166', 24, 0.9);
+          this.fx.burst(this.crowdX, CROWD_Y, '#b45309', 24, 250, 0.6, 4);
+          return;
+        }
+
+        const loss = 3; // Exactly 3 beans
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 28, `CRUSHED BY CARGO! −${loss} 📦`, '#ff0054', 28, 1.0);
+        this.fx.burst(this.crowdX, CROWD_Y, '#b45309', 26, 260, 0.6, 5);
+        this.fx.ring(this.crowdX, CROWD_Y, '#ef4444', 220, 0.5, 5);
+        this.fx.shake(12, 0.4);
+        this.sounds.hit();
+        this.haptics.heavy();
+
+        if (this.count <= 0) {
+          this.die('Flattened by Victorian steam crane sugar crate!');
+          return;
+        }
+      } else {
+        this.score += 30;
+        this.fx.text(this.crowdX, y - 20, 'CARGO CLEARED! +30', '#3dffa2', 18, 0.6);
+      }
+    }
+
+    // 4. Rolling Rum Casks
+    else if (r.kind === 'rum_casks') {
+      let hit = false;
+      for (const c of r.casks) {
+        if (Math.abs(c.x - this.crowdX) < rad + c.r * 0.85) {
+          hit = true;
+          break;
+        }
+      }
+
       if (hit) {
         if (this.boostTimer > 0) {
-          this.score += r.maxN * 50;
-          this.fx.text(r.x, y - 30, 'GANG CRUSHED! 🚀', '#ffd166', 26, 0.9);
-          this.fx.burst(r.x, CROWD_Y, '#ef4444', 24, 240, 0.6, 4);
-          this.sounds.hit();
-        } else {
-          const loss = Math.min(this.count, r.n);
-          this.count = Math.max(0, this.count - loss);
-          this.fx.text(this.crowdX, y - 30, `GANG CLASH! −${loss}`, '#ff0054', 28, 1.0);
-          this.fx.burst(r.x, CROWD_Y, '#ef4444', 20, 200, 0.5, 3.5);
-          this.fx.shake(8, 0.3);
-          this.sounds.hit();
-          this.haptics.heavy();
+          this.score += 70;
+          this.fx.text(this.crowdX, y - 24, 'CASKS PULVERIZED! 💥', '#ffd166', 24, 0.9);
+          this.fx.burst(this.crowdX, CROWD_Y, '#78350f', 24, 240, 0.6, 4);
+          return;
+        }
 
-          if (this.count <= 0) {
-            this.die('Overwhelmed by rival dock gang!');
-            return;
-          }
+        const loss = 2; // Exactly 2 beans
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 26, `CASK SMACK! −${loss} 🪵`, '#ff7a88', 26, 0.95);
+        this.fx.burst(this.crowdX, CROWD_Y, '#78350f', 22, 220, 0.5, 4);
+        this.fx.shake(9, 0.35);
+        this.sounds.hit();
+        this.haptics.heavy();
+
+        if (this.count <= 0) {
+          this.die('Tumbled into the dock by rolling rum casks!');
+          return;
+        }
+      } else {
+        this.score += 25;
+        this.fx.text(this.crowdX, y - 20, 'CASKS DODGED! +25', '#3dffa2', 18, 0.6);
+      }
+    }
+
+    // 5. Slapping Mersey Tentacle
+    else if (r.kind === 'tentacle_slap') {
+      const inDanger = r.side === 'left' ? this.crowdX < TRACK_L + r.w : this.crowdX > TRACK_R - r.w;
+      const isSlamming = r.state === 'slam';
+
+      if (inDanger && isSlamming) {
+        if (this.boostTimer > 0) {
+          this.score += 90;
+          this.fx.text(this.crowdX, y - 24, 'TENTACLE SLICED! 💥', '#ffd166', 24, 0.9);
+          this.fx.burst(this.crowdX, CROWD_Y, '#a21caf', 24, 250, 0.6, 4);
+          return;
+        }
+
+        const loss = 2; // Exactly 2 beans
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 26, `TENTACLE SLAP! −${loss} 🐙`, '#ff0054', 28, 1.0);
+        this.fx.burst(this.crowdX, CROWD_Y, '#a21caf', 24, 240, 0.6, 4);
+        this.fx.ring(this.crowdX, CROWD_Y, '#0284c7', 220, 0.5, 5);
+        this.fx.shake(10, 0.35);
+        this.sounds.hit();
+        this.haptics.heavy();
+
+        if (this.count <= 0) {
+          this.die('Whipped into the Mersey Basin by a kraken tentacle!');
+          return;
         }
       } else {
         this.score += 30;
-        this.fx.text(this.crowdX, y - 20, 'OUTMANEUVERED! +30', '#3dffa2', 18, 0.6);
+        this.fx.text(this.crowdX, y - 20, 'TENTACLE DODGED! +30', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 4. Albert Dock Drawbridge
-    else if (r.kind === 'drawbridge') {
-      if (this.crowdX < r.x - r.w / 2 || this.crowdX > r.x + r.w / 2) {
-        if (this.boostTimer <= 0) {
-          const loss = 2;
-          this.count = Math.max(0, this.count - loss);
-          this.fx.text(this.crowdX, y - 24, `FELL IN WATER! −${loss} 💦`, '#38bdf8', 26, 0.9);
-          this.fx.burst(this.crowdX, CROWD_Y, '#0077b6', 20, 180, 0.5, 3.5);
-          this.sounds.drop();
-          this.haptics.medium();
+    // 6. Rotating Dock Turnstile
+    else if (r.kind === 'turnstile') {
+      const distFromCenter = Math.abs(this.crowdX - r.x);
+      let hitArm = false;
 
-          if (this.count <= 0) {
-            this.die('Fell off the drawbridge into the Mersey Basin!');
-            return;
+      if (distFromCenter < rad + r.armLen * 0.9) {
+        // Player position angle from center
+        const pAng = Math.atan2(0, this.crowdX - r.x);
+        for (let i = 0; i < 3; i++) {
+          const armAng = (r.angle + (i * TAU) / 3) % TAU;
+          let diff = Math.abs(pAng - armAng);
+          if (diff > Math.PI) diff = TAU - diff;
+          if (diff < 0.45) {
+            hitArm = true;
+            break;
           }
+        }
+      }
+
+      if (hitArm) {
+        if (this.boostTimer > 0) {
+          this.score += 80;
+          this.fx.text(this.crowdX, y - 20, 'TURNSTILE SMASHED! 💥', '#ffd166', 24, 0.9);
+          this.fx.burst(this.crowdX, CROWD_Y, '#ffd166', 24, 240, 0.6, 4);
+          return;
+        }
+
+        const loss = 2; // Exactly 2 beans
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 24, `TURNSTILE SMACK! −${loss} 🔄`, '#ff7a88', 26, 0.9);
+        this.fx.burst(this.crowdX, CROWD_Y, '#cbd5e1', 20, 220, 0.5, 4);
+        this.fx.shake(8, 0.3);
+        this.sounds.hit();
+        this.haptics.heavy();
+
+        if (this.count <= 0) {
+          this.die('Battered by rotating dock customs turnstile!');
+          return;
         }
       } else {
         this.score += 30;
-        this.fx.text(this.crowdX, y - 20, 'SAFE CROSSING! +30', '#3dffa2', 18, 0.6);
+        this.fx.text(this.crowdX, y - 20, 'SLIPPED THROUGH! +30', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 5. TNT Barrels
-    else if (r.kind === 'tnt') {
-      for (const b of r.barrels) {
-        if (Math.abs(b.x - this.crowdX) < rad + b.r * 0.85) {
-          if (this.boostTimer > 0) {
-            this.score += 60;
-            this.fx.text(b.x, y - 24, 'BARREL DEFUSED! 💥', '#ffd166', 24, 0.9);
-            this.fx.burst(b.x, CROWD_Y, '#ff0054', 24, 260, 0.5, 4);
-            continue;
-          }
+    // 7. Slippery Seagull Dive-Bomb & Grease Puddle
+    else if (r.kind === 'seagull_slick') {
+      const hit = Math.abs(r.x - this.crowdX) < rad + r.w * 0.45;
+      if (hit) {
+        this.slipTimer = 1.35; // Trigger drift wobble
+        const loss = 1; // 1 bean slips into water
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 26, `SLIPPED ON FISH OIL! −${loss} 🐟`, '#38bdf8', 26, 0.95);
+        this.fx.burst(this.crowdX, CROWD_Y, '#38bdf8', 18, 190, 0.5, 3.5);
+        this.fx.shake(6, 0.25);
+        this.sounds.drop();
+        this.haptics.medium();
 
-          const cut = 3; // Exactly 3 beans
-          this.count = Math.max(0, this.count - cut);
-
-          this.fx.text(b.x, y - 28, `BARREL BOOM! −${cut}`, '#ff0054', 28, 1.0);
-          this.fx.burst(b.x, CROWD_Y, '#ff0054', 26, 280, 0.6, 5);
-          this.fx.ring(b.x, CROWD_Y, '#ffd166', 220, 0.5, 5);
-          this.fx.shake(12, 0.4);
-          this.sounds.hit();
-          this.haptics.heavy();
-
-          if (this.count <= 0) {
-            this.die('Blown up by maritime gunpowder barrel!');
-            return;
-          }
+        if (this.count <= 0) {
+          this.die('Slipped off the slick dock timber into the Mersey!');
+          return;
         }
+      } else {
+        this.score += 20;
+        this.fx.text(this.crowdX, y - 20, 'CLEARED OIL SLICK! +20', '#3dffa2', 18, 0.6);
       }
     }
 
-    // 6. Powerup
+    // 8. Powerup
     else if (r.kind === 'powerup') {
       if (Math.abs(r.x - this.crowdX) < rad + r.w * 0.5) {
         if (r.type === 'cannon') {
@@ -542,33 +738,51 @@ export class MultiplierRunner extends Game {
       }
     }
 
-    // 7. Boulder
-    else if (r.kind === 'boulder') {
-      if (Math.abs(r.x - this.crowdX) < rad + r.r * 0.85) {
-        if (this.boostTimer > 0) {
-          this.score += 90;
-          this.fx.text(this.crowdX, y - 24, 'BOULDER CRUSHED! 💥', '#ffd166', 24, 0.9);
-          this.fx.burst(r.x, CROWD_Y, '#ff0054', 28, 280, 0.6, 4);
-          this.sounds.hit();
-          return;
-        }
-
-        const loss = 2; // Exactly 2 beans
+    // Backward-compatible handlers for legacy obstacles
+    else if (r.kind === 'sweeper') {
+      const armCos = Math.cos(r.angle);
+      const beamX = MID + armCos * r.gapDist;
+      if (Math.abs(this.crowdX - beamX) > rad + 24) {
+        const loss = 2;
         this.count = Math.max(0, this.count - loss);
-
-        this.fx.text(r.x, y - 24, `RUN OVER! −${loss}`, '#ff7a88', 26, 0.9);
-        this.fx.burst(r.x, CROWD_Y, '#ff0054', 22, 240, 0.55, 4);
-        this.fx.shake(10, 0.35);
+        this.fx.text(this.crowdX, y - 24, `SWEPT OFF QUAY! −${loss}`, '#ff7a88', 26, 0.9);
+        this.fx.shake(9, 0.35);
         this.sounds.hit();
-        this.haptics.heavy();
-
-        if (this.count <= 0) {
-          this.die('Crushed by rolling jawbreaker boulder!');
-          return;
+        if (this.count <= 0) this.die('Swept into the Mersey by rotating dock boom!');
+      }
+    } else if (r.kind === 'gang') {
+      if (Math.abs(r.x - this.crowdX) < rad + r.r * 0.85) {
+        const loss = Math.min(this.count, r.n);
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 30, `GANG CLASH! −${loss}`, '#ff0054', 28, 1.0);
+        this.sounds.hit();
+        if (this.count <= 0) this.die('Overwhelmed by rival dock gang!');
+      }
+    } else if (r.kind === 'drawbridge') {
+      if (this.crowdX < r.x - r.w / 2 || this.crowdX > r.x + r.w / 2) {
+        const loss = 2;
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(this.crowdX, y - 24, `FELL IN WATER! −${loss} 💦`, '#38bdf8', 26, 0.9);
+        this.sounds.drop();
+        if (this.count <= 0) this.die('Fell off the drawbridge into the Mersey Basin!');
+      }
+    } else if (r.kind === 'tnt') {
+      for (const b of r.barrels) {
+        if (Math.abs(b.x - this.crowdX) < rad + b.r * 0.85) {
+          const cut = 3;
+          this.count = Math.max(0, this.count - cut);
+          this.fx.text(b.x, y - 28, `BARREL BOOM! −${cut}`, '#ff0054', 28, 1.0);
+          this.sounds.hit();
+          if (this.count <= 0) this.die('Blown up by maritime gunpowder barrel!');
         }
-      } else {
-        this.score += 25;
-        this.fx.text(this.crowdX, y - 22, 'CLOSE DODGE! +25', '#3dffa2', 18, 0.6);
+      }
+    } else if (r.kind === 'boulder') {
+      if (Math.abs(r.x - this.crowdX) < rad + r.r * 0.85) {
+        const loss = 2;
+        this.count = Math.max(0, this.count - loss);
+        this.fx.text(r.x, y - 24, `RUN OVER! −${loss}`, '#ff7a88', 26, 0.9);
+        this.sounds.hit();
+        if (this.count <= 0) this.die('Crushed by rolling jawbreaker boulder!');
       }
     }
 
@@ -707,13 +921,19 @@ export class MultiplierRunner extends Game {
         if (y < -220 || y > H + 220) continue;
 
         if (r.kind === 'gate') this.drawGates(r, y);
+        else if (r.kind === 'anchor') this.drawAnchor(r, y);
+        else if (r.kind === 'crane_drop') this.drawCraneDrop(r, y);
+        else if (r.kind === 'rum_casks') this.drawRumCasks(r, y);
+        else if (r.kind === 'tentacle_slap') this.drawTentacleSlap(r, y);
+        else if (r.kind === 'turnstile') this.drawTurnstile(r, y);
+        else if (r.kind === 'seagull_slick') this.drawSeagullSlick(r, y);
+        else if (r.kind === 'powerup') this.drawPowerup(r, y);
+        else if (r.kind === 'coins') this.drawCoins(r, y);
         else if (r.kind === 'sweeper') this.drawSweeper(r, y);
         else if (r.kind === 'gang') this.drawGang(r, y);
         else if (r.kind === 'drawbridge') this.drawDrawbridge(r, y);
         else if (r.kind === 'tnt') this.drawTnt(r, y);
-        else if (r.kind === 'powerup') this.drawPowerup(r, y);
         else if (r.kind === 'boulder') this.drawBoulder(r, y);
-        else if (r.kind === 'coins') this.drawCoins(r, y);
         else if (r.kind === 'boss') {
           this.drawBoss(r, y);
           // Approaching warning banner on the quayside
@@ -1006,6 +1226,563 @@ export class MultiplierRunner extends Game {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('💀', 0, 0);
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 1. Swinging Ship Anchor (Pendulum) */
+  drawAnchor(r, y) {
+    const ctx = this.ctx;
+    ctx.save();
+
+    // Top mounting beam / pivot high above the track
+    const pivotY = y - 170;
+    const anchorX = r.x;
+    const anchorY = y;
+
+    // Cast dynamic drop shadow on the quayside timber
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(anchorX, y + 16, 32, 14, 0, 0, TAU);
+    ctx.fill();
+
+    // Heavy hemp hawser rope / steel chain from top pivot to anchor ring
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(MID, pivotY);
+    ctx.lineTo(anchorX, anchorY - 34);
+    ctx.stroke();
+
+    // Inner chain links
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(MID, pivotY);
+    ctx.lineTo(anchorX, anchorY - 34);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Translate to anchor head with tilt angle
+    ctx.translate(anchorX, anchorY);
+    ctx.rotate(r.swingAngle || 0);
+
+    // Cast-iron Pirate Anchor Body
+    ctx.fillStyle = '#334155';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+
+    // Top Shackle Ring
+    ctx.beginPath();
+    ctx.arc(0, -32, 11, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.arc(0, -32, 5, 0, TAU);
+    ctx.fill();
+
+    // Stock / Crossbar
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(-28, -20, 56, 8);
+    ctx.strokeRect(-28, -20, 56, 8);
+    // Brass end knobs on stock
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath(); ctx.arc(-28, -16, 5, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(28, -16, 5, 0, TAU); ctx.fill(); ctx.stroke();
+
+    // Central Shank
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(-6, -20, 12, 36);
+    ctx.strokeRect(-6, -20, 12, 36);
+
+    // Curved Flukes / Arms
+    ctx.beginPath();
+    ctx.moveTo(-34, 4);
+    ctx.quadraticCurveTo(0, 32, 34, 4);
+    ctx.quadraticCurveTo(24, 22, 0, 24);
+    ctx.quadraticCurveTo(-24, 22, -34, 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Sharp Palms / Arrow tips
+    ctx.beginPath();
+    ctx.moveTo(-34, 4); ctx.lineTo(-40, 14); ctx.lineTo(-28, 12); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(34, 4); ctx.lineTo(40, 14); ctx.lineTo(28, 12); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Skull emblem on crown
+    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('☠️', 0, 4);
+
+    // Hazard Badge
+    ctx.font = '900 12px Outfit, system-ui, sans-serif';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#140924';
+    ctx.strokeText('−2 BEANS', 0, 38);
+    ctx.fillStyle = '#f87171';
+    ctx.fillText('−2 BEANS', 0, 38);
+
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 2. Victorian Steam Crane Crate Drop */
+  drawCraneDrop(r, y) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(r.x, y);
+
+    const isWarn = r.state === 'warn';
+    const isDrop = r.state === 'drop';
+
+    // 1. Quayside Drop Zone Telegraph Warning Box
+    const pulse = Math.sin(this.t * 16) > 0 ? 0.8 : 0.4;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = isDrop ? '#ef4444' : `rgba(239, 68, 68, ${pulse})`;
+    ctx.fillStyle = isDrop ? 'rgba(239, 68, 68, 0.35)' : `rgba(239, 68, 68, ${pulse * 0.25})`;
+
+    ctx.beginPath();
+    ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    // Diagonal hazard stripes on landing zone
+    ctx.strokeStyle = isDrop ? 'rgba(239, 68, 68, 0.6)' : `rgba(250, 204, 21, ${pulse * 0.7})`;
+    ctx.lineWidth = 2;
+    for (let lx = -r.w / 2 + 10; lx < r.w / 2 + 30; lx += 18) {
+      ctx.beginPath();
+      ctx.moveTo(clamp(lx - 20, -r.w / 2, r.w / 2), -r.h / 2);
+      ctx.lineTo(clamp(lx, -r.w / 2, r.w / 2), r.h / 2);
+      ctx.stroke();
+    }
+
+    // 2. Suspended Crate Height (Vertical drop offset)
+    let crateYOff = 0;
+    let crateScale = 1.0;
+    if (isWarn) {
+      // Hovering high above with slight winch sway
+      crateYOff = -130 + Math.sin(this.t * 6) * 8;
+      crateScale = 0.85;
+    } else if (isDrop) {
+      // Smashed down onto timber floor!
+      crateYOff = 0;
+      crateScale = 1.05; // Impact squash
+    } else {
+      // Lifting back up
+      const liftProgress = (r.animT - r.warnDur - r.smashDur) / r.liftDur;
+      crateYOff = -130 * Math.min(1, liftProgress * 1.5);
+      crateScale = 0.95;
+    }
+
+    // Crane Winch Chains
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(-r.w * 0.38, -260); ctx.lineTo(-r.w * 0.38, crateYOff - r.h * 0.45);
+    ctx.moveTo(r.w * 0.38, -260); ctx.lineTo(r.w * 0.38, crateYOff - r.h * 0.45);
+    ctx.stroke();
+
+    // Impact Ground Dust Puffs when dropped
+    if (isDrop) {
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.6)';
+      for (let i = -r.w / 2; i <= r.w / 2; i += 22) {
+        ctx.beginPath();
+        ctx.arc(i, r.h / 2 + 4, 9, 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    // Crate Body
+    ctx.save();
+    ctx.translate(0, crateYOff);
+    ctx.scale(crateScale, crateScale);
+
+    // Heavy Royal Albert Sugar Crate Planks
+    ctx.fillStyle = '#b45309';
+    ctx.strokeStyle = '#140924';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Planks line texture
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-r.w / 2, -r.h / 6); ctx.lineTo(r.w / 2, -r.h / 6);
+    ctx.moveTo(-r.w / 2, r.h / 6); ctx.lineTo(r.w / 2, r.h / 6);
+    ctx.stroke();
+
+    // Heavy iron cross-braces
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(-r.w / 2 + 6, -r.h / 2 + 6); ctx.lineTo(r.w / 2 - 6, r.h / 2 - 6);
+    ctx.moveTo(r.w / 2 - 6, -r.h / 2 + 6); ctx.lineTo(-r.w / 2 + 6, r.h / 2 - 6);
+    ctx.stroke();
+
+    // Stenciled Sugar / Rum Cargo Stamp
+    ctx.fillStyle = '#fef08a';
+    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('CRUMP CARGO', 0, 0);
+
+    // Warning Badge
+    ctx.font = '900 11px Outfit, system-ui, sans-serif';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#140924';
+    ctx.strokeText(isDrop ? '💥 −3 BEANS' : '⚠️ WATCH OUT', 0, -r.h / 2 - 12);
+    ctx.fillStyle = isDrop ? '#ef4444' : '#facc15';
+    ctx.fillText(isDrop ? '💥 −3 BEANS' : '⚠️ WATCH OUT', 0, -r.h / 2 - 12);
+
+    ctx.restore();
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 3. Rolling Rum Casks */
+  drawRumCasks(r, y) {
+    const ctx = this.ctx;
+    for (const c of r.casks) {
+      ctx.save();
+      const hop = Math.abs(Math.sin(c.rot * 2)) * 3;
+      ctx.translate(c.x, y - hop);
+
+      // Drop shadow
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+      ctx.beginPath();
+      ctx.ellipse(0, c.r + 3, c.r * 1.1, c.r * 0.45, 0, 0, TAU);
+      ctx.fill();
+
+      // Barrel Rotation
+      ctx.rotate(c.rot);
+
+      // Oak Barrel Exterior
+      ctx.fillStyle = '#92400e';
+      ctx.strokeStyle = '#140924';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, c.r, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      // Brass Hoops
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(0, 0, c.r * 0.72, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, c.r * 0.38, 0, TAU); ctx.stroke();
+
+      // Wooden staves spoke lines
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 2.5;
+      for (let a = 0; a < Math.PI; a += Math.PI / 3) {
+        ctx.beginPath();
+        ctx.moveTo(-Math.cos(a) * c.r, -Math.sin(a) * c.r);
+        ctx.lineTo(Math.cos(a) * c.r, Math.sin(a) * c.r);
+        ctx.stroke();
+      }
+
+      // Center Bung Plug
+      ctx.fillStyle = '#451a03';
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
+
+      ctx.restore();
+
+      // Floating Penalty Badge above cask
+      ctx.save();
+      ctx.translate(c.x, y - c.r - 16);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '900 12px Outfit, system-ui, sans-serif';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#140924';
+      ctx.strokeText('🪵 −2 BEANS', 0, 0);
+      ctx.fillStyle = '#f87171';
+      ctx.fillText('🪵 −2 BEANS', 0, 0);
+      ctx.restore();
+    }
+  }
+
+  /* ------------------------------------------------------------ 4. Slapping Mersey Tentacle */
+  drawTentacleSlap(r, y) {
+    const ctx = this.ctx;
+    ctx.save();
+
+    const isLeft = r.side === 'left';
+    const edgeX = isLeft ? TRACK_L : TRACK_R;
+    const isWarn = r.state === 'warn';
+    const isSlam = r.state === 'slam';
+
+    // 1. Canal Water Bubbles & Warning Ripples
+    ctx.strokeStyle = isSlam ? '#38bdf8' : 'rgba(56, 189, 248, 0.6)';
+    ctx.lineWidth = 3;
+    const ripR = (this.t * 40) % 28;
+    ctx.beginPath();
+    ctx.ellipse(edgeX, y, ripR, ripR * 0.5, 0, 0, TAU);
+    ctx.stroke();
+
+    // 2. Danger Zone Tint on Boardwalk
+    const zoneW = r.w;
+    const zoneX = isLeft ? TRACK_L : TRACK_R - zoneW;
+    ctx.fillStyle = isSlam ? 'rgba(162, 28, 175, 0.35)' : 'rgba(162, 28, 175, 0.15)';
+    ctx.fillRect(zoneX, y - 26, zoneW, 52);
+    ctx.strokeStyle = isSlam ? '#a21caf' : 'rgba(162, 28, 175, 0.4)';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(zoneX, y - 26, zoneW, 52);
+
+    // 3. Animated Tentacle Model
+    const reach = isSlam ? zoneW : isWarn ? zoneW * 0.35 : zoneW * 0.7;
+    const tipX = isLeft ? TRACK_L + reach : TRACK_R - reach;
+    const tentY = y - (isSlam ? 0 : 25 + Math.sin(this.t * 8) * 8);
+
+    // Drop shadow
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse((edgeX + tipX) / 2, y + 10, reach * 0.5, 12, 0, 0, TAU);
+    ctx.fill();
+
+    // Glossy Kraken Tentacle Body
+    ctx.fillStyle = '#a21caf';
+    ctx.strokeStyle = '#140924';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(edgeX, y - 24);
+    ctx.bezierCurveTo(
+      (edgeX + tipX) / 2, tentY - 30,
+      tipX, tentY - 20,
+      tipX + (isLeft ? 15 : -15), tentY
+    );
+    ctx.bezierCurveTo(
+      tipX, tentY + 20,
+      (edgeX + tipX) / 2, tentY + 26,
+      edgeX, y + 24
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Bright Yellow Suction Cups
+    ctx.fillStyle = '#fde047';
+    ctx.strokeStyle = '#140924';
+    ctx.lineWidth = 2;
+    const numCups = 5;
+    for (let i = 1; i <= numCups; i++) {
+      const frac = i / (numCups + 1);
+      const cupX = edgeX + (tipX - edgeX) * frac;
+      const cupY = tentY + Math.sin(frac * Math.PI) * (isLeft ? 6 : -6);
+      ctx.beginPath();
+      ctx.arc(cupX, cupY, 6.5 - frac * 2, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Splash Particles when slammed
+    if (isSlam) {
+      ctx.fillStyle = '#38bdf8';
+      for (let s = 0; s < 6; s++) {
+        const sx = tipX + (Math.random() - 0.5) * 40;
+        const sy = y + (Math.random() - 0.5) * 30;
+        ctx.beginPath(); ctx.arc(sx, sy, 4, 0, TAU); ctx.fill();
+      }
+    }
+
+    // Warning Badge
+    ctx.font = '900 12px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#140924';
+    const badgeX = isLeft ? TRACK_L + zoneW * 0.5 : TRACK_R - zoneW * 0.5;
+    ctx.strokeText(isSlam ? '🐙 SLAM! −2' : '⚠️ TENTACLE!', badgeX, y - 36);
+    ctx.fillStyle = isSlam ? '#f43f5e' : '#facc15';
+    ctx.fillText(isSlam ? '🐙 SLAM! −2' : '⚠️ TENTACLE!', badgeX, y - 36);
+
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 5. Rotating Dock Turnstile */
+  drawTurnstile(r, y) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(r.x, y);
+
+    // Cast circular base shadow
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r.armLen * 0.95, 0, TAU);
+    ctx.fill();
+
+    // 3 Rotating Boom Arms
+    for (let i = 0; i < 3; i++) {
+      const armAng = r.angle + (i * TAU) / 3;
+      ctx.save();
+      ctx.rotate(armAng);
+
+      // Padded Arm with Hazard Stripes
+      ctx.fillStyle = '#e2e8f0';
+      ctx.strokeStyle = '#140924';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(14, -8, r.armLen - 14, 16, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      // Red hazard stripes
+      ctx.fillStyle = '#ef4444';
+      for (let sx = 25; sx < r.armLen - 10; sx += 24) {
+        ctx.fillRect(sx, -7, 12, 14);
+      }
+
+      // Rubber End Bumper
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(r.armLen, 0, 10, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // Safe Open Wedge Indicator (Glowing green guide)
+    const openAng = r.angle + TAU / 6;
+    ctx.strokeStyle = 'rgba(74, 222, 128, 0.7)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(0, 0, r.armLen * 0.7, openAng - 0.4, openAng + 0.4);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Central Brass Customs Turret
+    ctx.fillStyle = '#f59e0b';
+    ctx.strokeStyle = '#140924';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#b45309';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, TAU);
+    ctx.fill();
+
+    // Rivets
+    ctx.fillStyle = '#ffffff';
+    for (let a = 0; a < TAU; a += TAU / 4) {
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * 17, Math.sin(a) * 17, 2.5, 0, TAU);
+      ctx.fill();
+    }
+
+    // Header label
+    ctx.font = '900 12px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#140924';
+    ctx.strokeText('🔄 −2 BEANS', 0, -r.armLen - 12);
+    ctx.fillStyle = '#f87171';
+    ctx.fillText('🔄 −2 BEANS', 0, -r.armLen - 12);
+
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 6. Seagull Dive-Bomb & Gummy Grease Puddle */
+  drawSeagullSlick(r, y) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(r.x, y);
+
+    // 1. Shimmering Iridescent Grease Puddle on Boardwalk
+    const pudGrad = ctx.createRadialGradient(0, 0, 8, 0, 0, r.w * 0.5);
+    pudGrad.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
+    pudGrad.addColorStop(0.5, 'rgba(232, 121, 249, 0.45)');
+    pudGrad.addColorStop(1, 'rgba(250, 204, 21, 0.15)');
+
+    ctx.fillStyle = pudGrad;
+    ctx.strokeStyle = '#140924';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r.w * 0.48, r.h * 0.48, 0.15, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+
+    // Slick skid streaks
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-r.w * 0.28, -6); ctx.lineTo(r.w * 0.25, 4);
+    ctx.moveTo(-r.w * 0.15, 8); ctx.lineTo(r.w * 0.2, 14);
+    ctx.stroke();
+
+    // Puddle Badge
+    ctx.font = '900 11px Outfit, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#140924';
+    ctx.strokeText('⚠️ SLICK OIL −1', 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('⚠️ SLICK OIL −1', 0, 0);
+
+    // 2. Flying Cartoon Liverpool Seagulls Overhead
+    for (const g of r.gulls) {
+      ctx.save();
+      ctx.translate(g.offX, g.offY);
+
+      // Flapping wing calculation
+      const wingFlap = Math.sin(g.flap) * 12;
+
+      // Seagull Body
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.5;
+
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 11, 6, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      // Animated Wings
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(-2, -14 - wingFlap);
+      ctx.lineTo(6, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(-2, 14 + wingFlap);
+      ctx.lineTo(6, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Yellow Beak
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.moveTo(10, -2);
+      ctx.lineTo(17, 0);
+      ctx.lineTo(10, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 
