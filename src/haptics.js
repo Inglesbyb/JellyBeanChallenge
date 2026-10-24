@@ -12,7 +12,7 @@ function buzz(pattern, minGap = 0) {
   } catch { /* unsupported */ }
 }
 
-export const haptics = {
+const rawHaptics = {
   light: () => buzz(8, 60),
   medium: () => buzz(18, 60),
   heavy: () => buzz([28, 18, 36]),
@@ -20,3 +20,11 @@ export const haptics = {
   fail: () => buzz([60, 40, 140]),
   setEnabled: (v) => { state.enabled = v; },
 };
+
+export const haptics = new Proxy(rawHaptics, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    return () => {};
+  }
+});
+

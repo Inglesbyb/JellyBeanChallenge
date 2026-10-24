@@ -560,8 +560,13 @@ export class Reel {
   loop(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    this.tick(dt);
-    requestAnimationFrame((t) => this.loop(t));
+    try {
+      this.tick(dt);
+    } catch (err) {
+      console.error('Game loop tick error:', err);
+    } finally {
+      requestAnimationFrame((t) => this.loop(t));
+    }
   }
 
   tick(dt) {

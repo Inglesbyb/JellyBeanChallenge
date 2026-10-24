@@ -192,7 +192,7 @@ export class ColorClash extends Game {
       this.isOvertime = true;
       this.inkRate = this.baseInkRate * 2.0;
       this.overtimeBannerTimer = 3.5;
-      this.sounds.levelUp();
+      this.sounds.up();
       this.haptics.heavy();
       this.fx.shake(10, 0.5);
       this.fx.text(this.W / 2, 280, '⚡ 2X INK OVERTIME RUSH! ⚡', '#ffd166', 26, 3.0);

@@ -152,6 +152,18 @@ class SoundEngine {
   boost() {
     this.tone({ f: 380, to: 950, type: 'sawtooth', dur: 0.28, vol: 0.22 });
   }
+  levelUp() {
+    this.up();
+  }
 }
 
-export const sounds = new SoundEngine();
+const rawSounds = new SoundEngine();
+export const sounds = new Proxy(rawSounds, {
+  get(target, prop) {
+    if (prop in target) {
+      const val = target[prop];
+      return typeof val === 'function' ? val.bind(target) : val;
+    }
+    return () => {};
+  }
+});
