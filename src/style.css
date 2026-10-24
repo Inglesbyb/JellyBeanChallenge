@@ -352,18 +352,20 @@ canvas {
   align-items: center;
   justify-content: center;
   gap: 0.05em;
-  background: var(--glass);
-  border: 1px solid var(--stroke);
+  background: #1e293b;
+  border: 2.5px solid #000000;
+  box-shadow: 0 3.5px 0 #000000;
   color: var(--ink);
   font: inherit;
   cursor: pointer;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  transition: transform 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .rbtn:active {
-  transform: scale(0.9);
+  transform: translateY(2px);
+  box-shadow: 0 1.5px 0 #000000;
 }
 
 .rbtn .ico {
@@ -656,8 +658,8 @@ canvas {
 .btn {
   width: 100%;
   padding: 0.95em 1em;
-  border: 0;
-  border-radius: 1.1em;
+  border: 3.5px solid #000000;
+  border-radius: 1.2em;
   font: inherit;
   font-size: 1.15em;
   font-weight: 900;
@@ -665,20 +667,21 @@ canvas {
   color: #07071a;
   cursor: pointer;
   background: linear-gradient(100deg, var(--a2), var(--a1) 70%, var(--a3));
-  box-shadow: 0 10px 40px rgba(124, 92, 255, 0.5);
+  box-shadow: 0 5px 0 #000000, 0 12px 30px rgba(0, 0, 0, 0.4);
   animation: btnpulse 1.8s ease-in-out infinite;
-  transition: transform 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .btn:active {
-  transform: scale(0.96);
+  transform: translateY(3px) scale(0.98);
+  box-shadow: 0 2px 0 #000000;
 }
 
 .btn.ghost {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid var(--stroke);
+  background: #1e293b;
+  border: 3px solid #000000;
+  box-shadow: 0 4px 0 #000000;
   color: var(--ink);
-  box-shadow: none;
   animation: none;
 }
 
@@ -719,8 +722,9 @@ canvas {
   place-items: center;
   font-size: 1.1em;
   border-radius: 1em;
-  background: var(--glass);
-  border: 2px solid var(--stroke);
+  background: #1e293b;
+  border: 2.5px solid #000000;
+  box-shadow: 0 3px 0 #000000;
   cursor: pointer;
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
@@ -728,11 +732,12 @@ canvas {
 .chip:hover {
   transform: translateY(-3px) scale(1.12);
   border-color: var(--a2);
-  box-shadow: 0 4px 16px rgba(37, 230, 255, 0.4);
+  box-shadow: 0 5px 0 #000000, 0 4px 16px rgba(37, 230, 255, 0.4);
 }
 
 .chip:active {
-  transform: scale(0.95);
+  transform: translateY(2px) scale(0.95);
+  box-shadow: 0 1px 0 #000000;
 }
 
 .chip.survived {

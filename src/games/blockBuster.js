@@ -649,16 +649,16 @@ export class BlockBuster extends Game {
     const ctx = this.ctx;
     const { W, H } = this;
 
-    // 1. Sleek Arcade Deep Blue Gradient Background
+    // 1. Vibrant Toy Playground Gradient Background
     const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0a0d1a');
-    bg.addColorStop(0.5, '#0e1224');
-    bg.addColorStop(1, '#080a14');
+    bg.addColorStop(0, '#2e1065'); // Deep playful berry violet
+    bg.addColorStop(0.5, '#3b0764'); // Rich plum
+    bg.addColorStop(1, '#1e1b4b'); // Deep indigo base
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // 2. Playfield Grid Guidelines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    // 2. Playfield Grid Guidelines (Soft subtle guide dots)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
     ctx.lineWidth = 1;
     for (let c = 0; c <= COLS; c++) {
       const x = LEFT_WALL + c * COL_W;
@@ -668,15 +668,34 @@ export class BlockBuster extends Game {
       ctx.stroke();
     }
 
-    // Outer Neon Arena Walls
-    ctx.strokeStyle = 'rgba(76, 201, 240, 0.35)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(LEFT_WALL, TOP_ROW_Y - 20);
-    ctx.lineTo(LEFT_WALL, DANGER_Y + 20);
-    ctx.moveTo(RIGHT_WALL, TOP_ROW_Y - 20);
-    ctx.lineTo(RIGHT_WALL, DANGER_Y + 20);
-    ctx.stroke();
+    // Outer Inflatable Striped Candy Cushion Bumpers
+    const drawSideBumper = (bx, bw) => {
+      ctx.save();
+      const by = TOP_ROW_Y - 24;
+      const bh = DANGER_Y - TOP_ROW_Y + 44;
+
+      // Inflatable Cushion Body
+      ctx.fillStyle = '#ffafcc';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Diagonal Candy Stripes
+      ctx.fillStyle = '#ffffff';
+      for (let y = by + 6; y < by + bh - 16; y += 28) {
+        ctx.beginPath();
+        ctx.roundRect(bx + 2, y, bw - 4, 12, 4);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    };
+
+    drawSideBumper(4, LEFT_WALL - 6);
+    drawSideBumper(RIGHT_WALL + 2, W - RIGHT_WALL - 6);
 
     // 3. Danger Hazard Threshold Line
     this.drawDangerLine(ctx);
@@ -724,19 +743,48 @@ export class BlockBuster extends Game {
   drawDangerLine(ctx) {
     const pulse = 0.5 + Math.sin(this.time * 6) * 0.3;
     ctx.save();
-    ctx.strokeStyle = `rgba(255, 0, 84, ${0.4 + pulse * 0.4})`;
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([12, 10]);
-    ctx.beginPath();
-    ctx.moveTo(LEFT_WALL, DANGER_Y);
-    ctx.lineTo(RIGHT_WALL, DANGER_Y);
-    ctx.stroke();
-    ctx.setLineDash([]);
 
-    ctx.fillStyle = `rgba(255, 0, 84, ${0.7 + pulse * 0.3})`;
-    ctx.font = '900 10px Outfit, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText('⚠️ DANGER BOUNDARY', RIGHT_WALL - 8, DANGER_Y - 6);
+    // Chunky cartoon hazard tape ribbon
+    const ribbonH = 10;
+    const ry = DANGER_Y - ribbonH / 2;
+
+    // Yellow background with black cartoon border
+    ctx.fillStyle = '#ffbe0b';
+    ctx.fillRect(LEFT_WALL, ry, RIGHT_WALL - LEFT_WALL, ribbonH);
+
+    // Diagonal black hazard stripes
+    ctx.fillStyle = '#000000';
+    for (let x = LEFT_WALL - 10; x < RIGHT_WALL; x += 18) {
+      ctx.beginPath();
+      ctx.moveTo(x, ry + ribbonH);
+      ctx.lineTo(x + 8, ry);
+      ctx.lineTo(x + 14, ry);
+      ctx.lineTo(x + 6, ry + ribbonH);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(LEFT_WALL, ry, RIGHT_WALL - LEFT_WALL, ribbonH);
+
+    // Hazard Badge Callout
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    this.rr(ctx, RIGHT_WALL - 148, ry - 17.5, 142, 16, 8);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(255, 0, 84, ${0.85 + pulse * 0.15})`;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    this.rr(ctx, RIGHT_WALL - 148, ry - 19, 142, 16, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 9.5px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚠️ DANGER BOUNDARY', RIGHT_WALL - 77, ry - 7);
     ctx.restore();
   }
 
@@ -992,11 +1040,15 @@ export class BlockBuster extends Game {
       hat: 'crown',
     });
 
-    // 4. Ball count badge directly above cannon
+    // 4. Ball count badge directly above cannon with 3D drop shadow
     if (this.state === 'aim') {
-      ctx.fillStyle = 'rgba(12, 16, 32, 0.9)';
-      ctx.strokeStyle = '#25e6ff';
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#000000';
+      this.rr(ctx, cx - 30, cy - 45.5, 60, 22, 11);
+      ctx.fill();
+
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
       this.rr(ctx, cx - 30, cy - 48, 60, 22, 11);
       ctx.fill();
       ctx.stroke();
@@ -1013,10 +1065,14 @@ export class BlockBuster extends Game {
   drawHUD(ctx, W, H) {
     ctx.save();
 
-    // 1. Wave Badge (Top Left)
-    ctx.fillStyle = 'rgba(12, 16, 32, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 1;
+    // 1. Wave Badge (Top Left) with 3D drop shadow
+    ctx.fillStyle = '#000000';
+    this.rr(ctx, 14, 109.5, 92, 34, 10);
+    ctx.fill();
+
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
     this.rr(ctx, 14, 106, 92, 34, 10);
     ctx.fill();
     ctx.stroke();
@@ -1026,8 +1082,14 @@ export class BlockBuster extends Game {
     ctx.textAlign = 'center';
     ctx.fillText(`WAVE ${this.wave}`, 60, 128);
 
-    // 2. Score Badge (Top Right)
-    ctx.fillStyle = 'rgba(12, 16, 32, 0.88)';
+    // 2. Score Badge (Top Right) with 3D drop shadow
+    ctx.fillStyle = '#000000';
+    this.rr(ctx, W - 140, 109.5, 126, 34, 10);
+    ctx.fill();
+
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
     this.rr(ctx, W - 140, 106, 126, 34, 10);
     ctx.fill();
     ctx.stroke();
@@ -1039,10 +1101,14 @@ export class BlockBuster extends Game {
 
     // 3. Fast-Forward Turbo Toggle Button (Bottom Right)
     const isFast = this.turbo || this.turnDuration > 5.5;
-    ctx.fillStyle = isFast ? '#ff0054' : 'rgba(20, 26, 48, 0.88)';
-    ctx.strokeStyle = isFast ? '#ffbe0b' : 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 1.5;
-    this.rr(ctx, W - 88, H - 54, 74, 32, 8);
+    ctx.fillStyle = '#000000';
+    this.rr(ctx, W - 88, H - 51, 74, 32, 10);
+    ctx.fill();
+
+    ctx.fillStyle = isFast ? '#ff0054' : '#334155';
+    ctx.strokeStyle = isFast ? '#ffd166' : '#000000';
+    ctx.lineWidth = 2.5;
+    this.rr(ctx, W - 88, H - 54, 74, 32, 10);
     ctx.fill();
     ctx.stroke();
 

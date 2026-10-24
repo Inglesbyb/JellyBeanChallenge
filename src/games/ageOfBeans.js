@@ -1137,6 +1137,7 @@ export class AgeOfBeans extends Game {
     // 4. Screen-Space UI & HUD Deck
     this.renderTopRadar(ctx);
     this.renderTopHud(ctx);
+    this.renderHomeBaseTracker(ctx);
     this.renderBottomCommandDeck(ctx);
 
     ctx.restore();
@@ -2782,21 +2783,66 @@ export class AgeOfBeans extends Game {
     ctx.restore();
   }
 
+  renderHomeBaseTracker(ctx) {
+    if (this.camX <= 40) return;
+    ctx.save();
+    const bx = 12;
+    const by = 135;
+    const bw = 90;
+    const bh = 34;
+
+    // 3D Cartoon Drop Shadow
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.roundRect(bx, by + 3.5, bw, bh, 10);
+    ctx.fill();
+
+    // Body
+    const hpRatio = clamp(this.playerBaseHp / this.playerMaxBaseHp, 0, 1);
+    const isLow = hpRatio < 0.3;
+    const underAttack = (this.playerBaseFlashTimer || 0) > 0;
+
+    ctx.fillStyle = underAttack ? '#ef4444' : '#0ea5e9';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // Title + Mini Health Bar
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText('🏰 BASE', bx + 6, by + 13);
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(bx + 6, by + 18, bw - 12, 8);
+    ctx.fillStyle = isLow ? '#ef4444' : '#10b981';
+    ctx.fillRect(bx + 7, by + 19, (bw - 14) * hpRatio, 6);
+
+    ctx.restore();
+  }
+
   renderBottomCommandDeck(ctx) {
     const deckY = 485;
     const deckH = this.H - deckY;
 
     ctx.save();
 
-    // Deep Obsidian Glassmorphic Panel
+    // Chunky Toy Tray Background with bold 3.5px black border
     const bgGrad = ctx.createLinearGradient(0, deckY, 0, this.H);
-    bgGrad.addColorStop(0, 'rgba(15, 23, 42, 0.96)');
-    bgGrad.addColorStop(1, 'rgba(2, 6, 23, 0.98)');
+    bgGrad.addColorStop(0, '#1e293b');
+    bgGrad.addColorStop(1, '#0f172a');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, deckY, this.W, deckH);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.14)';
-    ctx.fillRect(0, deckY, this.W, 2);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(0, deckY);
+    ctx.lineTo(this.W, deckY);
+    ctx.stroke();
 
     // Tabs Header
     this.renderTabs(ctx, deckY);
@@ -2815,36 +2861,53 @@ export class AgeOfBeans extends Game {
     const tabW = 98;
     const tabH = 34;
 
+    const drawTab = (tx, active, label, icon) => {
+      // 3D Cartoon Drop Shadow
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(tx, y + 9, tabW, tabH, 8);
+      ctx.fill();
+
+      // Tab Face
+      ctx.fillStyle = active ? '#2563eb' : '#334155';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(tx, y + 6, tabW, tabH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Label
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${icon} ${label}`, tx + tabW / 2, y + 28);
+    };
+
     // Tab 1: Units
-    ctx.fillStyle = this.activeTab === 'units' ? '#2563eb' : '#1e293b';
-    ctx.beginPath();
-    ctx.roundRect(14, y + 6, tabW, tabH, 6);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('⚔️ UNITS', 14 + tabW / 2, y + 28);
+    drawTab(14, this.activeTab === 'units', 'UNITS', '⚔️');
 
     // Tab 2: Turrets
-    ctx.fillStyle = this.activeTab === 'turrets' ? '#2563eb' : '#1e293b';
-    ctx.beginPath();
-    ctx.roundRect(120, y + 6, tabW, tabH, 6);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('🏹 TURRETS', 120 + tabW / 2, y + 28);
+    drawTab(120, this.activeTab === 'turrets', 'TURRETS', '🏹');
 
     // Tab 3: Evolve Era
     const nextEraNeeded = ERAS[this.playerEra].evolveXp;
     const canEvolve = (this.playerEra < ERAS.length - 1) && (this.playerXp >= nextEraNeeded);
-    ctx.fillStyle = canEvolve ? '#10b981' : '#334155';
+    
+    // 3D Drop Shadow
+    ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.roundRect(226, y + 6, 96, tabH, 6);
+    ctx.roundRect(226, y + 9, 96, tabH, 8);
     ctx.fill();
-    if (canEvolve) {
-      ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+
+    ctx.fillStyle = canEvolve ? '#10b981' : '#1e293b';
+    ctx.strokeStyle = canEvolve ? '#ffd166' : '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(226, y + 6, 96, tabH, 8);
+    ctx.fill();
+    ctx.stroke();
+
     ctx.fillStyle = canEvolve ? '#ffffff' : '#94a3b8';
     ctx.font = 'bold 11px sans-serif';
     ctx.fillText(canEvolve ? '✨ EVOLVE!' : '🔒 EVOLVE', 226 + 48, y + 21);
@@ -2854,15 +2917,20 @@ export class AgeOfBeans extends Game {
     // Tab 4: Special Ability
     const sReady = this.playerSpecialCd <= 0;
     const sDef = ERAS[this.playerEra].special;
-    ctx.fillStyle = sReady ? '#ef4444' : '#1e293b';
+
+    ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.roundRect(330, y + 6, 106, tabH, 6);
+    ctx.roundRect(330, y + 9, 106, tabH, 8);
     ctx.fill();
-    if (sReady) {
-      ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
+
+    ctx.fillStyle = sReady ? '#ef4444' : '#1e293b';
+    ctx.strokeStyle = sReady ? '#ffd166' : '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(330, y + 6, 106, tabH, 8);
+    ctx.fill();
+    ctx.stroke();
+
     ctx.fillStyle = sReady ? '#ffffff' : '#64748b';
     ctx.font = 'bold 11px sans-serif';
     ctx.fillText(sReady ? `${sDef.icon} SUPER!` : `⏳ ${Math.ceil(this.playerSpecialCd)}s`, 330 + 53, y + 27);
@@ -2877,43 +2945,42 @@ export class AgeOfBeans extends Game {
       const u = eraUnits[i];
       const bx = 16 + i * btnW;
       const canAfford = this.playerGold >= u.cost;
+      const cardW = btnW - 8;
 
-      // Card Background (Frosted Glass Jelly Card)
       ctx.save();
+
+      // 3D Cartoon Drop Shadow
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(bx, y + 7.5, cardW, btnH, 12);
+      ctx.fill();
+
+      // Card Face with 2.5px solid black border
       const cardGrad = ctx.createLinearGradient(bx, y, bx, y + btnH);
       if (canAfford) {
-        cardGrad.addColorStop(0, 'rgba(30, 41, 59, 0.96)');
-        cardGrad.addColorStop(1, 'rgba(15, 23, 42, 0.98)');
+        cardGrad.addColorStop(0, '#334155');
+        cardGrad.addColorStop(1, '#1e293b');
       } else {
-        cardGrad.addColorStop(0, 'rgba(20, 24, 36, 0.6)');
-        cardGrad.addColorStop(1, 'rgba(10, 14, 24, 0.6)');
+        cardGrad.addColorStop(0, '#1e293b');
+        cardGrad.addColorStop(1, '#0f172a');
       }
       ctx.fillStyle = cardGrad;
-      ctx.strokeStyle = canAfford ? '#38bdf8' : 'rgba(255, 255, 255, 0.12)';
-      ctx.lineWidth = canAfford ? 2 : 1;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.roundRect(bx, y + 4, btnW - 8, btnH, 12);
+      ctx.roundRect(bx, y + 4, cardW, btnH, 12);
       ctx.fill();
       ctx.stroke();
 
-      // Top Glass Sheen Reflection
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      // Top Specular Highlight Curve
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
       ctx.beginPath();
-      ctx.roundRect(bx + 2, y + 6, btnW - 12, (btnH - 8) * 0.42, [10, 10, 0, 0]);
+      ctx.roundRect(bx + 2, y + 6, cardW - 4, (btnH - 8) * 0.38, [10, 10, 0, 0]);
       ctx.fill();
 
-      // Unit Icon with Soft Glow Halo
-      const iconCenterX = bx + (btnW - 8) / 2;
+      // Unit Icon
+      const iconCenterX = bx + cardW / 2;
       const iconCenterY = y + 28;
-      if (canAfford) {
-        const halo = ctx.createRadialGradient(iconCenterX, iconCenterY, 2, iconCenterX, iconCenterY, 18);
-        halo.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
-        halo.addColorStop(1, 'rgba(56, 189, 248, 0)');
-        ctx.fillStyle = halo;
-        ctx.beginPath();
-        ctx.arc(iconCenterX, iconCenterY, 18, 0, TAU);
-        ctx.fill();
-      }
 
       ctx.font = '24px sans-serif';
       ctx.textAlign = 'center';
@@ -2929,20 +2996,23 @@ export class AgeOfBeans extends Game {
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(`HP ${u.hp} · ⚔️ ${u.dmg}`, iconCenterX, y + 67);
 
-      // Juicy Candy Gold Badge
+      // Juicy Candy Gold Badge with 3D drop shadow
       const badgeY = y + 74;
-      ctx.fillStyle = canAfford ? 'rgba(255, 209, 102, 0.22)' : 'rgba(100, 116, 139, 0.2)';
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(iconCenterX - 34, badgeY + 1.5, 68, 18, 9);
+      ctx.fill();
+
+      ctx.fillStyle = canAfford ? '#fbbf24' : '#475569';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.roundRect(iconCenterX - 34, badgeY, 68, 18, 9);
       ctx.fill();
-      if (canAfford) {
-        ctx.strokeStyle = '#ffd166';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+      ctx.stroke();
 
-      ctx.fillStyle = canAfford ? '#ffd166' : '#64748b';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = canAfford ? '#000000' : '#94a3b8';
+      ctx.font = 'bold 11px sans-serif';
       ctx.fillText(`💰 ${u.cost}`, iconCenterX, badgeY + 13);
 
       ctx.restore();
@@ -2957,14 +3027,14 @@ export class AgeOfBeans extends Game {
 
       const qBarW = this.W - 175;
       const ratio = clamp(this.playerQueueTimer / this.playerQueue[0].buildTime, 0, 1);
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillStyle = '#000000';
       ctx.beginPath();
-      ctx.roundRect(150, y + 112, qBarW, 10, 5);
+      ctx.roundRect(150, y + 112, qBarW, 11, 5);
       ctx.fill();
 
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
-      ctx.roundRect(150, y + 112, qBarW * ratio, 10, 5);
+      ctx.roundRect(151, y + 113, (qBarW - 2) * ratio, 9, 4);
       ctx.fill();
     }
   }
@@ -2977,12 +3047,18 @@ export class AgeOfBeans extends Game {
     for (let i = 0; i < 3; i++) {
       const slot = this.playerTurrets[i];
       const bx = 16 + i * slotW;
+      const cardW = slotW - 8;
 
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.95)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#000000';
       ctx.beginPath();
-      ctx.roundRect(bx, y + 4, slotW - 8, btnH, 12);
+      ctx.roundRect(bx, y + 7.5, cardW, btnH, 12);
+      ctx.fill();
+
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, y + 4, cardW, btnH, 12);
       ctx.fill();
       ctx.stroke();
 
@@ -2991,33 +3067,33 @@ export class AgeOfBeans extends Game {
       if (!slot.unlocked) {
         const cost = (i === 1) ? 250 : 600;
         ctx.font = '24px sans-serif';
-        ctx.fillText('🔒', bx + (slotW - 8) / 2, y + 34);
+        ctx.fillText('🔒', bx + cardW / 2, y + 34);
         ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`UNLOCK #${i + 1}`, bx + (slotW - 8) / 2, y + 54);
+        ctx.fillText(`UNLOCK #${i + 1}`, bx + cardW / 2, y + 54);
         ctx.fillStyle = '#ffd166';
-        ctx.fillText(`💰 ${cost}`, bx + (slotW - 8) / 2, y + 78);
+        ctx.fillText(`💰 ${cost}`, bx + cardW / 2, y + 78);
       } else if (slot.turretEra === null) {
         ctx.font = '24px sans-serif';
-        ctx.fillText('➕', bx + (slotW - 8) / 2, y + 34);
+        ctx.fillText('➕', bx + cardW / 2, y + 34);
         ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`BUILD ${eraTurret.name}`, bx + (slotW - 8) / 2, y + 54);
+        ctx.fillText(`BUILD ${eraTurret.name}`, bx + cardW / 2, y + 54);
         ctx.fillStyle = '#ffd166';
-        ctx.fillText(`💰 ${eraTurret.cost}`, bx + (slotW - 8) / 2, y + 78);
+        ctx.fillText(`💰 ${eraTurret.cost}`, bx + cardW / 2, y + 78);
       } else {
         const tDef = ERAS[slot.turretEra].turret;
         ctx.font = '24px sans-serif';
-        ctx.fillText('🏹', bx + (slotW - 8) / 2, y + 34);
+        ctx.fillText('🏹', bx + cardW / 2, y + 34);
         ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = '#10b981';
-        ctx.fillText(tDef.name, bx + (slotW - 8) / 2, y + 54);
+        ctx.fillText(tDef.name, bx + cardW / 2, y + 54);
         ctx.font = '10px sans-serif';
         ctx.fillStyle = '#94a3b8';
-        ctx.fillText(`DMG: ${tDef.dmg}`, bx + (slotW - 8) / 2, y + 68);
+        ctx.fillText(`DMG: ${tDef.dmg}`, bx + cardW / 2, y + 68);
         ctx.font = 'bold 10px sans-serif';
         ctx.fillStyle = '#f59e0b';
-        ctx.fillText('TAP TO SELL', bx + (slotW - 8) / 2, y + 84);
+        ctx.fillText('TAP TO SELL', bx + cardW / 2, y + 84);
       }
     }
   }

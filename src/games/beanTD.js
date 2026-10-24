@@ -1090,24 +1090,72 @@ export class BeanTD extends Game {
     ctx.fillStyle = mg;
     ctx.fillRect(0, 0, W, H);
 
-    // Subtle daisies and grass tufts
     ctx.save();
-    ctx.fillStyle = '#ffffff';
-    const flowers = [
-      { x: 50, y: 160 }, { x: 400, y: 180 }, { x: 180, y: 260 },
-      { x: 410, y: 400 }, { x: 40, y: 530 }, { x: 280, y: 530 },
-      { x: 200, y: 640 }, { x: 410, y: 650 },
+
+    // 1. Procedural Marshmallow Daisies
+    const daisies = [
+      { x: 45, y: 155 }, { x: 410, y: 175 }, { x: 175, y: 255 },
+      { x: 420, y: 395 }, { x: 45, y: 535 }, { x: 285, y: 530 },
+      { x: 195, y: 645 }, { x: 415, y: 655 }, { x: 50, y: 360 },
+      { x: 380, y: 240 }, { x: 180, y: 370 }, { x: 290, y: 440 },
     ];
-    for (const f of flowers) {
+
+    for (const d of daisies) {
+      // 5 white cartoon petals with black outline
+      for (let p = 0; p < 5; p++) {
+        const ang = (p / 5) * TAU;
+        const px = d.x + Math.cos(ang) * 5.5;
+        const py = d.y + Math.sin(ang) * 5.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.8, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+      }
+      // Golden gumdrop center
+      ctx.fillStyle = '#ffbe0b';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(f.x, f.y, 4, 0, TAU);
+      ctx.arc(d.x, d.y, 3.2, 0, TAU);
       ctx.fill();
-      ctx.fillStyle = '#ffb703';
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, 2, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
+      ctx.stroke();
     }
+
+    // 2. Juicy Jellybean Boulders along track bends
+    const jellyRocks = [
+      { x: 170, y: 150, r: 8, col: '#f72585' },
+      { x: 385, y: 340, r: 9, col: '#4cc9f0' },
+      { x: 35,  y: 470, r: 7, col: '#ffd166' },
+      { x: 320, y: 485, r: 9, col: '#7209b7' },
+      { x: 145, y: 585, r: 8, col: '#06d6a0' },
+    ];
+
+    for (const jr of jellyRocks) {
+      // Drop Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(jr.x, jr.y + 3, jr.r * 1.1, jr.r * 0.6, 0, 0, TAU);
+      ctx.fill();
+
+      // Jelly body with 2.5px black cartoon outline
+      ctx.fillStyle = jr.col;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(jr.x, jr.y, jr.r * 1.1, jr.r * 0.85, 0.2, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      // Specular highlight glint
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.beginPath();
+      ctx.ellipse(jr.x - jr.r * 0.35, jr.y - jr.r * 0.3, jr.r * 0.35, jr.r * 0.18, -0.3, 0, TAU);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 
@@ -1115,6 +1163,16 @@ export class BeanTD extends Game {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+
+    // 0. Thick Black Cartoon Track Outline
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 54;
+    ctx.beginPath();
+    ctx.moveTo(TRACK_WAYPOINTS[0].x, TRACK_WAYPOINTS[0].y);
+    for (let i = 1; i < TRACK_WAYPOINTS.length; i++) {
+      ctx.lineTo(TRACK_WAYPOINTS[i].x, TRACK_WAYPOINTS[i].y);
+    }
+    ctx.stroke();
 
     // 1. Dark Dirt Path Border
     ctx.strokeStyle = '#583101';
@@ -1128,7 +1186,7 @@ export class BeanTD extends Game {
 
     // 2. Sand / Cobblestone Walkway
     ctx.strokeStyle = '#ddb892';
-    ctx.lineWidth = 40;
+    ctx.lineWidth = 38;
     ctx.beginPath();
     ctx.moveTo(TRACK_WAYPOINTS[0].x, TRACK_WAYPOINTS[0].y);
     for (let i = 1; i < TRACK_WAYPOINTS.length; i++) {
@@ -1138,7 +1196,7 @@ export class BeanTD extends Game {
 
     // 3. Wooden Curbs / Stepping Stones
     ctx.strokeStyle = '#b08968';
-    ctx.lineWidth = 32;
+    ctx.lineWidth = 30;
     ctx.setLineDash([14, 18]);
     ctx.beginPath();
     ctx.moveTo(TRACK_WAYPOINTS[0].x, TRACK_WAYPOINTS[0].y);
@@ -1148,11 +1206,16 @@ export class BeanTD extends Game {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Path Entrance / Exit Decals
-    ctx.fillStyle = '#e63946';
+    // Path Entrance / Exit Decals with cartoon outline
+    ctx.fillStyle = '#000000';
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
+    ctx.fillText('ENTRY ➔', 40, 186);
+    ctx.fillText('EXIT ⚠️', 360, 676);
+
+    ctx.fillStyle = '#ffd166';
     ctx.fillText('ENTRY ➔', 40, 185);
+    ctx.fillStyle = '#ef233c';
     ctx.fillText('EXIT ⚠️', 360, 675);
 
     ctx.restore();
@@ -1500,6 +1563,12 @@ export class BeanTD extends Game {
     const btnW = 120;
     const isFast = this.speedMult === 2.0;
 
+    // 3D Cartoon Drop Shadow
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.roundRect(btnX, 98.5, btnW, 30, 15);
+    ctx.fill();
+
     const bgGrad = ctx.createLinearGradient(btnX, 0, btnX + btnW, 0);
     if (!this.waveActive) {
       bgGrad.addColorStop(0, '#06d6a0');
@@ -1510,9 +1579,12 @@ export class BeanTD extends Game {
     }
 
     ctx.fillStyle = bgGrad;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.roundRect(btnX, 96, btnW, 30, 15);
     ctx.fill();
+    ctx.stroke();
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 12px system-ui, sans-serif';
@@ -1527,10 +1599,16 @@ export class BeanTD extends Game {
     // Bottom Tower Dock Drawer (y: 622 -> 704, comfortably above Reel bottom info bar)
     ctx.save();
 
-    // Drawer Background with frosted candy rim
-    ctx.fillStyle = 'rgba(43, 45, 66, 0.95)';
-    ctx.strokeStyle = '#ffd166';
-    ctx.lineWidth = 2.5;
+    // 3D Cartoon Drop Shadow
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.roundRect(8, 625.5, W - 16, 82, 16);
+    ctx.fill();
+
+    // Drawer Background with bold 3.5px black border
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.roundRect(8, 622, W - 16, 82, 16);
     ctx.fill();
@@ -1548,15 +1626,27 @@ export class BeanTD extends Game {
       const isSelected = this.selectedTrayTower === tId;
       const canAfford = this.cash >= proto.cost;
 
+      // 3D Cartoon Drop Shadow
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(cx, cy + 3.5, cardW, cardH, 12);
+      ctx.fill();
+
       // Card Background
-      ctx.fillStyle = isSelected ? '#4361ee' : canAfford ? '#3d405b' : '#2b2d42';
-      ctx.strokeStyle = isSelected ? '#ffd166' : canAfford ? '#6c757d' : '#495057';
-      ctx.lineWidth = isSelected ? 3 : 1.5;
+      ctx.fillStyle = isSelected ? '#3a86ff' : canAfford ? '#334155' : '#1e293b';
+      ctx.strokeStyle = isSelected ? '#ffd166' : '#000000';
+      ctx.lineWidth = isSelected ? 3 : 2.5;
 
       ctx.beginPath();
-      ctx.roundRect(cx, cy, cardW, cardH, 10);
+      ctx.roundRect(cx, cy, cardW, cardH, 12);
       ctx.fill();
       ctx.stroke();
+
+      // Top Specular Highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.roundRect(cx + 2, cy + 2, cardW - 4, (cardH - 4) * 0.38, [10, 10, 0, 0]);
+      ctx.fill();
 
       // Tower Icon
       ctx.font = '22px sans-serif';
@@ -1568,10 +1658,20 @@ export class BeanTD extends Game {
       ctx.font = 'bold 9.5px system-ui, sans-serif';
       ctx.fillText(proto.name, cx + cardW / 2, cy + 42);
 
-      // Price Tag
-      ctx.fillStyle = canAfford ? '#ffd166' : '#ef233c';
+      // Price Tag Pill with 3D drop shadow
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(cx + cardW / 2 - 24, cy + 49.5, 48, 16, 8);
+      ctx.fill();
+
+      ctx.fillStyle = canAfford ? '#fbbf24' : '#ef4444';
+      ctx.beginPath();
+      ctx.roundRect(cx + cardW / 2 - 24, cy + 48, 48, 16, 8);
+      ctx.fill();
+
+      ctx.fillStyle = canAfford ? '#000000' : '#ffffff';
       ctx.font = 'bold 11px system-ui, sans-serif';
-      ctx.fillText(`$${proto.cost}`, cx + cardW / 2, cy + 58);
+      ctx.fillText(`$${proto.cost}`, cx + cardW / 2, cy + 60);
     }
 
     ctx.restore();

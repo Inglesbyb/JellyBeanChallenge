@@ -612,51 +612,115 @@ export class BallBlast extends Game {
   }
 
   renderBackdrop(ctx, W, H) {
-    // Sky gradient
+    // 1. Cheerful Sunny Pastel Sky Gradient
     const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-    sky.addColorStop(0, '#0f172a');
-    sky.addColorStop(0.4, '#1e293b');
-    sky.addColorStop(1, '#334155');
+    sky.addColorStop(0, '#a2d2ff'); // Baby Cerulean Blue
+    sky.addColorStop(0.55, '#cdb4db'); // Soft Lilac
+    sky.addColorStop(1, '#ffcbf2'); // Bubblegum Blush
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
-    // Distant soft mountain ridges
     ctx.save();
-    ctx.fillStyle = 'rgba(71, 85, 105, 0.4)';
+
+    // 2. Fluffy Puffy Marshmallow Clouds with cartoon black outlines
+    const drawCloud = (cx, cy, scale) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, TAU);
+      ctx.arc(18, -8, 18, 0, TAU);
+      ctx.arc(38, 2, 20, 0, TAU);
+      ctx.arc(20, 10, 22, 0, TAU);
+      ctx.arc(-16, 6, 16, 0, TAU);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Soft pink cloud cheek highlight
+      ctx.fillStyle = 'rgba(255, 175, 204, 0.45)';
+      ctx.beginPath();
+      ctx.arc(10, 8, 12, 0, TAU);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    drawCloud(60, 160, 0.9);
+    drawCloud(W - 80, 210, 1.05);
+    drawCloud(190, 270, 0.75);
+
+    // 3. Distant Frosted Candy Mountain Ridges with black outlines
+    ctx.fillStyle = '#bde0fe';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
-    ctx.lineTo(80, 480);
-    ctx.lineTo(190, 560);
-    ctx.lineTo(280, 450);
-    ctx.lineTo(390, 530);
-    ctx.lineTo(W, 490);
+    ctx.quadraticCurveTo(80, 470, 160, 520);
+    ctx.quadraticCurveTo(240, 440, 320, 500);
+    ctx.quadraticCurveTo(390, 460, W, GROUND_Y);
     ctx.lineTo(W, GROUND_Y);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+
     ctx.restore();
   }
 
   renderGround(ctx, W) {
     ctx.save();
-    // Lush grassy soil border
-    ctx.fillStyle = '#06d6a0';
-    ctx.fillRect(0, GROUND_Y, W, 6);
 
-    const earthGrad = ctx.createLinearGradient(0, GROUND_Y + 6, 0, this.H);
+    // Inflatable Ground Platform with bold black outline
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(W, GROUND_Y);
+    ctx.stroke();
+
+    // Vibrant Grass Turf
+    ctx.fillStyle = '#06d6a0';
+    ctx.fillRect(0, GROUND_Y, W, 8);
+
+    const earthGrad = ctx.createLinearGradient(0, GROUND_Y + 8, 0, this.H);
     earthGrad.addColorStop(0, '#1e293b');
     earthGrad.addColorStop(1, '#0f172a');
     ctx.fillStyle = earthGrad;
-    ctx.fillRect(0, GROUND_Y + 6, W, this.H - GROUND_Y);
+    ctx.fillRect(0, GROUND_Y + 8, W, this.H - GROUND_Y);
 
-    // Side wall guide lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(12, 90);
-    ctx.lineTo(12, GROUND_Y);
-    ctx.moveTo(W - 12, 90);
-    ctx.lineTo(W - 12, GROUND_Y);
-    ctx.stroke();
+    // Inflatable Striped Side Cushion Bumpers
+    const drawBumper = (bx, isLeft) => {
+      ctx.save();
+      const bw = 16;
+      const bh = GROUND_Y - 90;
+      
+      // Bumper Body
+      ctx.fillStyle = '#ffafcc';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, 90, bw, bh, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Diagonal Candy Stripes
+      ctx.fillStyle = '#ffffff';
+      for (let y = 100; y < GROUND_Y - 20; y += 28) {
+        ctx.beginPath();
+        ctx.roundRect(bx + 2, y, bw - 4, 12, 4);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    };
+
+    drawBumper(4, true);
+    drawBumper(W - 20, false);
 
     ctx.restore();
   }
@@ -858,18 +922,20 @@ export class BallBlast extends Game {
   renderBullets(ctx) {
     ctx.save();
     for (const p of this.bullets) {
-      // High-velocity glowing plasma bolt
-      ctx.fillStyle = '#ffd166';
+      // Bouncy cartoon candy pellet with bold black outline & glint
+      ctx.fillStyle = '#ffbe0b';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 3.5, 0, TAU);
+      ctx.arc(p.x, p.y, 4.8, 0, TAU);
       ctx.fill();
-
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      ctx.lineTo(p.x, p.y + 8);
       ctx.stroke();
+
+      // Specular shine glint
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(p.x - 1.5, p.y - 1.5, 1.8, 0, TAU);
+      ctx.fill();
     }
     ctx.restore();
   }
@@ -878,15 +944,15 @@ export class BallBlast extends Game {
     ctx.save();
     for (const c of this.droppedCoins) {
       ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#f77f00';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(c.x, c.y, 6, 0, TAU);
+      ctx.arc(c.x, c.y, 7, 0, TAU);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#f77f00';
-      ctx.font = 'bold 8px monospace';
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 9px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('$', c.x, c.y);
@@ -919,10 +985,16 @@ export class BallBlast extends Game {
     ctx.save();
     const barY = 94;
 
-    // Background pill
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 2;
+    // 3D Cartoon Drop Shadow
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.roundRect(14, barY + 3.5, W - 28, 36, 18);
+    ctx.fill();
+
+    // Background pill with 2.5px solid black border
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.roundRect(14, barY, W - 28, 36, 18);
     ctx.fill();
@@ -984,13 +1056,26 @@ export class BallBlast extends Game {
       const by = dockY;
       const bh = 34;
 
-      ctx.fillStyle = btn.canAfford ? '#1e293b' : '#0f172a';
-      ctx.strokeStyle = btn.canAfford ? '#ffd166' : '#334155';
-      ctx.lineWidth = btn.canAfford ? 2 : 1;
+      // 3D Cartoon Drop Shadow
+      ctx.fillStyle = '#000000';
       ctx.beginPath();
-      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.roundRect(bx, by + 3.5, bw, bh, 10);
+      ctx.fill();
+
+      // Card Face
+      ctx.fillStyle = btn.canAfford ? '#334155' : '#1e293b';
+      ctx.strokeStyle = btn.canAfford ? '#ffd166' : '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 10);
       ctx.fill();
       ctx.stroke();
+
+      // Top Specular Highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.roundRect(bx + 2, by + 2, bw - 4, (bh - 4) * 0.4, [8, 8, 0, 0]);
+      ctx.fill();
 
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 9.5px system-ui, sans-serif';
@@ -999,7 +1084,7 @@ export class BallBlast extends Game {
       ctx.fillText(`${btn.icon} ${btn.title} (${btn.val})`, bx + bw / 2, by + 11);
 
       ctx.fillStyle = btn.canAfford ? '#ffd166' : '#ef233c';
-      ctx.font = 'bold 10px monospace';
+      ctx.font = 'bold 11px system-ui, sans-serif';
       ctx.fillText(`$${btn.cost}`, bx + bw / 2, by + 24);
     });
 

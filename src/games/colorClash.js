@@ -1097,18 +1097,39 @@ export class ColorClash extends Game {
         const y = ARENA_Y + r * CELL_SIZE;
 
         if (val === 1) {
-          // Blue Paint Tile
+          // Blue Paint Tile (Wet cartoon jelly slime)
+          ctx.fillStyle = '#0077b6';
+          ctx.beginPath();
+          ctx.roundRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1, 3);
+          ctx.fill();
+
           ctx.fillStyle = '#00b4d8';
-          ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
-          // High-gloss specular highlight
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-          ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, 3);
+          ctx.beginPath();
+          ctx.roundRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2, 2.5);
+          ctx.fill();
+
+          // Wet glossy specular glint
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.beginPath();
+          ctx.ellipse(x + 4, y + 4, 3, 1.8, -0.4, 0, TAU);
+          ctx.fill();
         } else if (val === 2) {
-          // Red Paint Tile
+          // Red Paint Tile (Wet cartoon jelly slime)
+          ctx.fillStyle = '#d90429';
+          ctx.beginPath();
+          ctx.roundRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1, 3);
+          ctx.fill();
+
           ctx.fillStyle = '#ef233c';
-          ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-          ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, 3);
+          ctx.beginPath();
+          ctx.roundRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2, 2.5);
+          ctx.fill();
+
+          // Wet glossy specular glint
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.beginPath();
+          ctx.ellipse(x + 4, y + 4, 3, 1.8, -0.4, 0, TAU);
+          ctx.fill();
         } else {
           // Neutral Grid Floor with dot matrix mesh
           ctx.fillStyle = '#1e293b';
@@ -1504,15 +1525,20 @@ export class ColorClash extends Game {
   renderBottomDock(ctx, W) {
     ctx.save();
 
-    // 1. Ink / Elixir Meter (y: 614 -> 628)
+    // 1. Ink / Elixir Meter with 3D drop shadow
     const inkX = ARENA_X;
     const inkY = 614;
     const inkW = GRID_W;
     const inkH = 14;
 
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.roundRect(inkX, inkY + 2.5, inkW, inkH, 7);
+    ctx.fill();
+
     ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = this.isOvertime ? '#ff9e00' : '#ffd166';
-    ctx.lineWidth = this.isOvertime ? 2 : 1.5;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.roundRect(inkX, inkY, inkW, inkH, 7);
     ctx.fill();
@@ -1535,8 +1561,8 @@ export class ColorClash extends Game {
     ctx.fill();
 
     // 10 Pip divider marks
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 1.2;
     for (let p = 1; p < 10; p++) {
       const px = inkX + (p / 10) * inkW;
       ctx.beginPath();
@@ -1556,11 +1582,18 @@ export class ColorClash extends Game {
     // 2. Bottom Card Tray (y: 636 -> 706)
     // Next Card Preview (on left: x: 16 -> 62)
     const nextCard = CARDS.find((c) => c.id === this.playerNextCard);
-    ctx.fillStyle = '#1e293b';
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 1.5;
+    
+    // 3D Cartoon Shadow
+    ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.roundRect(16, 636, 48, 68, 10);
+    ctx.roundRect(16, 639.5, 48, 68, 12);
+    ctx.fill();
+
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(16, 636, 48, 68, 12);
     ctx.fill();
     ctx.stroke();
 
@@ -1591,15 +1624,27 @@ export class ColorClash extends Game {
       const canAfford = this.playerInk >= card.cost;
       const isSelected = this.selectedCardIndex === i;
 
-      // Card Background
-      ctx.fillStyle = isSelected ? '#0077b6' : canAfford ? '#1e293b' : '#0f172a';
-      ctx.strokeStyle = isSelected ? '#ffd166' : canAfford ? '#00b4d8' : '#334155';
-      ctx.lineWidth = isSelected ? 3 : 1.5;
+      // 3D Cartoon Drop Shadow
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(cx, cy + 4, cardW, cardH, 12);
+      ctx.fill();
+
+      // Card Background Face
+      ctx.fillStyle = isSelected ? '#0077b6' : canAfford ? '#334155' : '#1e293b';
+      ctx.strokeStyle = isSelected ? '#ffd166' : '#000000';
+      ctx.lineWidth = isSelected ? 3 : 2.5;
 
       ctx.beginPath();
-      ctx.roundRect(cx, cy, cardW, cardH, 10);
+      ctx.roundRect(cx, cy, cardW, cardH, 12);
       ctx.fill();
       ctx.stroke();
+
+      // Top Specular Highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.roundRect(cx + 2, cy + 2, cardW - 4, (cardH - 4) * 0.4, [10, 10, 0, 0]);
+      ctx.fill();
 
       // Card Icon
       ctx.font = '24px sans-serif';
@@ -1611,10 +1656,20 @@ export class ColorClash extends Game {
       ctx.font = 'bold 9px system-ui, sans-serif';
       ctx.fillText(card.name, cx + cardW / 2, cy + 46);
 
-      // Ink Cost Drop Badge
+      // Ink Cost Drop Badge with mini shadow
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(cx + cardW / 2 - 20, cy + 50.5, 40, 14, 7);
+      ctx.fill();
+
       ctx.fillStyle = canAfford ? '#ffd166' : '#ef233c';
-      ctx.font = 'bold 11px system-ui, sans-serif';
-      ctx.fillText(`💧 ${card.cost}`, cx + cardW / 2, cy + 60);
+      ctx.beginPath();
+      ctx.roundRect(cx + cardW / 2 - 20, cy + 49, 40, 14, 7);
+      ctx.fill();
+
+      ctx.fillStyle = canAfford ? '#000000' : '#ffffff';
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.fillText(`💧${card.cost}`, cx + cardW / 2, cy + 59.5);
     }
 
     ctx.restore();
