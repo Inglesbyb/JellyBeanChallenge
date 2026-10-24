@@ -884,6 +884,13 @@ export class MultiplierRunner extends Game {
     }
 
     if (this.stairsProgress >= steps.length + 0.6) {
+      if (this.stage >= 3) {
+        // Conquered all 3 Bosses!
+        this.bossState = 'none';
+        this.won = true;
+        this.winReason = 'All 3 Dock Bosses Defeated! 👑';
+        return;
+      }
       this.bossState = 'none';
       this.stage++;
       this.feverRush = 3.0;

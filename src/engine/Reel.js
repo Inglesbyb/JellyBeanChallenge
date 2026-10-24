@@ -418,6 +418,28 @@ export class Reel {
     this.roundStartScore = this.game.score;
   }
 
+  onVictory(winReason) {
+    this.bank();
+    const id = GAMES[this.index].meta.id;
+    // Apex victory bonus points!
+    const victoryBonus = 2500;
+    this.game.score = (this.game.score || 0) + victoryBonus;
+    store.meta.global += victoryBonus;
+    store.set(id, this.game.serialize(), this.game.score);
+    store.meta.results[this.index] = 'survived';
+    store.save();
+    this.mode = 'secured';
+    this.holdT = 1.6;
+    const sub = winReason || 'MAXIMUM POWER ACHIEVED! · NEXT GAME';
+    this.banner('APEX VICTORY! 👑', `${sub} (+${victoryBonus.toLocaleString()} PTS)`, 'ok');
+    this.flash('ok');
+    sounds.survive();
+    sounds.up();
+    haptics.success();
+    this.stage.classList.remove('urgent');
+    this.renderPips();
+  }
+
   onSurvive() {
     this.bank();
     const id = GAMES[this.index].meta.id;
@@ -593,7 +615,9 @@ export class Reel {
       this.timeLeft -= dt;
       this.updateTimerUI();
       if (g.dead) this.onDeath();
-      else if (this.timeLeft <= 0) {
+      else if (g.won || g.secured) {
+        this.onVictory(g.winReason);
+      } else if (this.timeLeft <= 0) {
         this.timeLeft = 0;
         this.updateTimerUI();
         this.onSurvive();

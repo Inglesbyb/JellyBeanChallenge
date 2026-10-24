@@ -31,7 +31,7 @@ export class Game {
   }
 
   die(reason) {
-    if (this.dead || this.grace > 0) return false;
+    if (this.dead || this.grace > 0 || (typeof this.isMaxSize === 'function' && this.isMaxSize())) return false;
     this.dead = true;
     this.deathReason = reason;
     return true;

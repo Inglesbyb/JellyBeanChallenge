@@ -13,9 +13,9 @@ export const STAGES = [
   { n: 'Sour Peach Ring',       s: 42,  icon: '🍑', title: 'Tier 3: Sugar-Dusted Jelly' },
   { n: 'Marshmallow Puffer',    s: 75,  icon: '🍫', title: 'Tier 4: Fluffy Corn-Spiker' },
   { n: 'Peppermint Barracuda',  s: 120, icon: '🍭', title: 'Tier 5: Hard-Candy Dasher' },
-  { n: 'Gummy Worm Serpent',    s: 185, icon: '🐛', title: 'Tier 6: Two-Tone Ribbon' },
-  { n: 'Two-Tone Haribo Shark', s: 270, icon: '🦈', title: 'Tier 7: Foam-Belly Apex' },
-  { n: 'Sour Crystal Megalodon',s: 380, icon: '👑', title: 'Tier 8: Sour Sugar Colossus' },
+  { n: 'Gummy Worm Serpent',    s: 175, icon: '🐛', title: 'Tier 6: Two-Tone Ribbon' },
+  { n: 'Two-Tone Haribo Shark', s: 240, icon: '🦈', title: 'Tier 7: Foam-Belly Apex' },
+  { n: 'Sour Crystal Megalodon',s: 320, icon: '👑', title: 'Tier 8: Sour Sugar Colossus' },
 ];
 
 export const DEPTH_ZONES = [
@@ -187,6 +187,8 @@ export class DeepFeeder extends Game {
     this.pSpeed = 220;
     this.currentZoneIndex = 0;
     this.zoneAlert = null;
+    this.victoryTimer = 0;
+    this.maxSizeCelebrated = false;
 
     // Ocean environment: Strawberry/Apple Licorice Laces & Rock Candy Corals
     this.licoriceLaces = this.buildLicoriceLaces();
@@ -314,6 +316,10 @@ export class DeepFeeder extends Game {
     return `${STAGES[this.stage].n}, size ${Math.round(this.player.size)}`;
   }
 
+  isMaxSize() {
+    return this.player.size >= 320;
+  }
+
   targetZoom() {
     return clamp(28 / (this.player.size * 0.65 + 18), 0.12, 0.84);
   }
@@ -423,6 +429,45 @@ export class DeepFeeder extends Game {
   update(dt) {
     const p = this.player;
     this.sfxT -= dt;
+
+    // Apex victory countdown when max size reached
+    if (this.isMaxSize()) {
+      if (!this.maxSizeCelebrated) {
+        this.maxSizeCelebrated = true;
+        this.victoryTimer = 4.0;
+        const kk = 1 / this.zoom;
+        this.fx.ring(p.x, p.y, '#ffd166', 360 * kk, 1.2, 8);
+        this.fx.burst(p.x, p.y, '#ffd166', 40, 320 * kk, 1.0, 6);
+        this.fx.burst(p.x, p.y, '#3dffa2', 30, 260 * kk, 0.9, 5);
+        this.fx.text(p.x, p.y - p.size - 40 * kk, '👑 SOUR CRYSTAL MEGALODON REACHED!', '#ffd166', 28, 2.5);
+        this.fx.text(p.x, p.y - p.size - 14 * kk, 'INVULNERABLE APEX PREDATOR!', '#3dffa2', 22, 2.2);
+        this.sounds.gate(true);
+        this.sounds.up();
+        this.haptics.heavy();
+      }
+
+      // Golden apex aura & particles
+      const kk = 1 / this.zoom;
+      if (Math.random() < 0.35) {
+        this.fx.burst(
+          p.x + (Math.random() - 0.5) * p.size * 1.4,
+          p.y + (Math.random() - 0.5) * p.size * 0.8,
+          ['#ffd166', '#ffbe0b', '#3dffa2', '#ffffff'][Math.floor(Math.random() * 4)],
+          2,
+          70 * kk,
+          0.5,
+          3.5
+        );
+      }
+
+      if (this.victoryTimer > 0) {
+        this.victoryTimer -= dt;
+        if (this.victoryTimer <= 0) {
+          this.won = true;
+          this.winReason = 'Apex Ocean Megalodon Conquered! 🦈';
+        }
+      }
+    }
 
     // Smooth FOV zoom
     this.zoom += (this.targetZoom() - this.zoom) * Math.min(1, dt * 2.5);
@@ -568,8 +613,8 @@ export class DeepFeeder extends Game {
       const dy = p.y - f.y;
       const d = Math.hypot(dx, dy);
       const ratio = f.size / p.size;
-      const isDeadly = ratio > 1.08 && p.sugarRush <= 0;
-      const isEdible = ratio < 0.95 || p.sugarRush > 0;
+      const isDeadly = !this.isMaxSize() && ratio > 1.08 && p.sugarRush <= 0;
+      const isEdible = this.isMaxSize() || ratio < 0.95 || p.sugarRush > 0;
       const isShark = f.species === 'hariboshark' || f.species === 'strawberryshark' || f.species === 'peppermint' || f.species === 'sourmegalodon';
 
       let lungeBoost = 1.0;
@@ -661,7 +706,7 @@ export class DeepFeeder extends Game {
       // Collision checks
       const reach = (p.size + f.size) * 0.56;
       if (d < reach) {
-        if (p.sugarRush > 0) {
+        if (this.isMaxSize() || p.sugarRush > 0) {
           this.eat(i, f, true);
         } else if (ratio < 0.95) {
           this.eat(i, f, false);
@@ -709,6 +754,8 @@ export class DeepFeeder extends Game {
     const kk = 1 / this.zoom;
     this.score += 350;
     this.player.sugarRush = 5.2; // 5.2s of Invulnerable Gummy Shark Hunter mode!
+    this.player.size = Math.min(360, this.player.size + 14);
+
     this.fx.ring(c.x, c.y, '#ffd166', 180, 0.7, 5);
     this.fx.burst(c.x, c.y, '#ffe066', 22, 180 * kk, 0.8, 5);
     this.fx.burst(c.x, c.y, '#f72585', 18, 140 * kk, 0.6, 4);
@@ -718,6 +765,15 @@ export class DeepFeeder extends Game {
     this.sounds.gate(true);
     this.sounds.up();
     this.haptics.heavy();
+
+    const st = stageOf(this.player.size);
+    if (st > this.stage) {
+      this.stage = st;
+      this.fx.text(this.player.x, this.player.y - this.player.size - 36 * kk, `EVOLVED: ${STAGES[st].n.toUpperCase()}`, '#3dffa2', 26, 1.8);
+      this.fx.ring(this.player.x, this.player.y, '#3dffa2', 180, 0.75, 5);
+      this.sounds.up();
+      this.haptics.medium();
+    }
 
     // Spawn 10 gold foil chocolate doubloons
     for (let i = 0; i < 10; i++) {
@@ -739,8 +795,8 @@ export class DeepFeeder extends Game {
     const kk = 1 / this.zoom;
     this.fish.splice(i, 1);
 
-    const growthMult = wasSharkHunter ? 0.7 : 0.45;
-    p.size = Math.min(420, Math.sqrt(p.size * p.size + f.size * f.size * growthMult));
+    const growthMult = wasSharkHunter ? 1.4 : 0.95;
+    p.size = Math.min(360, Math.sqrt(p.size * p.size + f.size * f.size * growthMult + f.size * 1.2));
 
     const pts = wasSharkHunter ? Math.round(f.size * 10) : Math.max(1, Math.round(f.size * 3.5));
     this.score += pts;
@@ -2105,6 +2161,33 @@ export class DeepFeeder extends Game {
       }
     }
 
+    // Apex Megalodon Victory & Invulnerability Banner
+    if (this.isMaxSize()) {
+      const vSec = Math.max(0, Math.ceil(this.victoryTimer));
+      const badgeW = 280;
+      const badgeH = 46;
+      const bx = W / 2 - badgeW / 2;
+      const by = 18;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 214, 10, 0.95)';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
+      this.rr(bx, by, badgeW, badgeH, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 13px Outfit, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('👑 APEX MEGALODON (INVULNERABLE)', W / 2, by + 19);
+
+      ctx.font = '800 11px Outfit, system-ui, sans-serif';
+      ctx.fillStyle = '#10002b';
+      ctx.fillText(vSec > 0 ? `OCEAN DOMINATED · VICTORY IN ${vSec}s` : 'OCEAN DOMINATED · VICTORY!', W / 2, by + 36);
+      ctx.restore();
+    }
+
     // 1. Stage & Depth Information Pill (positioned safely above bottom reel controls)
     const pillY = H - 148;
     ctx.fillStyle = 'rgba(20, 9, 36, 0.82)';
@@ -2114,10 +2197,10 @@ export class DeepFeeder extends Game {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#3dffa2';
+    ctx.fillStyle = this.isMaxSize() ? '#ffd166' : '#3dffa2';
     ctx.font = '800 13px Outfit, system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`${curStage.icon} ${curStage.n.toUpperCase()}`, 26, pillY + 20);
+    ctx.fillText(this.isMaxSize() ? '👑 APEX MEGALODON (MAX)' : `${curStage.icon} ${curStage.n.toUpperCase()}`, 26, pillY + 20);
 
     // Depth & Threat Level Badge
     ctx.fillStyle = '#ffffff';

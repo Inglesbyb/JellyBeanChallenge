@@ -8,20 +8,20 @@ const CHUNK_SIZE = 600;
 const CHUNKS_ACROSS = WORLD / CHUNK_SIZE; // 30 x 30 = 900 chunks
 const TAU = Math.PI * 2;
 
-// 12-Tier Epic Progression from Micro Debris to Cosmic Singularity
+// 12-Tier Epic Progression from Micro Debris to Cosmic Singularity (Max Size)
 export const TIERS = [
   { level: 1,  req: 16,   name: 'Micro Hole',        desc: 'Sweets, Litter, Cones, Birds' },
-  { level: 2,  req: 26,   name: 'Sidewalk Maw',      desc: 'Phone Boxes, Benches, Pedestrians' },
-  { level: 3,  req: 42,   name: 'Alley Eater',       desc: 'Taxis, Double-Deckers, Anchors' },
-  { level: 4,  req: 68,   name: 'Quayside Devourer', desc: 'Statues, Fountains, Banana-Beans' },
-  { level: 5,  req: 110,  name: 'Townhouse Scourge', desc: 'Georgian Terraces, Cavern Clubs' },
-  { level: 6,  req: 175,  name: 'Dockland Consumer', desc: 'Palm Houses, Albert Warehouses' },
-  { level: 7,  req: 280,  name: 'Waterfront Titan',  desc: 'St. Jelly Hall, Clock Towers' },
-  { level: 8,  req: 440,  name: 'Cathedral Void',    desc: 'Cathedral Spires, Liver Building' },
-  { level: 9,  req: 700,  name: 'District Colossus', desc: 'Dock Basins, Stadiums, Wheels' },
-  { level: 10, req: 1100, name: 'Metropolis Leviathan',desc: 'Entire Avenues & Pier Quays' },
-  { level: 11, req: 1650, name: 'Continental Maw',   desc: 'Multiple Historic Quarters' },
-  { level: 12, req: 2500, name: 'Cosmic Singularity',desc: 'ENTIRE CITY CONQUERED' },
+  { level: 2,  req: 24,   name: 'Sidewalk Maw',      desc: 'Phone Boxes, Benches, Pedestrians' },
+  { level: 3,  req: 38,   name: 'Alley Eater',       desc: 'Taxis, Double-Deckers, Anchors' },
+  { level: 4,  req: 60,   name: 'Quayside Devourer', desc: 'Statues, Fountains, Banana-Beans' },
+  { level: 5,  req: 95,   name: 'Townhouse Scourge', desc: 'Georgian Terraces, Cavern Clubs' },
+  { level: 6,  req: 150,  name: 'Dockland Consumer', desc: 'Palm Houses, Albert Warehouses' },
+  { level: 7,  req: 230,  name: 'Waterfront Titan',  desc: 'St. Jelly Hall, Clock Towers' },
+  { level: 8,  req: 340,  name: 'Cathedral Void',    desc: 'Cathedral Spires, Liver Building' },
+  { level: 9,  req: 480,  name: 'District Colossus', desc: 'Dock Basins, Stadiums, Wheels' },
+  { level: 10, req: 660,  name: 'Metropolis Leviathan',desc: 'Entire Avenues & Pier Quays' },
+  { level: 11, req: 850,  name: 'Continental Maw',   desc: 'Multiple Historic Quarters' },
+  { level: 12, req: 1000, name: 'Cosmic Singularity',desc: 'ENTIRE CITY CONQUERED (MAX SIZE)' },
 ];
 
 const PROP_DEFS = {
@@ -112,6 +112,8 @@ export class VoidEater extends Game {
     this.closestHunter = null;
     this.beanSquash = 1;
     this.lastTier = this.getTier().level;
+    this.victoryTimer = 0;
+    this.maxSizeCelebrated = false;
 
     this.chunks = new Map();
     this.eatenProps = new Set();
@@ -203,6 +205,10 @@ export class VoidEater extends Game {
   restoreLabel() {
     const t = this.getTier();
     return `size ${Math.round(this.hole.r)} (${t.name})`;
+  }
+
+  isMaxSize() {
+    return this.hole.r >= 1000;
   }
 
   getTier() {
@@ -499,11 +505,11 @@ export class VoidEater extends Game {
   growHole(h, propSize) {
     const isPlayer = h === this.hole;
     const efficiency = propSize / Math.max(8, h.r * 0.85);
-    const scaling = Math.min(1.4, Math.max(0.2, efficiency));
-    // Sizing up faster: Player gets a 1.05x multiplier with smooth damping
-    const mult = isPlayer ? 1.05 : 0.65;
-    const rate = (propSize * mult * scaling) / (1 + Math.sqrt(h.r) * 0.35);
-    h.r = Math.min(2500, h.r + rate);
+    const scaling = Math.min(1.4, Math.max(0.25, efficiency));
+    // Sizing up at a rewarding pace so players can reach maximum size in ~40-50s
+    const mult = isPlayer ? 2.2 : 0.65;
+    const rate = (propSize * mult * scaling) / (1 + Math.sqrt(h.r) * 0.22);
+    h.r = Math.min(1000, h.r + rate);
   }
 
   absorb(h, dt) {
@@ -588,6 +594,36 @@ export class VoidEater extends Game {
       this.hole.pulse = Math.max(0, this.hole.pulse - dt * 4.2);
     }
     this.beanSquash += (1 - this.beanSquash) * Math.min(1, dt * 10);
+
+    // Check for reaching maximum size (Cosmic Singularity)
+    if (this.isMaxSize() && !this.maxSizeCelebrated) {
+      this.maxSizeCelebrated = true;
+      this.victoryTimer = 4.0;
+      const k = 1 / this.zoom;
+      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 2.8, 1.2, 8);
+      this.fx.ring(this.hole.x, this.hole.y, '#3dffa2', this.hole.r * this.zoom * 2.2, 1.0, 6);
+      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 45, 380 * k, 1.2, 6);
+      this.fx.burst(this.hole.x, this.hole.y, '#38bdf8', 35, 300 * k, 1.0, 5);
+      this.fx.text(this.hole.x, this.hole.y - this.hole.r - 45 * k, '👑 COSMIC SINGULARITY REACHED! YOU CANNOT LOSE! 👑', '#ffd166', 26, 2.8);
+      this.sounds.survive();
+      this.sounds.up();
+      this.haptics.heavy();
+    }
+
+    if (this.victoryTimer > 0) {
+      this.victoryTimer -= dt;
+      // God-mode golden cosmic vortex particles
+      if (Math.random() < 0.35) {
+        const k = 1 / this.zoom;
+        const ang = Math.random() * TAU;
+        const dist = Math.random() * this.hole.r;
+        this.fx.burst(this.hole.x + Math.cos(ang) * dist, this.hole.y + Math.sin(ang) * dist, '#ffd166', 2, 80 * k, 0.35, 3);
+      }
+      if (this.victoryTimer <= 0) {
+        this.won = true;
+        this.winReason = 'Cosmic Singularity Conquered! 🌌';
+      }
+    }
 
     this.updateActiveProps();
 
@@ -735,9 +771,9 @@ export class VoidEater extends Game {
   eatRival(rv) {
     rv.dead = true;
     rv.respawn = 2.5;
-    const pts = Math.round(600 + rv.r * 10);
+    const pts = Math.round(800 + rv.r * 15);
     this.score += pts;
-    const rivalMass = Math.min(this.hole.r * 0.65, Math.max(16, rv.r * 0.5));
+    const rivalMass = Math.min(this.hole.r * 0.75, Math.max(35, rv.r * 0.7));
     this.growHole(this.hole, rivalMass);
     const k = 1 / this.zoom;
     this.fx.burst(rv.x, rv.y, '#ffd166', 36, 300 * k, 0.9, 6);
@@ -929,6 +965,12 @@ export class VoidEater extends Game {
 
       const overlap = (h.r + rv.r) - pd;
       if (overlap > 0) {
+        // MAXIMUM SIZE ACHIEVED: YOU CANNOT LOSE! ALWAYS DEVOURS RIVALS!
+        if (this.isMaxSize()) {
+          this.eatRival(rv);
+          continue;
+        }
+
         // 1. RIVAL IS BIGGER THAN PLAYER -> SWALLOWS & ELIMINATES PLAYER!
         if (rv.r >= h.r + 1.0) {
           if (this.grace > 0) {
@@ -1030,11 +1072,38 @@ export class VoidEater extends Game {
       this.drawDangerVignette(ctx, W, H);
     }
 
-    // 6. Draw HUD Elements: Top 5 Leaderboard, Radar & District Tag
     this.drawRivalIndicators(ctx, ox, oy, sc, W, H);
     this.drawLeaderboard(ctx, W, H);
     this.drawRadar(ctx, W, H);
     this.drawDistrictHUD(ctx, W, H);
+
+    // 7. Apex Invulnerability & Victory Countdown Pill
+    if (this.isMaxSize()) {
+      ctx.save();
+      const bannerW = 296;
+      const bannerH = 40;
+      const bannerX = W / 2 - bannerW / 2;
+      const bannerY = 82;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(bannerX, bannerY, bannerW, bannerH, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '900 13px Outfit, system-ui, sans-serif';
+      ctx.fillStyle = '#ffd166';
+      if (this.victoryTimer > 0) {
+        ctx.fillText(`👑 APEX VICTORY IN ${Math.max(1, Math.ceil(this.victoryTimer))}s · [TAP TO WIN]`, W / 2, bannerY + bannerH / 2);
+      } else {
+        ctx.fillText('👑 APEX SINGULARITY (INVULNERABLE) 👑', W / 2, bannerY + bannerH / 2);
+      }
+      ctx.restore();
+    }
   }
 
   /* --------------------------------------------------- Live Top 5 Competitor Leaderboard */
