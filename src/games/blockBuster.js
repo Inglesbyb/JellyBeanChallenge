@@ -59,16 +59,23 @@ export class BlockBuster extends Game {
     if (saved && saved.wave) {
       this.wave = saved.wave;
       this.ballCount = saved.ballCount || 15;
-      this.cannonX = saved.cannonX ?? this.cannonX;
+      this.cannonX = clamp(Number(saved.cannonX) || (LEFT_WALL + RIGHT_WALL) / 2, LEFT_WALL + 28, RIGHT_WALL - 28);
       this.targetCannonX = this.cannonX;
-      if (saved.blocks && Array.isArray(saved.blocks)) {
-        this.blocks = saved.blocks.map(b => ({ ...b }));
+      if (saved.blocks && Array.isArray(saved.blocks) && saved.blocks.length > 0) {
+        this.blocks = saved.blocks.map(b => ({
+          ...b,
+          w: b.w || BLOCK_W,
+          h: b.h || BLOCK_H,
+          pulse: 0,
+          rot: 0,
+        }));
       } else {
         this.spawnRow(0);
         this.spawnRow(1);
+        this.spawnRow(2);
       }
     } else {
-      // Starting board setup: 2 rows to get action started immediately
+      // Starting board setup: 3 rows to get action started immediately
       this.spawnRow(0);
       this.spawnRow(1);
       this.spawnRow(2);
@@ -86,6 +93,8 @@ export class BlockBuster extends Game {
         row: b.row,
         x: Math.round(b.x),
         y: Math.round(b.y),
+        w: b.w || BLOCK_W,
+        h: b.h || BLOCK_H,
         type: b.type,
         hp: b.hp,
         maxHp: b.maxHp,
@@ -371,8 +380,10 @@ export class BlockBuster extends Game {
       if (b.dead) continue;
 
       // Closest point on rectangle
-      const cx = clamp(ball.x, b.x, b.x + b.w);
-      const cy = clamp(ball.y, b.y, b.y + b.h);
+      const bw = b.w || BLOCK_W;
+      const bh = b.h || BLOCK_H;
+      const cx = clamp(ball.x, b.x, b.x + bw);
+      const cy = clamp(ball.y, b.y, b.y + bh);
       const dx = ball.x - cx;
       const dy = ball.y - cy;
       const distSq = dx * dx + dy * dy;
@@ -902,12 +913,18 @@ export class BlockBuster extends Game {
 
   drawBlock(ctx, b) {
     const scale = 1.0 + (b.pulse || 0) * 0.15;
-    const cx = b.x + b.w / 2;
-    const cy = b.y + b.h / 2;
-    const bw = b.w * scale;
-    const bh = b.h * scale;
+    const bw = (b.w || BLOCK_W) * scale;
+    const bh = (b.h || BLOCK_H) * scale;
+    const bx = Number.isFinite(b.x) ? b.x : LEFT_WALL;
+    const by = Number.isFinite(b.y) ? b.y : TOP_ROW_Y;
+    const cx = bx + (b.w || BLOCK_W) / 2;
+    const cy = by + (b.h || BLOCK_H) / 2;
     const x = cx - bw / 2;
     const y = cy - bh / 2;
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(bw) || !Number.isFinite(bh)) {
+      return;
+    }
 
     ctx.save();
 

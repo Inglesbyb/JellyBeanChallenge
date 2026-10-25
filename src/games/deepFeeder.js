@@ -2313,18 +2313,4 @@ export class DeepFeeder extends Game {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);
   }
-
-  serialize() {
-    return {
-      x: this.player.x,
-      y: this.player.y,
-      size: this.player.size,
-      stageIndex: this.stage.index,
-    };
-  }
-
-  restoreLabel() {
-    const zone = this.getDepthZone(this.player.y);
-    return `${this.stage.icon} ${this.stage.name} · ${Math.round(this.player.y)}m (${zone.name})`;
-  }
 }
