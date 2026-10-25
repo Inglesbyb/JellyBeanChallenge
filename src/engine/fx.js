@@ -13,7 +13,9 @@ export class FX {
   }
 
   burst(x, y, color, n = 12, speed = 160, life = 0.6, size = 3, grav = 0) {
-    for (let i = 0; i < n; i++) {
+    if (this.parts.length > 180) return; // Drop excessive particles to keep 60 FPS
+    const count = Math.min(n, 20);
+    for (let i = 0; i < count; i++) {
       const a = Math.random() * TAU;
       const s = speed * (0.35 + Math.random() * 0.65);
       this.parts.push({
@@ -28,20 +30,44 @@ export class FX {
   }
 
   ring(x, y, color, maxR = 60, life = 0.45, w = 3) {
+    if (this.rings.length > 10) this.rings.shift();
     this.rings.push({ x, y, color, maxR, life, max: life, w });
   }
 
-  text(x, y, str, color = '#fff', size = 22, life = 0.9) {
+  text(x, y, str, color = '#fff', size = 22, life = 0.65) {
+    // Smart merge: if adding a numeric "+pts" near an existing one, combine them cleanly
+    const existing = this.texts.find(t => Math.hypot(t.x - x, t.y - y) < 60);
+    if (existing) {
+      if (str.startsWith('+') && existing.str.startsWith('+')) {
+        const v1 = parseInt(existing.str.replace(/\D/g, ''), 10) || 0;
+        const v2 = parseInt(str.replace(/\D/g, ''), 10) || 0;
+        if (v1 > 0 && v2 > 0) {
+          existing.str = `+${v1 + v2}`;
+          existing.life = Math.min(existing.max, existing.life + 0.3);
+          existing.color = color;
+          existing.size = Math.min(28, existing.size + 1.5);
+          return;
+        }
+      }
+      // Nudge slightly up to avoid direct overlap
+      y = existing.y - 26;
+    }
+
+    // Keep active text count low to prevent jitter and screen crowding
+    if (this.texts.length >= 6) {
+      this.texts.shift();
+    }
     this.texts.push({ x, y, str, color, size, life, max: life });
   }
 
-  shake(mag = 6, t = 0.25) {
-    this.shakeMag = Math.max(this.shakeMag, mag);
-    this.shakeT = Math.max(this.shakeT, t);
-    this.shakeDur = Math.max(this.shakeDur, t);
+  shake(mag = 6, t = 0.22) {
+    // Prevent cumulative violent shaking
+    this.shakeMag = Math.min(8, Math.max(this.shakeMag, mag));
+    this.shakeT = Math.min(0.25, Math.max(this.shakeT, t));
+    this.shakeDur = Math.max(this.shakeDur, this.shakeT);
   }
 
-  screenShake(mag = 6, t = 0.25) {
+  screenShake(mag = 6, t = 0.22) {
     this.shake(mag, t);
   }
 
@@ -63,7 +89,7 @@ export class FX {
     this.rings = this.rings.filter((r) => r.life > 0);
     for (const t of this.texts) {
       t.life -= dt;
-      t.y -= 38 * dt;
+      t.y -= 42 * dt;
     }
     this.texts = this.texts.filter((t) => t.life > 0);
     if (this.shakeT > 0) {
@@ -94,18 +120,20 @@ export class FX {
       ctx.arc(r.x, r.y, r.maxR * k * (0.15 + 0.85 * t), 0, TAU);
       ctx.stroke();
     }
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (const t of this.texts) {
-      const a = t.life / t.max;
-      ctx.globalAlpha = Math.min(1, a * 2);
-      const pop = 1 + Math.max(0, a - 0.75) * 1.4;
-      ctx.font = `900 ${t.size * k * pop}px Outfit, system-ui, sans-serif`;
-      ctx.lineWidth = 4 * k;
-      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-      ctx.strokeText(t.str, t.x, t.y);
-      ctx.fillStyle = t.color;
-      ctx.fillText(t.str, t.x, t.y);
+    if (this.texts.length > 0) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const t of this.texts) {
+        const a = t.life / t.max;
+        ctx.globalAlpha = Math.min(1, a * 2.2);
+        const pop = 1 + Math.max(0, a - 0.8) * 0.8;
+        ctx.font = `900 ${Math.round(t.size * k * pop)}px Outfit, system-ui, sans-serif`;
+        ctx.lineWidth = 4 * k;
+        ctx.strokeStyle = '#000000';
+        ctx.strokeText(t.str, t.x, t.y);
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.str, t.x, t.y);
+      }
     }
     ctx.globalAlpha = 1;
   }

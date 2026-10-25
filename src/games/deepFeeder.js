@@ -189,6 +189,9 @@ export class DeepFeeder extends Game {
     this.zoneAlert = null;
     this.victoryTimer = 0;
     this.maxSizeCelebrated = false;
+    this.fishTextCooldown = 0;
+    this.fishBatchPts = 0;
+    this.sharkTextCooldown = 0;
 
     // Ocean environment: Strawberry/Apple Licorice Laces & Rock Candy Corals
     this.licoriceLaces = this.buildLicoriceLaces();
@@ -429,6 +432,16 @@ export class DeepFeeder extends Game {
   update(dt) {
     const p = this.player;
     this.sfxT -= dt;
+    this.fishTextCooldown -= dt;
+    this.sharkTextCooldown -= dt;
+
+    // Flush accumulated fish feast text smoothly
+    if (this.fishTextCooldown <= 0 && this.fishBatchPts > 0) {
+      const kk = 1 / this.zoom;
+      this.fx.text(p.x, p.y - p.size * 0.5 - 16 * kk, `+${this.fishBatchPts}`, '#ffd166', 20, 0.6);
+      this.fishBatchPts = 0;
+      this.fishTextCooldown = 0.32;
+    }
 
     // Apex victory countdown when max size reached
     if (this.isMaxSize()) {
@@ -589,8 +602,7 @@ export class DeepFeeder extends Game {
         this.coins.splice(i, 1);
         this.score += coin.val;
         const kk = 1 / this.zoom;
-        this.fx.burst(coin.x, coin.y, '#ffd166', 6, 80 * kk, 0.4, 3);
-        this.fx.text(coin.x, coin.y - 12 * kk, `+${coin.val}`, '#ffd166', 15);
+        this.fx.burst(coin.x, coin.y, '#ffd166', 4, 70 * kk, 0.35, 2.5);
         this.sounds.bubble(1.2 + Math.random() * 0.4);
         this.haptics.light();
       }
@@ -802,17 +814,25 @@ export class DeepFeeder extends Game {
     this.score += pts;
 
     if (wasSharkHunter) {
-      this.fx.burst(f.x, f.y, '#f72585', 18, 220 * kk, 0.7, 4.5);
-      this.fx.text(f.x, f.y - 18 * kk, `🦈 GUMMY SHARK CRUNCHED! +${pts}`, '#3dffa2', 24, 1.4);
+      this.fx.burst(f.x, f.y, '#f72585', 12, 180 * kk, 0.5, 3.5);
+      if (this.sharkTextCooldown <= 0) {
+        this.fx.text(f.x, f.y - 18 * kk, `🦈 CRUNCHED! +${pts}`, '#3dffa2', 22, 0.65);
+        this.sharkTextCooldown = 0.35;
+      }
       this.sounds.chomp();
       this.sounds.hit();
       this.haptics.heavy();
     } else {
-      this.fx.burst(f.x, f.y, f.flavor || '#9bf6ff', 10, 160 * kk, 0.55, 3.5);
-      this.fx.text(f.x, f.y - 12 * kk, `+${pts}`, '#ffd166', 20);
+      this.fx.burst(f.x, f.y, f.flavor || '#9bf6ff', 8, 140 * kk, 0.45, 3);
+      this.fishBatchPts += pts;
+      if (this.fishTextCooldown <= 0) {
+        this.fx.text(p.x, p.y - p.size * 0.5 - 14 * kk, `+${this.fishBatchPts}`, '#ffd166', 20, 0.6);
+        this.fishBatchPts = 0;
+        this.fishTextCooldown = 0.32;
+      }
       if (this.sfxT <= 0) {
         this.sounds.bubble(0.85 + Math.random() * 0.5);
-        this.sfxT = 0.04;
+        this.sfxT = 0.05;
       }
       this.haptics.light();
     }

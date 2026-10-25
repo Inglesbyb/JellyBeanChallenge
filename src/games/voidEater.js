@@ -114,6 +114,9 @@ export class VoidEater extends Game {
     this.lastTier = this.getTier().level;
     this.victoryTimer = 0;
     this.maxSizeCelebrated = false;
+    this.eatTextCooldown = 0;
+    this.batchPts = 0;
+    this.gulpCooldown = 0;
 
     this.chunks = new Map();
     this.eatenProps = new Set();
@@ -588,7 +591,17 @@ export class VoidEater extends Game {
     this.hapT -= dt;
     this.clashT -= dt;
     this.dangerT -= dt;
+    this.eatTextCooldown -= dt;
+    this.gulpCooldown -= dt;
     if (this.grace > 0) this.grace = Math.max(0, this.grace - dt);
+
+    // Flush accumulated devour score text smoothly without overlapping spam
+    if (this.eatTextCooldown <= 0 && this.batchPts > 0) {
+      const k = 1 / this.zoom;
+      this.fx.text(this.hole.x, this.hole.y - this.hole.r - 20 * k, `+${this.batchPts} PTS`, '#ffd166', 22);
+      this.batchPts = 0;
+      this.eatTextCooldown = 0.35;
+    }
 
     if (this.hole.pulse > 0) {
       this.hole.pulse = Math.max(0, this.hole.pulse - dt * 4.2);
@@ -730,28 +743,39 @@ export class VoidEater extends Game {
   onPlayerAte(p) {
     const k = 1 / this.zoom;
     this.score += p.pts;
+    this.batchPts += p.pts;
 
-    const punch = Math.min(0.35, (p.size / this.hole.r) * 0.45 + 0.1);
-    this.hole.pulse = Math.min(0.5, this.hole.pulse + punch);
-    this.beanSquash = Math.max(0.65, 1.35 - punch * 0.85);
+    const punch = Math.min(0.3, (p.size / this.hole.r) * 0.4 + 0.08);
+    this.hole.pulse = Math.min(0.45, this.hole.pulse + punch);
+    this.beanSquash = Math.max(0.7, 1.3 - punch * 0.7);
 
-    this.sounds.gulp(Math.max(0.55, 1.45 - p.size * 0.025));
+    if (this.gulpCooldown <= 0) {
+      this.sounds.gulp(Math.max(0.55, 1.45 - p.size * 0.025));
+      this.gulpCooldown = 0.07;
+    }
 
     if (p.size <= 8) {
       // Tiny snappy ripple for micro sweets & litter
       this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.25, 0.18, 2);
     } else if (p.size < 20) {
-      this.fx.ring(this.hole.x, this.hole.y, '#25e6ff', this.hole.r * this.zoom * 1.4, 0.25, 2.5);
+      this.fx.ring(this.hole.x, this.hole.y, '#25e6ff', this.hole.r * this.zoom * 1.35, 0.22, 2.5);
     } else if (p.size < 40) {
-      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.65, 0.35, 3.5);
-      this.fx.shake(2.5, 0.12);
-      this.fx.text(this.hole.x, this.hole.y - this.hole.r - 18 * k, `+${p.pts} PTS`, '#ffd166', 20);
+      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.5, 0.28, 3);
+      if (this.eatTextCooldown <= 0) {
+        this.fx.text(this.hole.x, this.hole.y - this.hole.r - 20 * k, `+${this.batchPts} PTS`, '#ffd166', 22);
+        this.batchPts = 0;
+        this.eatTextCooldown = 0.32;
+      }
       this.haptics.light();
     } else {
-      this.fx.ring(this.hole.x, this.hole.y, '#ff4fa3', this.hole.r * this.zoom * 2.2, 0.55, 5);
-      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 18, 160 * k, 0.65, 4);
-      this.fx.shake(6, 0.25);
-      this.fx.text(this.hole.x, this.hole.y - this.hole.r - 24 * k, `DEVOUR! +${p.pts}`, '#ff4fa3', 24);
+      this.fx.ring(this.hole.x, this.hole.y, '#ff4fa3', this.hole.r * this.zoom * 1.8, 0.35, 4);
+      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 12, 140 * k, 0.5, 3.5);
+      this.fx.shake(3.5, 0.18);
+      if (this.eatTextCooldown <= 0) {
+        this.fx.text(this.hole.x, this.hole.y - this.hole.r - 24 * k, `DEVOUR! +${this.batchPts}`, '#ff4fa3', 24);
+        this.batchPts = 0;
+        this.eatTextCooldown = 0.35;
+      }
       this.sounds.up();
       this.haptics.heavy();
     }
