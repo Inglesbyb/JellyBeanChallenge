@@ -37,8 +37,10 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: 🤖 Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: 🤖 Verify Android SDK
+        run: |
+          echo "Using GitHub runner pre-installed Android SDK: $ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
       - name: 🔑 Configure Release Keystore
         working-directory: android
