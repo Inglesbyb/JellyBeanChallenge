@@ -33,10 +33,12 @@ export class BallBlast extends Game {
 
     // Upgrades
     this.upgrades = {
-      damage: saved?.upgrades?.damage || 1, // Damage per bullet
-      fireRate: saved?.upgrades?.fireRate || 1, // 1..8
-      barrels: saved?.upgrades?.barrels || 1, // 1..4 (single, double, triple, quad)
+      damage: Number.isFinite(saved?.upgrades?.damage) ? saved.upgrades.damage : 1, // Damage per bullet
+      fireRate: Number.isFinite(saved?.upgrades?.fireRate) ? saved.upgrades.fireRate : 1, // 1..8
+      barrels: Number.isFinite(saved?.upgrades?.barrels) ? saved.upgrades.barrels : 1, // 1..4 (single, double, triple, quad)
     };
+
+    if (saved) this.grace = 1.5;
 
     // Cannon Physics
     this.cannonX = this.W / 2;

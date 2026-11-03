@@ -26,8 +26,10 @@ export class MultiplierRunner extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
-    this.count = 10; // Exactly 10 starting jellybeans as requested!
-    this.dist = saved ? saved.dist : 0;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
+    this.count = (saved && Number.isFinite(saved.count) && saved.count > 0) ? saved.count : 10;
+    this.dist = (saved && Number.isFinite(saved.dist)) ? saved.dist : 0;
     this.crowdX = MID;
     this.targetX = this.crowdX;
     this.rows = [];
@@ -76,9 +78,14 @@ export class MultiplierRunner extends Game {
   }
 
   /* ------------------------------------------------------------ Stage & Boss Progression */
+  // Boss squad requirement/HP for a stage, +25% per prestige level.
+  bossReqFor(stage) {
+    return Math.round(stage * 10 * (1 + 0.25 * ((this.pLevel || 1) - 1)));
+  }
+
   initStage(stage) {
     this.stage = stage;
-    this.bossReq = stage * 10; // Boss 1 = 10, Boss 2 = 20, Boss 3 = 30...
+    this.bossReq = this.bossReqFor(stage); // Boss 1 = 10, Boss 2 = 20, Boss 3 = 30... (+25% per prestige)
     this.stageStartDist = this.dist;
     this.stageLength = 2200;
     this.bossDist = this.stageStartDist + this.stageLength;
@@ -107,7 +114,7 @@ export class MultiplierRunner extends Game {
   }
 
   makeBossRow(d, stage) {
-    const req = stage * 10;
+    const req = this.bossReqFor(stage);
     const hp = req;
     let title, color, type;
 
@@ -372,7 +379,7 @@ export class MultiplierRunner extends Game {
       this.feverRush -= dt;
       this.speed = 265;
     } else {
-      this.speed = 195 + Math.min(50, this.stage * 10);
+      this.speed = (195 + Math.min(50, this.stage * 10)) * (1 + 0.07 * (this.pLevel - 1));
     }
 
     this.dist += this.speed * dt;
@@ -851,7 +858,7 @@ export class MultiplierRunner extends Game {
         const rescueBonus = 3 + this.stage * 2;
         this.count += rescueBonus;
         // Floor guarantee for next stage
-        const targetNext = (this.stage + 1) * 10;
+        const targetNext = this.bossReqFor(this.stage + 1);
         this.count = Math.max(this.count, targetNext - 8);
 
         this.fx.text(MID, CROWD_Y - 40, `+${rescueBonus} RESCUED RECRUITS! 🎖️`, '#38bdf8', 26, 1.5);
@@ -895,7 +902,7 @@ export class MultiplierRunner extends Game {
       this.stage++;
       this.feverRush = 3.0;
       this.sounds.upgrade();
-      this.fx.text(MID, CROWD_Y - 50, `STAGE ${this.stage}: TARGET ${this.stage * 10} BEANS! ⚡`, '#3dffa2', 28, 1.8);
+      this.fx.text(MID, CROWD_Y - 50, `STAGE ${this.stage}: TARGET ${this.bossReqFor(this.stage)} BEANS! ⚡`, '#3dffa2', 28, 1.8);
       this.initStage(this.stage);
     }
   }

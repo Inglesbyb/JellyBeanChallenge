@@ -102,22 +102,22 @@ export class ColorClash extends Game {
     this.fx = new FX();
     this.score = score;
 
-    this.matchTimer = saved?.matchTimer !== undefined ? saved.matchTimer : 60;
+    this.matchTimer = (saved && Number.isFinite(saved.matchTimer)) ? saved.matchTimer : 60;
     this.gameWon = false;
     this.gameLost = false;
 
     // Ink Pools (0.0 to 10.0)
-    this.playerInk = saved?.playerInk || 5.0;
-    this.aiInk = saved?.aiInk || 5.0;
+    this.playerInk = (saved && Number.isFinite(saved.playerInk)) ? saved.playerInk : 5.0;
+    this.aiInk = (saved && Number.isFinite(saved.aiInk)) ? saved.aiInk : 5.0;
     this.baseInkRate = 1.0 / 1.15; // 1 Ink every 1.15 seconds
-    this.isOvertime = saved?.isOvertime || false;
+    this.isOvertime = Boolean(saved?.isOvertime);
     this.inkRate = this.isOvertime ? this.baseInkRate * 2.0 : this.baseInkRate;
-    this.aiSurgeTriggered = saved?.aiSurgeTriggered || false;
+    this.aiSurgeTriggered = Boolean(saved?.aiSurgeTriggered);
     this.overtimeBannerTimer = 0;
 
     // Grid Buffer: 0 = Neutral, 1 = Blue (You), 2 = Red (AI)
     this.grid = new Uint8Array(TOTAL_TILES);
-    if (saved?.grid) {
+    if (Array.isArray(saved?.grid) && saved.grid.length === TOTAL_TILES) {
       this.grid.set(saved.grid);
     } else {
       // Initialize starting territory:
@@ -133,6 +133,8 @@ export class ColorClash extends Game {
         }
       }
     }
+
+    if (saved) this.grace = 1.5;
 
     // Territory Counts
     this.blueCount = 0;

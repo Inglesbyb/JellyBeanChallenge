@@ -160,6 +160,8 @@ export class DeepFeeder extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
     this.player = {
       x: 0,
       y: 350,
@@ -172,7 +174,7 @@ export class DeepFeeder extends Game {
       sugarRush: 0,
       bubbleT: 0,
     };
-    if (saved && typeof saved.x === 'number') {
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y) && Number.isFinite(saved.size) && saved.size >= 12) {
       Object.assign(this.player, { x: saved.x, y: saved.y, size: saved.size });
       this.grace = 1.8;
     } else {
@@ -391,7 +393,7 @@ export class DeepFeeder extends Game {
 
     // Determine target size
     let finalSize;
-    const isPredator = Math.random() < predatorChance;
+    const isPredator = Math.random() < Math.min(0.97, predatorChance + 0.07 * (this.pLevel - 1));
     if (isPredator) {
       finalSize = Math.max(sizeMin, Math.min(sizeMax, p.size * rand(1.18, 1.85)));
       if (y >= 35000) finalSize = Math.max(finalSize, rand(160, 340));
@@ -399,7 +401,7 @@ export class DeepFeeder extends Game {
       finalSize = Math.max(8, Math.min(sizeMax * 0.75, p.size * rand(0.4, 0.88)));
     }
 
-    const baseSpd = rand(spec.baseSpd[0], spec.baseSpd[1]);
+    const baseSpd = rand(spec.baseSpd[0], spec.baseSpd[1]) * (1 + 0.08 * (this.pLevel - 1));
     const gummyFlavors = ['#e63946', '#2ec4b6', '#ffd166', '#7209b7', '#f72585', '#ff70a6'];
     const flavor = gummyFlavors[Math.floor(Math.random() * gummyFlavors.length)];
 
@@ -743,7 +745,7 @@ export class DeepFeeder extends Game {
     this.fish = this.fish.filter(Boolean);
 
     this.spawnT -= dt;
-    if (this.spawnT <= 0 && this.fish.length < 32) {
+    if (this.spawnT <= 0 && this.fish.length < 32 + 4 * (this.pLevel - 1)) {
       this.spawnT = 0.14;
       this.spawnFish(false);
     }

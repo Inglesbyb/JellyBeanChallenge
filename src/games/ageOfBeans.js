@@ -113,34 +113,45 @@ export class AgeOfBeans extends Game {
     this.meta = AgeOfBeans.meta;
     this.fx = new FX();
     this.score = score;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
+    // Enemy units gain +25% HP and the AI director thinks faster per prestige level.
+    this.enemyHpMult = 1 + 0.25 * (this.pLevel - 1);
 
     // Faction Progression (Player = Left / Cyan Team, Enemy = Right / Magenta Team)
-    this.playerEra = saved?.playerEra || 0;
-    this.enemyEra = saved?.enemyEra || 0;
+    this.playerEra = clamp(saved?.playerEra || 0, 0, ERAS.length - 1);
+    this.enemyEra = clamp(saved?.enemyEra || 0, 0, ERAS.length - 1);
 
-    this.playerGold = saved?.playerGold ?? 190;
-    this.playerXp = saved?.playerXp || 0;
+    this.playerGold = Number.isFinite(saved?.playerGold) ? saved.playerGold : 190;
+    this.playerXp = Number.isFinite(saved?.playerXp) ? saved.playerXp : 0;
 
-    this.enemyGold = saved?.enemyGold ?? 170;
-    this.enemyXp = saved?.enemyXp || 0;
+    this.enemyGold = Number.isFinite(saved?.enemyGold) ? saved.enemyGold : 170;
+    this.enemyXp = Number.isFinite(saved?.enemyXp) ? saved.enemyXp : 0;
 
     // Base Fortresses
-    this.playerBaseHp = saved?.playerBaseHp ?? ERAS[this.playerEra].baseMaxHp;
-    this.enemyBaseHp = saved?.enemyBaseHp ?? ERAS[this.enemyEra].baseMaxHp;
+    this.playerBaseHp = Number.isFinite(saved?.playerBaseHp) ? saved.playerBaseHp : ERAS[this.playerEra].baseMaxHp;
+    this.enemyBaseHp = Number.isFinite(saved?.enemyBaseHp) ? saved.enemyBaseHp : ERAS[this.enemyEra].baseMaxHp;
     this.playerBaseMaxHp = ERAS[this.playerEra].baseMaxHp;
-    this.enemyBaseMaxHp = ERAS[this.enemyEra].baseMaxHp;
+    this.enemyBaseMaxHp = Math.round(ERAS[this.enemyEra].baseMaxHp * this.enemyHpMult);
+    if (!Number.isFinite(saved?.enemyBaseHp)) this.enemyBaseHp = this.enemyBaseMaxHp;
 
     // Base Turret Hardpoints (up to 3 tiers per base)
-    this.playerTurrets = saved?.playerTurrets || [
-      { unlocked: true, turretEra: 0, cdTimer: 0 },
-      { unlocked: false, turretEra: null, cdTimer: 0 },
-      { unlocked: false, turretEra: null, cdTimer: 0 },
-    ];
-    this.enemyTurrets = saved?.enemyTurrets || [
-      { unlocked: true, turretEra: 0, cdTimer: 0 },
-      { unlocked: false, turretEra: null, cdTimer: 0 },
-      { unlocked: false, turretEra: null, cdTimer: 0 },
-    ];
+    this.playerTurrets = Array.isArray(saved?.playerTurrets)
+      ? saved.playerTurrets.map((t) => ({ ...t }))
+      : [
+          { unlocked: true, turretEra: 0, cdTimer: 0 },
+          { unlocked: false, turretEra: null, cdTimer: 0 },
+          { unlocked: false, turretEra: null, cdTimer: 0 },
+        ];
+    this.enemyTurrets = Array.isArray(saved?.enemyTurrets)
+      ? saved.enemyTurrets.map((t) => ({ ...t }))
+      : [
+          { unlocked: true, turretEra: 0, cdTimer: 0 },
+          { unlocked: false, turretEra: null, cdTimer: 0 },
+          { unlocked: false, turretEra: null, cdTimer: 0 },
+        ];
+
+    if (saved) this.grace = 1.5;
 
     // Special Ability Timers
     this.playerSpecialCd = 0;
@@ -364,6 +375,7 @@ export class AgeOfBeans extends Game {
     const x = isPlayer ? 135 : 1465;
     const dir = isPlayer ? 1 : -1;
 
+    const hpMult = isPlayer ? 1 : this.enemyHpMult;
     this.units.push({
       id: this.nextUnitId++,
       team,
@@ -371,8 +383,8 @@ export class AgeOfBeans extends Game {
       tier,
       name: def.name,
       type: def.type,
-      hp: def.hp,
-      maxHp: def.hp,
+      hp: Math.round(def.hp * hpMult),
+      maxHp: Math.round(def.hp * hpMult),
       dmg: def.dmg,
       spd: def.spd,
       range: def.range,
@@ -432,7 +444,7 @@ export class AgeOfBeans extends Game {
   enemyEvolve() {
     if (this.enemyEra >= ERAS.length - 1) return;
     this.enemyEra++;
-    this.enemyBaseMaxHp = ERAS[this.enemyEra].baseMaxHp;
+    this.enemyBaseMaxHp = Math.round(ERAS[this.enemyEra].baseMaxHp * this.enemyHpMult);
     this.enemyBaseHp = Math.min(this.enemyBaseMaxHp, this.enemyBaseHp + 250);
 
     this.sounds.whoosh();
@@ -986,7 +998,7 @@ export class AgeOfBeans extends Game {
   updateAiDirector(dt) {
     this.aiThinkTimer -= dt;
     if (this.aiThinkTimer > 0) return;
-    this.aiThinkTimer = 1.2 + Math.random() * 0.8;
+    this.aiThinkTimer = (1.2 + Math.random() * 0.8) / (1 + 0.2 * (this.pLevel - 1));
 
     const eEra = this.enemyEra;
     const eraDef = ERAS[eEra];
@@ -1099,6 +1111,9 @@ export class AgeOfBeans extends Game {
       this.fx.screenShake(25, 1.0);
       this.fx.burst(1480, GROUND_Y - 100, '#ffd166', 80, 350, 1.4, 8);
       this.fx.text(this.W / 2, 280, 'VICTORY! ENEMY FORTRESS CRUSHED! 🏆', '#ffd166', 26, 3.0);
+      // Signal Reel.js: stage cleared (Reel handles bonus + prestige promotion).
+      this.won = true;
+      this.winReason = 'Enemy Citadel Destroyed! 🏰';
     }
   }
 

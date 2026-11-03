@@ -71,9 +71,10 @@ export class CrossyRoad extends Game {
     this.touchStartY = 0;
     this.touchStartT = 0;
 
-    if (saved && saved.maxDistance) {
-      this.maxDistance = saved.maxDistance;
-      this.coins = saved.coins || 0;
+    if (saved) {
+      if (Number.isFinite(saved.maxDistance)) this.maxDistance = saved.maxDistance;
+      if (Number.isFinite(saved.coins)) this.coins = saved.coins;
+      this.grace = 1.5;
     }
 
     // Generate initial safe zone + upcoming lanes (rows 0 to 24)

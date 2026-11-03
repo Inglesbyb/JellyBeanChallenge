@@ -86,16 +86,17 @@ export class ZombieFortress extends Game {
 
     // Restore saved progression if available
     if (saved) {
-      this.wave = saved.wave || 1;
-      this.gold = saved.gold || 0;
-      this.damageLevel = saved.damageLevel || 1;
-      this.fireRateLevel = saved.fireRateLevel || 1;
-      this.gunCount = saved.gunCount || 1;
-      this.multiShotLevel = saved.multiShotLevel || 1;
-      this.wallLevel = saved.wallLevel || 1;
+      this.wave = Number.isFinite(saved.wave) ? saved.wave : 1;
+      this.gold = Number.isFinite(saved.gold) ? saved.gold : 0;
+      this.damageLevel = Number.isFinite(saved.damageLevel) ? saved.damageLevel : 1;
+      this.fireRateLevel = Number.isFinite(saved.fireRateLevel) ? saved.fireRateLevel : 1;
+      this.gunCount = Number.isFinite(saved.gunCount) ? saved.gunCount : 1;
+      this.multiShotLevel = Number.isFinite(saved.multiShotLevel) ? saved.multiShotLevel : 1;
+      this.wallLevel = Number.isFinite(saved.wallLevel) ? saved.wallLevel : 1;
       this.maxWallHp = 200 + (this.wallLevel - 1) * 60;
-      this.wallHp = Math.min(this.maxWallHp, saved.wallHp || this.maxWallHp);
-      this.zombiesKilled = saved.zombiesKilled || 0;
+      this.wallHp = Math.min(this.maxWallHp, Number.isFinite(saved.wallHp) ? saved.wallHp : this.maxWallHp);
+      this.zombiesKilled = Number.isFinite(saved.zombiesKilled) ? saved.zombiesKilled : 0;
+      this.grace = 1.5;
     }
   }
 

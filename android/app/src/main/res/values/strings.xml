@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Game Reels</string>
-    <string name="title_activity_main">Game Reels</string>
-    <string name="package_name">com.jellybeans.gamereels</string>
-    <string name="custom_url_scheme">com.jellybeans.gamereels</string>
+    <string name="app_name">Jelly Bean: 60s Challenge</string>
+    <string name="title_activity_main">Jelly Bean: 60s Challenge</string>
+    <string name="package_name">com.jellybean.challenge</string>
+    <string name="custom_url_scheme">com.jellybean.challenge</string>
 </resources>

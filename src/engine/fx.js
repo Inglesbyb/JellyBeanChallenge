@@ -1,3 +1,5 @@
+import { store } from './store.js';
+
 // Lightweight particle / ring / floating-text effects layer.
 // Renders in whatever coordinate space the caller has active.
 const TAU = Math.PI * 2;
@@ -72,7 +74,7 @@ export class FX {
   }
 
   offset() {
-    if (this.shakeT <= 0) return { x: 0, y: 0 };
+    if (this.shakeT <= 0 || store.settings?.screenShakeEnabled === false) return { x: 0, y: 0 };
     const k = (this.shakeT / this.shakeDur) * this.shakeMag;
     return { x: (Math.random() - 0.5) * 2 * k, y: (Math.random() - 0.5) * 2 * k };
   }

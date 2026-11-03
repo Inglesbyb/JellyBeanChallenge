@@ -5,3 +5,7 @@ dist-ssr
 *.local
 .env
 .env.*
+*.keystore
+*.jks
+keystore.properties
+!keystore.properties.example

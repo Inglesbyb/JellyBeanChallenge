@@ -1,4 +1,4 @@
-package com.jellybeans.gamereels;
+package com.jellybean.challenge;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -53,8 +53,10 @@ export class FruitMerge extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
     this.engine = Engine.create({ positionIterations: 10, velocityIterations: 8 });
-    this.engine.gravity.y = 1.15;
+    this.engine.gravity.y = 1.15 * (1 + 0.08 * (this.pLevel - 1));
     this.acc = 0;
     this.mergeQ = [];
     this.overT = 0;
@@ -73,6 +75,13 @@ export class FruitMerge extends Game {
       Bodies.rectangle(L - 25, 380, 50, 800, wallOpts),
       Bodies.rectangle(R + 25, 380, 50, 800, wallOpts),
     ]);
+
+    // Prestige hazard: rock-candy pegs inside the jar (1 per level above 1, max 3).
+    const PEG_SLOTS = [{ x: 140, y: 560 }, { x: 280, y: 500 }, { x: 210, y: 620 }];
+    this.pegs = PEG_SLOTS.slice(0, Math.min(3, this.pLevel - 1)).map((p) => ({ ...p, r: 11 }));
+    for (const p of this.pegs) {
+      Composite.add(this.engine.world, Bodies.circle(p.x, p.y, p.r, { ...wallOpts, label: 'peg' }));
+    }
 
     this.onCollide = (ev) => {
       for (const pair of ev.pairs) {
@@ -118,10 +127,16 @@ export class FruitMerge extends Game {
     Events.on(this.engine, 'collisionStart', this.onCollide);
 
     if (saved) {
-      for (const f of saved.fruits) this.addFruit(f[0], f[1], f[2], f[3], -10, false);
-      this.cur = saved.cur;
-      this.next = saved.next;
-      this.shakerCharges = saved.shakerCharges || 2;
+      if (Array.isArray(saved.fruits)) {
+        for (const f of saved.fruits) {
+          if (Array.isArray(f) && Number.isFinite(f[0]) && Number.isFinite(f[1]) && Number.isFinite(f[2])) {
+            this.addFruit(f[0], f[1], f[2], Number.isFinite(f[3]) ? f[3] : 0, -10, false);
+          }
+        }
+      }
+      this.cur = (saved.cur !== undefined && Number.isFinite(saved.cur)) ? saved.cur : dropTier();
+      this.next = (saved.next !== undefined && Number.isFinite(saved.next)) ? saved.next : dropTier();
+      this.shakerCharges = Number.isFinite(saved.shakerCharges) ? saved.shakerCharges : 2;
       this.grace = 1.5;
     } else {
       this.cur = dropTier();
@@ -276,7 +291,7 @@ export class FruitMerge extends Game {
     }
 
     this.overT = over ? this.overT + dt : Math.max(0, this.overT - dt * 2);
-    if (this.overT > 3.0) {
+    if (this.overT > Math.max(1.6, 3.0 - 0.4 * (this.pLevel - 1))) {
       if (this.die('Jar overflowed!')) {
         this.fx.shake(12, 0.45);
         this.sounds.hit();
@@ -332,6 +347,9 @@ export class FruitMerge extends Game {
         this.fx.shake(14, 0.5);
         this.sounds.survive();
         this.haptics.heavy();
+        // Stage complete: the King Berry has been crowned.
+        this.won = true;
+        this.winReason = 'Superlambanana Berry Crowned! 👑';
         continue;
       }
 
@@ -436,6 +454,18 @@ export class FruitMerge extends Game {
     }
 
     // 5. Render All Confectionery Fruits in the Jar
+    for (const pg of this.pegs || []) {
+      const pgr = ctx.createRadialGradient(pg.x - 3, pg.y - 3, 2, pg.x, pg.y, pg.r);
+      pgr.addColorStop(0, '#ffe1f0');
+      pgr.addColorStop(1, '#f72585');
+      ctx.fillStyle = pgr;
+      ctx.strokeStyle = '#7a0f45';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(pg.x, pg.y, pg.r, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
     for (const b of this.fruits) {
       let s = 1;
       if (b.pop) {

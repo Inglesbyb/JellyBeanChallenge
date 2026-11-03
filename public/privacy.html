@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Jelly Bean: 60s Challenge</title>
+    <meta name="description" content="Official Privacy Policy and Data Safety statement for Jelly Bean: 60s Challenge mobile arcade game." />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #05050c;
+        --card-bg: rgba(18, 17, 38, 0.94);
+        --ink: #f5f6ff;
+        --muted: rgba(245, 246, 255, 0.68);
+        --a1: #7c5cff;
+        --a2: #25e6ff;
+        --gold: #ffd166;
+        --ok: #3dffa2;
+        --border: #000000;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: radial-gradient(1100px 700px at 15% 8%, rgba(124, 92, 255, 0.22), transparent 60%),
+                    radial-gradient(900px 600px at 88% 92%, rgba(37, 230, 255, 0.16), transparent 60%),
+                    #05050c;
+        color: var(--ink);
+        font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+        line-height: 1.65;
+        padding: 2em 1em 4em;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 800px;
+        background: var(--card-bg);
+        border: 4px solid var(--border);
+        box-shadow: 0 0 0 3px var(--border), 0 24px 64px rgba(0, 0, 0, 0.8), 0 0 40px rgba(124, 92, 255, 0.2);
+        border-radius: 1.6em;
+        padding: 2.5em 2em;
+        position: relative;
+      }
+
+      header {
+        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 1.8em;
+        margin-bottom: 2em;
+      }
+
+      .badge-row {
+        display: flex;
+        gap: 0.6em;
+        align-items: center;
+        margin-bottom: 0.8em;
+        flex-wrap: wrap;
+      }
+
+      .badge {
+        font-size: 0.75em;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        padding: 0.35em 0.8em;
+        border-radius: 2em;
+        text-transform: uppercase;
+        border: 2px solid var(--border);
+      }
+
+      .badge-green {
+        background: var(--ok);
+        color: #000;
+      }
+
+      .badge-blue {
+        background: var(--a2);
+        color: #000;
+      }
+
+      h1 {
+        font-size: clamp(1.8em, 4vw, 2.6em);
+        font-weight: 900;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+        margin-bottom: 0.4em;
+      }
+
+      .meta {
+        font-size: 0.88em;
+        color: var(--muted);
+        display: flex;
+        gap: 1.2em;
+        flex-wrap: wrap;
+      }
+
+      .highlight-box {
+        background: linear-gradient(135deg, rgba(37, 230, 255, 0.12), rgba(124, 92, 255, 0.12));
+        border: 2px solid var(--a2);
+        border-radius: 1.1em;
+        padding: 1.3em 1.5em;
+        margin-bottom: 2.2em;
+      }
+
+      .highlight-title {
+        font-weight: 900;
+        font-size: 1.1em;
+        color: var(--a2);
+        margin-bottom: 0.3em;
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+      }
+
+      h2 {
+        font-size: 1.35em;
+        font-weight: 800;
+        color: var(--gold);
+        margin: 1.8em 0 0.6em;
+        letter-spacing: 0.02em;
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+      }
+
+      p {
+        margin-bottom: 1em;
+        color: rgba(245, 246, 255, 0.88);
+      }
+
+      ul {
+        margin-left: 1.4em;
+        margin-bottom: 1.2em;
+      }
+
+      li {
+        margin-bottom: 0.5em;
+        color: rgba(245, 246, 255, 0.85);
+      }
+
+      strong {
+        color: #fff;
+      }
+
+      code {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.15em 0.4em;
+        border-radius: 0.3em;
+        font-family: monospace;
+        font-size: 0.9em;
+      }
+
+      .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4em;
+        margin-top: 2em;
+        background: linear-gradient(135deg, #25e6ff, #7c5cff);
+        color: #000;
+        font-weight: 900;
+        font-size: 0.95em;
+        letter-spacing: 0.04em;
+        text-decoration: none;
+        padding: 0.8em 1.4em;
+        border-radius: 2em;
+        border: 3px solid var(--border);
+        box-shadow: 0 4px 0 var(--border), 0 8px 24px rgba(37, 230, 255, 0.35);
+        transition: transform 0.12s ease;
+      }
+
+      .back-btn:active {
+        transform: translateY(3px);
+        box-shadow: 0 1px 0 var(--border);
+      }
+
+      @media (max-width: 600px) {
+        .container {
+          padding: 1.8em 1.2em;
+          border-width: 3px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="badge-row">
+          <span class="badge badge-green">Zero Data Collected</span>
+          <span class="badge badge-blue">Google Play Certified</span>
+        </div>
+        <h1>Privacy Policy</h1>
+        <div class="meta">
+          <span>🎮 <strong>Application:</strong> Jelly Bean: 60s Challenge</span>
+          <span>📦 <strong>Package:</strong> <code>com.jellybean.challenge</code></span>
+          <span>📅 <strong>Updated:</strong> November 2, 2026</span>
+        </div>
+      </header>
+
+      <div class="highlight-box">
+        <div class="highlight-title">🔒 Our Core Privacy Promise</div>
+        <p style="margin: 0;">
+          <strong>Jelly Bean: 60s Challenge does not collect, transmit, sell, or share any personal information.</strong>
+          All gameplay scores, mascot customizations, and daily streaks are stored strictly on your local device.
+        </p>
+      </div>
+
+      <h2>1. Information We Do NOT Collect</h2>
+      <p>We believe in pure arcade fun without invasive tracking. We do not collect:</p>
+      <ul>
+        <li><strong>No Personal Identifiers:</strong> No names, email addresses, phone numbers, or passwords.</li>
+        <li><strong>No Account Sign-In:</strong> No registration required; guests can play immediately.</li>
+        <li><strong>No Location Data:</strong> Zero GPS, coarse, or cell tower location tracking.</li>
+        <li><strong>No Advertising Identifiers:</strong> We do not read or store your Google Advertising ID (GAID).</li>
+        <li><strong>No Financial Info:</strong> No payment details or billing data.</li>
+        <li><strong>No Hardware Access:</strong> No camera, microphone, contact list, or photo library permissions.</li>
+      </ul>
+
+      <h2>2. Information Stored Locally on Your Device</h2>
+      <p>To preserve your arcade achievements across play sessions, the following is stored locally inside your device's sandboxed storage:</p>
+      <ul>
+        <li><strong>Callsign & Avatar:</strong> Your chosen player nickname and mascot icon.</li>
+        <li><strong>Progression & Stats:</strong> High scores, cycles survived, and stage clears.</li>
+        <li><strong>Mascot Closet:</strong> Equipped skins (Cyan, Berry, Gold, etc.) and hats unlocked via points.</li>
+        <li><strong>Daily Seed Gauntlet:</strong> Today's completion status, medal grade (🥇/🥈/🥉), and daily streak count.</li>
+        <li><strong>Settings:</strong> Audio volume, haptic feedback toggle, and screen shake toggle.</li>
+      </ul>
+      <p><em>This data never leaves your device and is never uploaded to any remote server.</em></p>
+
+      <h2>3. Third-Party Services & Analytics</h2>
+      <p>
+        The game contains <strong>no third-party ad networks</strong> (no banner ads, no popups) and <strong>no third-party behavioral analytics SDKs</strong>.
+        Open-source Capacitor plugins are used exclusively to bridge native device hardware (vibration actuator and back button navigation).
+      </p>
+
+      <h2>4. Optional Run Card Sharing</h2>
+      <p>
+        When you choose to tap the "📸 SHARE RUN POSTER" or "📸 SHARE DAILY RECORD" button, the poster image is drawn directly on your device canvas.
+        Tapping "Share" triggers the native Android system share dialog (<code>navigator.share</code>), allowing you to select an app of your choice.
+        We have no access to your recipients or external accounts.
+      </p>
+
+      <h2>5. Children's Privacy (COPPA & GDPR-K)</h2>
+      <p>
+        The game is family-friendly and designed for all ages. Because we collect zero personal data from any user, we are fully compliant with the
+        <strong>Children's Online Privacy Protection Act (COPPA)</strong> and European <strong>GDPR-K</strong> regulations.
+      </p>
+
+      <h2>6. How to Delete Your Data</h2>
+      <p>You can permanently erase all local game data at any time:</p>
+      <ul>
+        <li><strong>In-Game:</strong> On the main menu, click <em>"Start fresh run"</em> to clear session data.</li>
+        <li><strong>Android Settings:</strong> Go to <code>Settings &gt; Apps &gt; Jelly Bean: 60s Challenge &gt; Storage &gt; Clear Storage</code>.</li>
+        <li><strong>Uninstall:</strong> Removing the app from your device immediately deletes all local save files.</li>
+      </ul>
+
+      <h2>7. Contact Information</h2>
+      <p>If you have any questions or feedback regarding this Privacy Policy, please reach out to:</p>
+      <p>
+        <strong>Jelly Bean Studios</strong><br />
+        Support: <a href="mailto:support@jellybeangame.com" style="color: var(--a2);">support@jellybeangame.com</a><br />
+        Source Code: <a href="https://github.com/Eggwi/game-reels" target="_blank" style="color: var(--a2);">https://github.com/Eggwi/game-reels</a>
+      </p>
+
+      <a href="/" class="back-btn">← BACK TO THE ARCADE</a>
+    </div>
+  </body>
+</html>

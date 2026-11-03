@@ -4,6 +4,7 @@ class SoundEngine {
     this.ctx = null;
     this.master = null;
     this.muted = false;
+    this.volume = 0.8;
     try { this.muted = localStorage.getItem('gr_muted') === '1'; } catch { /* ignore */ }
   }
 
@@ -13,14 +14,24 @@ class SoundEngine {
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.7;
+      this.master.gain.value = this.muted ? 0 : this.volume;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
+  setVolume(v) {
+    this.volume = Math.max(0, Math.min(1, Number(v) ?? 0.8));
+    if (this.master && !this.muted) {
+      this.master.gain.setValueAtTime(this.volume, this.ctx ? this.ctx.currentTime : 0);
+    }
+  }
+
   setMuted(m) {
     this.muted = m;
+    if (this.master) {
+      this.master.gain.setValueAtTime(m ? 0 : this.volume, this.ctx ? this.ctx.currentTime : 0);
+    }
     try { localStorage.setItem('gr_muted', m ? '1' : '0'); } catch { /* ignore */ }
   }
 

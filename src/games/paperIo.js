@@ -15,6 +15,7 @@ const GRID_H = 260; // 3900 / 15
 const TOTAL_CELLS = GRID_W * GRID_H; // 39,000
 const PLAYABLE_CELLS = (GRID_W - 2) * (GRID_H - 2); // 38,184
 const TAU = Math.PI * 2;
+const WIN_PCT = 75; // % of the playable map the player must own to complete the stage
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const normalizeAngle = (a) => {
@@ -94,6 +95,8 @@ export class PaperIo extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
     this.t = 0;
     this.highestPct = 0;
 
@@ -155,6 +158,15 @@ export class PaperIo extends Game {
       this.createEntity(20, 'Hyper Nitro',      1850, 3400, false, 'nibbler',       '#4cc9f0'),
     ];
 
+    // Prestige: roughly one extra bot in three turns into a trail-hunting predator per level.
+    if (this.pLevel > 1) {
+      for (const b of this.bots) {
+        if (b.personality !== 'hunter' && (b.id % 3) < Math.min(3, this.pLevel - 1)) {
+          b.personality = 'hunter';
+        }
+      }
+    }
+
     this.allEntities = [this.player, ...this.bots];
 
     // Seed initial bases for all contenders (Radius 5 grid cells = ~75px radius)
@@ -171,6 +183,8 @@ export class PaperIo extends Game {
     this.updateRankings();
 
     if (saved) {
+      if (Number.isFinite(saved.highestPct)) this.highestPct = saved.highestPct;
+      if (Number.isFinite(saved.kills)) this.player.kills = saved.kills;
       this.grace = 1.2;
     }
   }
@@ -208,6 +222,9 @@ export class PaperIo extends Game {
       turnSpeed = 8.0;
       maxTrail = 28;
     }
+
+    // Prestige: bots (never the human) get +5% speed per level.
+    if (!isHuman) speed *= 1 + 0.05 * ((this.pLevel || 1) - 1);
 
     return {
       id,
@@ -340,6 +357,17 @@ export class PaperIo extends Game {
     // 6. Periodic Rank & Score Recalculation (4 times/sec)
     if (this.t % 0.25 < dt) {
       this.updateRankings();
+
+      // Stage complete: 75%+ of the map, or every rival eliminated at the same time.
+      if (!this.won && !this.dead) {
+        const me = this.rankings.find((r) => r.isHuman);
+        const rivalsAlive = this.bots.some((b) => b.alive);
+        if (me && (me.pct >= WIN_PCT || !rivalsAlive)) {
+          this.won = true;
+          this.winReason = me.pct >= WIN_PCT ? `Arena Conquered: ${me.pct.toFixed(0)}% Turf! ⭕` : 'Every Rival Eliminated! ⭕';
+          this.fx.text(this.player.x, this.player.y - 40, 'ARENA CONQUERED!', '#ffd166', 30, 1.8);
+        }
+      }
     }
   }
 

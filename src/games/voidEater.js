@@ -81,6 +81,9 @@ const PROP_DEFS = {
   sky:            { size: 180, pts: 4000,minTier: 8 },
   wheel:          { size: 260, pts: 9500,minTier: 9 },
   stadium:        { size: 270, pts: 11000,minTier: 9 },
+  // High-voltage industrial hazards & magnetic void mines (requires size 160+ to consume)
+  electricSubstation: { size: 30, pts: 2500, minTier: 7, isHazard: true },
+  voidMine:           { size: 20, pts: 1800, minTier: 6, isHazard: true },
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -95,15 +98,18 @@ export class VoidEater extends Game {
     id: 'void-eater',
     title: 'Void Eater',
     icon: '🌀',
-    hint: 'DRAG to steer · VACUUM CANDY DROPS · climb TOP 5 LEADERBOARD!',
+    hint: 'DRAG to steer · ⚡ BOOST (SPACE / BTN) · AVOID HAZARDS & DODGE PREDATORS!',
     baseLikes: 1420,
   };
 
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
+    this.sinceEat = 0;
     this.hole = { x: WORLD / 2, y: WORLD / 2, r: 16, vx: 0, vy: 0, pulse: 0 };
-    this.zoom = 1.45;
+    this.zoom = 1.35;
     this.sfxT = 0;
     this.hapT = 0;
     this.clashT = 0;
@@ -117,6 +123,10 @@ export class VoidEater extends Game {
     this.eatTextCooldown = 0;
     this.batchPts = 0;
     this.gulpCooldown = 0;
+    this.ringCooldown = 0;
+    this.shockCooldown = 0;
+    this.boosting = false;
+    this.boostHapT = 0;
 
     this.chunks = new Map();
     this.eatenProps = new Set();
@@ -125,14 +135,14 @@ export class VoidEater extends Game {
     this.respawnQueue = [];
 
     if (saved) {
-      this.hole.x = saved.x ?? WORLD / 2;
-      this.hole.y = saved.y ?? WORLD / 2;
-      this.hole.r = saved.r ?? 16;
+      this.hole.x = Number.isFinite(saved.x) ? saved.x : WORLD / 2;
+      this.hole.y = Number.isFinite(saved.y) ? saved.y : WORLD / 2;
+      this.hole.r = Number.isFinite(saved.r) && saved.r >= 16 ? saved.r : 16;
       this.lastTier = this.getTier().level;
-      if (saved.eaten) {
+      if (Array.isArray(saved.eaten)) {
         for (const id of saved.eaten) this.eatenProps.add(id);
       }
-      this.grace = 1.0;
+      this.grace = 1.5;
     } else {
       this.grace = 1.0;
     }
@@ -189,6 +199,11 @@ export class VoidEater extends Game {
       feedTarget: null,
       feedT: 0,
       wander: { x: d.x, y: d.y, t: 0 },
+      surgeCooldown: 3.5 + Math.random() * 4.0,
+      telegraphT: 0,
+      surging: false,
+      surgeT: 0,
+      exhaustionT: 0,
     }));
 
     this.updateActiveProps();
@@ -223,7 +238,8 @@ export class VoidEater extends Game {
   }
 
   targetZoom() {
-    return clamp(36 / (this.hole.r + 7), 0.035, 1.45);
+    // Clamped zoom prevents rendering the entire 18,000px city map at once!
+    return clamp(45 / (this.hole.r + 18), 0.16, 1.4);
   }
 
   /* --------------------------------------------------- Real Liverpool Geographic District Engine */
@@ -371,6 +387,14 @@ export class VoidEater extends Game {
     addProp('cone', wx + 140, wy + 95, 0, '#ff8a3d');
     addProp('trash', wx + 130, wy + 230, 0, '#4a4e69');
 
+    // Strategic High-Voltage & Void Mine Hazards
+    if ((cx + cy) % 2 === 0) {
+      addProp('electricSubstation', wx + 440, wy + 210, 0, '#ffd166');
+    }
+    if ((cx * 3 + cy) % 4 === 0) {
+      addProp('voidMine', wx + 200, wy + 390, 0, '#ff0054');
+    }
+
     // =========================================================================
     // 🏛️ DISTRICT SPECIFIC LANDMARKS & HIGHER TIER PROPS
     // =========================================================================
@@ -486,18 +510,28 @@ export class VoidEater extends Game {
 
   updateActiveProps() {
     const h = this.hole;
-    const viewDist = (this.H / 2 + 420) / this.zoom;
-    const minCX = Math.max(0, Math.floor((h.x - viewDist) / CHUNK_SIZE));
-    const maxCX = Math.min(CHUNKS_ACROSS - 1, Math.floor((h.x + viewDist) / CHUNK_SIZE));
-    const minCY = Math.max(0, Math.floor((h.y - viewDist) / CHUNK_SIZE));
-    const maxCY = Math.min(CHUNKS_ACROSS - 1, Math.floor((h.y + viewDist) / CHUNK_SIZE));
+    // Strictly cull to screen viewport + 120px margin, preventing processing 30,000 off-screen props!
+    const halfW = (this.W / 2 + 120) / this.zoom;
+    const halfH = (this.H / 2 + 120) / this.zoom;
+    const minX = h.x - halfW;
+    const maxX = h.x + halfW;
+    const minY = h.y - halfH;
+    const maxY = h.y + halfH;
+
+    const minCX = Math.max(0, Math.floor(minX / CHUNK_SIZE));
+    const maxCX = Math.min(CHUNKS_ACROSS - 1, Math.floor(maxX / CHUNK_SIZE));
+    const minCY = Math.max(0, Math.floor(minY / CHUNK_SIZE));
+    const maxCY = Math.min(CHUNKS_ACROSS - 1, Math.floor(maxY / CHUNK_SIZE));
 
     const active = [];
     for (let cy = minCY; cy <= maxCY; cy++) {
       for (let cx = minCX; cx <= maxCX; cx++) {
         const cp = this.getChunkProps(cx, cy);
         for (let i = 0; i < cp.length; i++) {
-          if (!cp[i].dead) active.push(cp[i]);
+          const p = cp[i];
+          if (!p.dead && p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) {
+            active.push(p);
+          }
         }
       }
     }
@@ -511,31 +545,86 @@ export class VoidEater extends Game {
     const scaling = Math.min(1.4, Math.max(0.25, efficiency));
     // Sizing up at a rewarding pace so players can reach maximum size in ~40-50s
     const mult = isPlayer ? 2.2 : 0.65;
-    const rate = (propSize * mult * scaling) / (1 + Math.sqrt(h.r) * 0.22);
+    // Prestige: every level demands +20% more mass for the same growth.
+    const massScale = 1 + 0.2 * ((this.pLevel || 1) - 1);
+    const rate = (propSize * mult * scaling) / ((1 + Math.sqrt(h.r) * 0.22) * (isPlayer ? massScale : 1));
     h.r = Math.min(1000, h.r + rate);
+    if (isPlayer) this.sinceEat = 0;
+  }
+
+  triggerHazardShock(h, p, d) {
+    if (this.grace > 0 || this.shockCooldown > 0) return;
+    this.shockCooldown = 0.6;
+
+    // Repel violently away from hazard
+    const dx = h.x - p.x;
+    const dy = h.y - p.y;
+    const len = d || 1;
+    h.vx = (dx / len) * 320;
+    h.vy = (dy / len) * 320;
+
+    // Penalty: shave radius and points
+    const loss = Math.max(3.5, h.r * 0.07);
+    h.r = Math.max(16, h.r - loss);
+    this.score = Math.max(0, this.score - 100);
+
+    const k = 1 / this.zoom;
+    this.fx.shake(9, 0.35);
+    this.fx.burst(h.x, h.y, '#ffd166', 16, 200 * k, 0.6, 4);
+    this.fx.burst(p.x, p.y, '#ff0054', 16, 180 * k, 0.5, 3.5);
+    this.fx.ring(p.x, p.y, '#ff0054', p.size * 2.2, 0.45, 4);
+    this.fx.text(h.x, h.y - h.r - 28 * k, `⚡ OVERLOAD! -${Math.round(loss)} SIZE`, '#ff0054', 24, 1.4);
+
+    this.sounds.hit();
+    this.haptics.heavy();
   }
 
   absorb(h, dt) {
-    for (let i = 0; i < this.activeProps.length; i++) {
-      const p = this.activeProps[i];
-      if (p.fall > 0 || p.dead) continue;
+    const isPlayer = h === this.hole;
+    const reach = h.r * 1.55;
+    // Query only chunks within suction reach, maintaining lightning-fast 60 FPS!
+    const minCX = Math.max(0, Math.floor((h.x - reach) / CHUNK_SIZE));
+    const maxCX = Math.min(CHUNKS_ACROSS - 1, Math.floor((h.x + reach) / CHUNK_SIZE));
+    const minCY = Math.max(0, Math.floor((h.y - reach) / CHUNK_SIZE));
+    const maxCY = Math.min(CHUNKS_ACROSS - 1, Math.floor((h.y + reach) / CHUNK_SIZE));
 
-      if (p.size > h.r * 0.85) continue;
+    for (let cy = minCY; cy <= maxCY; cy++) {
+      for (let cx = minCX; cx <= maxCX; cx++) {
+        const cp = this.getChunkProps(cx, cy);
+        for (let i = 0; i < cp.length; i++) {
+          const p = cp[i];
+          if (p.fall > 0 || p.dead) continue;
 
-      const dx = h.x - p.x;
-      const dy = h.y - p.y;
-      const d = Math.hypot(dx, dy);
+          // Check for Hazard Collision with player hole
+          if (p.isHazard && isPlayer) {
+            const hDist = Math.hypot(h.x - p.x, h.y - p.y);
+            if (h.r < 160) {
+              // Too small to absorb: ELECTRICAL/EXPLOSIVE HAZARD OVERLOAD!
+              if (hDist < h.r + p.size * 0.75) {
+                this.triggerHazardShock(h, p, hDist);
+              }
+              continue;
+            }
+          }
 
-      if (d < h.r * 1.55 && d > 0.1) {
-        const pull = (65 + h.r * 0.5) * dt;
-        p.x += (dx / d) * pull;
-        p.y += (dy / d) * pull;
-      }
+          if (p.size > h.r * 0.85) continue;
 
-      if (d < h.r - p.size * 0.3) {
-        p.fall = 0.001;
-        p.owner = h;
-        this.fallingProps.add(p);
+          const dx = h.x - p.x;
+          const dy = h.y - p.y;
+          const d = Math.hypot(dx, dy);
+
+          if (d < reach && d > 0.1) {
+            const pull = (70 + h.r * 0.4) * dt;
+            p.x += (dx / d) * pull;
+            p.y += (dy / d) * pull;
+          }
+
+          if (d < h.r - p.size * 0.3) {
+            p.fall = 0.001;
+            p.owner = h;
+            this.fallingProps.add(p);
+          }
+        }
       }
     }
   }
@@ -578,8 +667,39 @@ export class VoidEater extends Game {
 
   update(dt) {
     const h = this.hole;
+    this.shockCooldown = Math.max(0, this.shockCooldown - dt);
+    this.ringCooldown = Math.max(0, this.ringCooldown - dt);
+
+    // Boost Controls: on-screen boost button OR keyboard Space / Shift / E / W
+    const boostBtnX = this.W - 46;
+    const boostBtnY = this.H - 118;
+    const boostRadius = 34;
+    const touchBoost = this.input.down && Math.hypot(this.input.x - boostBtnX, this.input.y - boostBtnY) < boostRadius;
+    const keyBoost = this.input.key(' ', 'shift', 'e', 'w');
+    this.boosting = (touchBoost || keyBoost) && h.r > 16.5;
+
+    if (this.boosting) {
+      // Cost: burns mass at 3.2 radius per second
+      h.r = Math.max(16, h.r - dt * 3.2);
+      this.boostHapT -= dt;
+      if (this.boostHapT <= 0) {
+        this.haptics.light();
+        this.boostHapT = 0.16;
+      }
+      // Boost Jetstream particles
+      if (Math.random() < 0.55) {
+        const k = 1 / this.zoom;
+        const ang = Math.atan2(h.vy, h.vx) + Math.PI + (Math.random() - 0.5) * 0.8;
+        this.fx.burst(h.x + Math.cos(ang) * h.r * 0.75, h.y + Math.sin(ang) * h.r * 0.75, '#25e6ff', 1, 60 * k, 0.22, 2.5);
+      }
+    }
+
+    // Dynamic mass momentum: nimble when small, massive and crushing when huge
+    const baseSp = Math.max(95, 145 - (h.r - 16) * 0.045);
+    const boostMult = this.boosting && h.r > 16.5 ? 1.65 : 1.0;
+    const sp = baseSp * boostMult;
+
     const v = this.input.vec(55);
-    const sp = 100 + h.r * 1.05;
     const k = Math.min(1, dt * 10);
     h.vx += (v.x * sp - h.vx) * k;
     h.vy += (v.y * sp - h.vy) * k;
@@ -607,6 +727,12 @@ export class VoidEater extends Game {
       this.hole.pulse = Math.max(0, this.hole.pulse - dt * 4.2);
     }
     this.beanSquash += (1 - this.beanSquash) * Math.min(1, dt * 10);
+
+    // Prestige idle decay: stop eating for 2.5s and the void slowly shrinks.
+    this.sinceEat += dt;
+    if (this.pLevel > 1 && this.sinceEat > 2.5 && !this.maxSizeCelebrated && h.r > 16) {
+      h.r = Math.max(16, h.r * (1 - 0.0035 * (this.pLevel - 1) * dt * 10));
+    }
 
     // Check for reaching maximum size (Cosmic Singularity)
     if (this.isMaxSize() && !this.maxSizeCelebrated) {
@@ -745,22 +871,36 @@ export class VoidEater extends Game {
     this.score += p.pts;
     this.batchPts += p.pts;
 
-    const punch = Math.min(0.3, (p.size / this.hole.r) * 0.4 + 0.08);
-    this.hole.pulse = Math.min(0.45, this.hole.pulse + punch);
-    this.beanSquash = Math.max(0.7, 1.3 - punch * 0.7);
+    const punch = Math.min(0.25, (p.size / this.hole.r) * 0.35 + 0.06);
+    this.hole.pulse = Math.min(0.4, this.hole.pulse + punch);
+    this.beanSquash = Math.max(0.75, 1.25 - punch * 0.6);
 
     if (this.gulpCooldown <= 0) {
       this.sounds.gulp(Math.max(0.55, 1.45 - p.size * 0.025));
-      this.gulpCooldown = 0.07;
+      this.gulpCooldown = 0.08;
     }
 
-    if (p.size <= 8) {
-      // Tiny snappy ripple for micro sweets & litter
-      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.25, 0.18, 2);
+    if (p.isHazard) {
+      // Swallowed an electric hazard at giant size!
+      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 2.0, 0.45, 5);
+      this.fx.burst(this.hole.x, this.hole.y, '#25e6ff', 20, 200 * k, 0.7, 4);
+      this.fx.shake(5, 0.25);
+      this.fx.text(this.hole.x, this.hole.y - this.hole.r - 26 * k, `GRID SMASH! +${p.pts}`, '#ffd166', 24);
+      this.sounds.laser();
+      this.haptics.heavy();
+    } else if (p.size <= 8) {
+      // Micro sweets: rate-limited ring to prevent particle bloat
+      if (this.ringCooldown <= 0) {
+        this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.2, 0.15, 2);
+        this.ringCooldown = 0.08;
+      }
     } else if (p.size < 20) {
-      this.fx.ring(this.hole.x, this.hole.y, '#25e6ff', this.hole.r * this.zoom * 1.35, 0.22, 2.5);
+      if (this.ringCooldown <= 0) {
+        this.fx.ring(this.hole.x, this.hole.y, '#25e6ff', this.hole.r * this.zoom * 1.3, 0.2, 2.5);
+        this.ringCooldown = 0.08;
+      }
     } else if (p.size < 40) {
-      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.5, 0.28, 3);
+      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.45, 0.25, 3);
       if (this.eatTextCooldown <= 0) {
         this.fx.text(this.hole.x, this.hole.y - this.hole.r - 20 * k, `+${this.batchPts} PTS`, '#ffd166', 22);
         this.batchPts = 0;
@@ -768,8 +908,8 @@ export class VoidEater extends Game {
       }
       this.haptics.light();
     } else {
-      this.fx.ring(this.hole.x, this.hole.y, '#ff4fa3', this.hole.r * this.zoom * 1.8, 0.35, 4);
-      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 12, 140 * k, 0.5, 3.5);
+      this.fx.ring(this.hole.x, this.hole.y, '#ff4fa3', this.hole.r * this.zoom * 1.7, 0.35, 4);
+      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 10, 130 * k, 0.45, 3);
       this.fx.shake(3.5, 0.18);
       if (this.eatTextCooldown <= 0) {
         this.fx.text(this.hole.x, this.hole.y - this.hole.r - 24 * k, `DEVOUR! +${this.batchPts}`, '#ff4fa3', 24);
@@ -784,9 +924,9 @@ export class VoidEater extends Game {
     if (curTier.level > this.lastTier) {
       this.lastTier = curTier.level;
       this.fx.ring(this.hole.x, this.hole.y, '#3dffa2', this.hole.r * this.zoom * 2.8, 0.8, 6);
-      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 32, 280 * k, 0.9, 5);
+      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 24, 260 * k, 0.8, 4.5);
       this.fx.text(this.hole.x, this.hole.y - this.hole.r - 40 * k, `TIER UP: ${curTier.name.toUpperCase()}!`, '#3dffa2', 26, 2.0);
-      this.fx.shake(7, 0.3);
+      this.fx.shake(6, 0.28);
       this.sounds.up();
       this.haptics.heavy();
     }
@@ -901,11 +1041,46 @@ export class VoidEater extends Game {
       // 2. STATE: AGGRESSIVE HUNTING! (Player or Prey Rival)
       } else if (isBiggerThanPlayer && pd < visionRange) {
         // Predictive lead trajectory based on player velocity
-        const leadFactor = Math.min(0.9, pd / 500);
+        const leadFactor = Math.min(0.9, pd / 450);
         tx = h.x + h.vx * leadFactor;
         ty = h.y + h.vy * leadFactor;
 
-        if (pd < 550) {
+        // Predator Surge Lunge Attack Engine
+        if (pd < 600) {
+          rv.surgeCooldown = (rv.surgeCooldown || 4) - dt;
+          if (rv.surgeCooldown <= 0 && rv.telegraphT <= 0 && !rv.surging) {
+            rv.telegraphT = 0.75; // 0.75s red targeting telegraph!
+          }
+        }
+
+        if (rv.telegraphT > 0) {
+          rv.telegraphT -= dt;
+          if (rv.telegraphT <= 0) {
+            rv.surging = true;
+            rv.surgeT = 1.1; // 1.1s lunge!
+            rv.surgeCooldown = 5.5 + Math.random() * 3.0;
+            const k = 1 / this.zoom;
+            this.fx.ring(rv.x, rv.y, '#ff0054', rv.r * this.zoom * 1.6, 0.35, 3);
+            this.sounds.laser();
+            this.haptics.medium();
+          }
+        }
+
+        if (rv.surging) {
+          rv.surgeT -= dt;
+          speedMultiplier = 1.85; // Surges at high speed!
+          if (Math.random() < 0.4) {
+            const k = 1 / this.zoom;
+            this.fx.burst(rv.x, rv.y, '#ff0054', 2, 50 * k, 0.2, 2);
+          }
+          if (rv.surgeT <= 0) {
+            rv.surging = false;
+            rv.exhaustionT = 1.3; // brief fatigue where rival is slower
+          }
+        } else if (rv.exhaustionT > 0) {
+          rv.exhaustionT -= dt;
+          speedMultiplier = 0.65; // recovery slow
+        } else if (pd < 550) {
           rv.frenzyT = Math.min(2.5, rv.frenzyT + dt);
           if (Math.random() < 0.25) {
             this.fx.ring(rv.x, rv.y, '#ff0054', rv.r * 1.15, 0.2, 2);
@@ -939,7 +1114,6 @@ export class VoidEater extends Game {
                 if (p.dead || p.fall > 0 || p.size > rv.r * 0.82) continue;
                 const d = Math.hypot(p.x - rv.x, p.y - rv.y);
                 if (d > searchRange) continue;
-                // Prioritize larger edible items to maximize mass gain
                 const score = (p.size * 2.2) - (d * 0.08);
                 if (score > bestScore) {
                   bestScore = score;
@@ -968,18 +1142,15 @@ export class VoidEater extends Game {
         }
       }
 
-      // Player's exact current top speed
-      const playerSpeed = 100 + h.r * 1.05;
-
       const dx = tx - rv.x;
       const dy = ty - rv.y;
       const d = Math.hypot(dx, dy) || 1;
 
-      // FAIR COMPETITION: Rivals can NEVER move faster than the player!
-      // Capped strictly at playerSpeed so the player can always outrun / outmaneuver pursuers
-      const naturalSpeed = 95 + rv.r * 0.95;
-      const baseSp = Math.min(playerSpeed, naturalSpeed * speedMultiplier);
-      const accelK = Math.min(1, dt * 4.0);
+      // Dynamic rival speed physics: natural mass scaling + surge lunges
+      const pSpd = 1 + 0.06 * ((this.pLevel || 1) - 1);
+      const naturalSpeed = Math.max(90, 140 - (rv.r - 16) * 0.04) * pSpd;
+      const baseSp = naturalSpeed * speedMultiplier;
+      const accelK = Math.min(1, dt * (rv.surging ? 8.0 : 4.0));
       rv.vx += ((dx / d) * baseSp - rv.vx) * accelK;
       rv.vy += ((dy / d) * baseSp - rv.vy) * accelK;
       rv.x = clamp(rv.x + rv.vx * dt, 40, WORLD - 40);
@@ -1076,12 +1247,27 @@ export class VoidEater extends Game {
       this.drawProp(p, 1, 1);
     }
 
-    // 3. Draw Rivals (with Aggressive Threat Auras)
+    // 3. Draw Rivals (with Aggressive Threat Auras & Telegraph Warning Lasers)
     for (const rv of this.rivals) {
       if (rv.dead) continue;
       const isThreat = rv.r > h.r + 10;
       const isPrey = h.r >= rv.r + 2;
-      const rim = isThreat ? '#ff0054' : isPrey ? '#00f5d4' : '#ffd166';
+      const rim = rv.surging ? '#ff0054' : isThreat ? '#ff0054' : isPrey ? '#00f5d4' : '#ffd166';
+
+      // Red Targeting Telegraph Laser Line when predator is locking on for a surge lunge!
+      if (rv.telegraphT > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#ff0054';
+        ctx.lineWidth = Math.max(2, 3.5 / sc);
+        ctx.setLineDash([12 / sc, 8 / sc]);
+        ctx.beginPath();
+        ctx.moveTo(rv.x, rv.y);
+        ctx.lineTo(h.x, h.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
       this.drawHole(rv, rim, rv.color, rv.name, false, isThreat);
     }
 
@@ -1100,6 +1286,7 @@ export class VoidEater extends Game {
     this.drawLeaderboard(ctx, W, H);
     this.drawRadar(ctx, W, H);
     this.drawDistrictHUD(ctx, W, H);
+    this.drawBoostButton(ctx, W, H);
 
     // 7. Apex Invulnerability & Victory Countdown Pill
     if (this.isMaxSize()) {
@@ -1149,7 +1336,7 @@ export class VoidEater extends Game {
     const playerInTop5 = playerRank <= 5;
 
     const lx = 12;
-    const ly = 108;
+    const ly = 118;
     const lw = 158;
     const lh = playerInTop5 ? 136 : 158;
 
@@ -1258,6 +1445,16 @@ export class VoidEater extends Game {
         const bx = gx * CHUNK_SIZE;
         const by = gy * CHUNK_SIZE;
         const dist = this.getDistrictInfo(bx + CHUNK_SIZE / 2, by + CHUNK_SIZE / 2);
+
+        // Performance LOD: When zoomed out, draw sleek stylized block districts
+        if (this.zoom < 0.35) {
+          ctx.fillStyle = dist.turf;
+          ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
+          ctx.fillStyle = dist.street;
+          ctx.fillRect(bx, by, CHUNK_SIZE, 60);
+          ctx.fillRect(bx, by, 60, CHUNK_SIZE);
+          continue;
+        }
 
         // 1. THE RIVER MERSEY & ENCLOSED DOCK BASINS (West: bx < 2400)
         if (bx < 2400) {
@@ -1504,7 +1701,7 @@ export class VoidEater extends Game {
 
       ctx.save();
       ctx.fillStyle = 'rgba(255, 0, 84, 0.88)';
-      this.rr(W / 2 - 125, 68, 250, 32, 16);
+      this.rr(W / 2 - 125, 134, 250, 32, 16);
       ctx.fill();
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1.5;
@@ -1513,7 +1710,7 @@ export class VoidEater extends Game {
       ctx.fillStyle = '#fff';
       ctx.font = '900 12px Outfit, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`⚠️ HUNTER LOCK: ${hunter.name.toUpperCase()} (${distM}m)!`, W / 2, 89);
+      ctx.fillText(`⚠️ HUNTER LOCK: ${hunter.name.toUpperCase()} (${distM}m)!`, W / 2, 155);
       ctx.restore();
     }
   }
@@ -1522,7 +1719,7 @@ export class VoidEater extends Game {
     const pad = 12;
     const size = 78;
     const rx = W - size - pad;
-    const ry = 108;
+    const ry = 118;
 
     ctx.save();
     ctx.fillStyle = 'rgba(8, 12, 28, 0.88)';
@@ -1716,6 +1913,12 @@ export class VoidEater extends Game {
   drawProp(p, alpha, scale) {
     const ctx = this.ctx;
     const s = p.size * scale;
+    // Sub-pixel culling: when zoomed out, skip full path geometry for sub-pixel debris
+    if (s * this.zoom < 1.3) {
+      ctx.fillStyle = p.col;
+      ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+      return;
+    }
     const col = p.col;
 
     ctx.save();
@@ -2165,6 +2368,65 @@ export class VoidEater extends Game {
         }
         break;
 
+      case 'electricSubstation': {
+        // High voltage electric substation box
+        ctx.fillStyle = '#2b2d42';
+        this.rr(-s * 1.1, -s * 0.9, s * 2.2, s * 1.8, 4); ctx.fill();
+        // Yellow & black hazard stripes
+        ctx.fillStyle = '#ffd166';
+        ctx.fillRect(-s * 0.9, -s * 0.7, s * 1.8, s * 0.4);
+        ctx.fillStyle = '#111';
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-s * 0.8 + i * s * 0.45, -s * 0.7);
+          ctx.lineTo(-s * 0.6 + i * s * 0.45, -s * 0.3);
+          ctx.lineTo(-s * 0.7 + i * s * 0.45, -s * 0.3);
+          ctx.lineTo(-s * 0.9 + i * s * 0.45, -s * 0.7);
+          ctx.fill();
+        }
+        // Glowing electric coils & arcs
+        ctx.strokeStyle = '#25e6ff';
+        ctx.lineWidth = Math.max(1.5, s * 0.08);
+        ctx.beginPath();
+        const arcPhase = this.time * 14;
+        ctx.moveTo(-s * 0.6, s * 0.1);
+        ctx.lineTo(-s * 0.2 + Math.sin(arcPhase) * s * 0.2, s * 0.3);
+        ctx.lineTo(s * 0.2 + Math.cos(arcPhase) * s * 0.2, s * 0.1);
+        ctx.lineTo(s * 0.6, s * 0.3);
+        ctx.stroke();
+        // Hazard lightning bolt symbol
+        ctx.fillStyle = '#ffd166';
+        ctx.font = `900 ${Math.round(s * 0.55)}px Outfit, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡', 0, s * 0.7);
+        break;
+      }
+
+      case 'voidMine': {
+        // Spiked magnetic void mine
+        ctx.fillStyle = '#1c1b24';
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.75, 0, TAU); ctx.fill();
+        // 8 Spikes
+        ctx.fillStyle = '#3a0ca3';
+        for (let i = 0; i < 8; i++) {
+          const a = (i * Math.PI) / 4;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a - 0.2) * s * 0.65, Math.sin(a - 0.2) * s * 0.65);
+          ctx.lineTo(Math.cos(a) * s * 1.15, Math.sin(a) * s * 1.15);
+          ctx.lineTo(Math.cos(a + 0.2) * s * 0.65, Math.sin(a + 0.2) * s * 0.65);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Blinking red central diode
+        const blink = Math.sin(this.time * 10) > 0;
+        ctx.fillStyle = blink ? '#ff0054' : '#640d14';
+        ctx.shadowColor = '#ff0054';
+        ctx.shadowBlur = blink ? 10 : 0;
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.35, 0, TAU); ctx.fill();
+        ctx.shadowBlur = 0;
+        break;
+      }
+
       default:
         ctx.fillStyle = col;
         this.rr(-s, -s, s * 2, s * 2, s * 0.2); ctx.fill();
@@ -2172,10 +2434,54 @@ export class VoidEater extends Game {
     }
     ctx.restore();
   }
+
+  /* --------------------------------------------------- Cybernetic Turbo Boost HUD Button */
+  drawBoostButton(ctx, W, H) {
+    const bx = W - 46;
+    const by = H - 118;
+    const r = 26;
+    const h = this.hole;
+    const canBoost = h.r > 16.5;
+
+    ctx.save();
+    if (this.boosting) {
+      // Fiery golden active boost glow
+      const g = ctx.createRadialGradient(bx, by, r * 0.2, bx, by, r * 1.4);
+      g.addColorStop(0, 'rgba(255, 209, 102, 0.95)');
+      g.addColorStop(1, 'rgba(255, 0, 84, 0.4)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(bx, by, r * 1.25, 0, TAU); ctx.fill();
+
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.stroke();
+    } else {
+      // Sleek glassmorphism button
+      ctx.fillStyle = canBoost ? 'rgba(12, 18, 36, 0.88)' : 'rgba(20, 20, 30, 0.5)';
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.fill();
+
+      ctx.strokeStyle = canBoost ? '#25e6ff' : 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.stroke();
+    }
+
+    ctx.fillStyle = this.boosting ? '#ffffff' : canBoost ? '#25e6ff' : 'rgba(255, 255, 255, 0.4)';
+    ctx.font = '900 13px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('⚡', bx, by - 5);
+
+    ctx.font = '800 8px Outfit, sans-serif';
+    ctx.fillText('BOOST', bx, by + 9);
+
+    ctx.restore();
+  }
 }
 
 function pickColor(kind, seed) {
   const p = pseudoRandom(seed);
+  if (kind === 'electricSubstation') return '#ffd166';
+  if (kind === 'voidMine') return '#ff0054';
   if (kind === 'sugarDrop') return pick(['#ff3366', '#06d6a0', '#ffbe0b', '#4cc9f0', '#9b5de5', '#ff70a6'], p);
   if (kind === 'sweetWrapper') return pick(['#ff0054', '#7209b7', '#f72585', '#4361ee', '#ffd166'], p);
   if (kind === 'sodaCan') return pick(['#e63946', '#3a86ff', '#52b788', '#ff70a6', '#ffbe0b'], p);

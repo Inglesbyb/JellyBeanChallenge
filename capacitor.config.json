@@ -1,6 +1,10 @@
 {
-  "appId": "com.jellybeans.gamereels",
-  "appName": "Game Reels",
+  "appId": "com.jellybean.challenge",
+  "appName": "Jelly Bean: 60s Challenge",
   "webDir": "dist",
-  "bundledWebRuntime": false
+  "backgroundColor": "#05050c",
+  "android": {
+    "backgroundColor": "#05050c",
+    "allowMixedContent": false
+  }
 }

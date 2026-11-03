@@ -268,6 +268,8 @@ export class BeanTD extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
 
     this.lives = saved?.lives || 20;
     this.cash = saved?.cash || 250;
@@ -289,11 +291,15 @@ export class BeanTD extends Game {
     this.placementValid = false;
 
     // Load saved towers if available
-    if (saved?.towers) {
+    if (Array.isArray(saved?.towers)) {
       for (const t of saved.towers) {
-        this.towers.push(this.createTower(t.type, t.x, t.y, t.upgradeLvl));
+        if (t && TOWER_TYPES[t.type] && Number.isFinite(t.x) && Number.isFinite(t.y)) {
+          this.towers.push(this.createTower(t.type, t.x, t.y, Number.isFinite(t.upgradeLvl) ? t.upgradeLvl : 0));
+        }
       }
     }
+
+    if (saved) this.grace = 1.5;
 
     // Auto start wave after short delay if first play
     this.startDelay = 0.5;
@@ -483,9 +489,9 @@ export class BeanTD extends Game {
       type: typeKey,
       color: proto.color,
       r: proto.r,
-      speed: proto.speed,
-      hp: proto.hp,
-      maxHp: proto.hp,
+      speed: proto.speed * (1 + 0.06 * (this.pLevel - 1)),
+      hp: proto.hp > 1 ? Math.round(proto.hp * (1 + 0.25 * (this.pLevel - 1))) : proto.hp,
+      maxHp: proto.hp > 1 ? Math.round(proto.hp * (1 + 0.25 * (this.pLevel - 1))) : proto.hp,
       reward: proto.reward,
       next: proto.next,
       splits: proto.splits || 1,
@@ -528,6 +534,12 @@ export class BeanTD extends Game {
     this.fx.text(this.W / 2, 320, `+$${bonus} BONUS`, '#06d6a0', 22, 1.4);
     for (let i = 0; i < 4; i++) {
       this.fx.burst(100 + i * 80, 260, '#ffd166', 12, 180, 0.8, 3.5, 120);
+    }
+
+    // Final scripted wave (MOAB ARMADA) cleared -> stage complete.
+    if (this.wave >= WAVES.length && !this.won) {
+      this.won = true;
+      this.winReason = 'MOAB Armada Defeated! 🎈';
     }
   }
 
@@ -1037,6 +1049,10 @@ export class BeanTD extends Game {
         upgradeLvl: t.upgradeLvl,
       })),
     };
+  }
+
+  restoreLabel() {
+    return `Wave ${this.wave} · ${this.towers.length} Towers · 💖 ${this.lives}`;
   }
 
   /* -------------------------------------------------------- Rendering */

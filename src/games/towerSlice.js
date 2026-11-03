@@ -7,6 +7,7 @@ const BASE_Y = 660;     // screen y of the first block's top at camera 0
 const BASE_W = 195;
 const DEPTH = 12;       // pseudo-3D perspective depth
 const TOL = 7;          // perfect-drop tolerance (px)
+const FLOOR_GOAL = 50;  // spire height that completes the stage (Space Apex)
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -23,10 +24,14 @@ export class TowerSlice extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
-    this.blocks = saved
+    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
+    this.pLevel = Math.max(1, this.prestige || 1);
+    const validSavedBlocks = Array.isArray(saved?.blocks) && saved.blocks.length > 0
+      && saved.blocks.every((b) => Number.isFinite(b?.x) && Number.isFinite(b?.w) && b.w > 0);
+    this.blocks = validSavedBlocks
       ? saved.blocks.map((b) => ({ ...b }))
       : [{ x: (this.W - BASE_W) / 2, w: BASE_W, hue: 210, type: 'wafer', milestone: false }];
-    this.combo = saved ? saved.combo : 0;
+    this.combo = (saved && Number.isFinite(saved.combo)) ? saved.combo : 0;
     this.falling = [];
     this.crumbs = [];
     this.cam = 0;
@@ -114,7 +119,7 @@ export class TowerSlice extends Game {
       w: top.w,
       x: fromLeft ? mn : mx,
       dir: fromLeft ? 1 : -1,
-      speed: Math.min(460, 185 + n * 5.2),
+      speed: Math.min(560, (185 + n * 5.2) * (1 + 0.08 * (this.pLevel - 1))),
       hue: (200 + n * 11) % 360,
       type,
       milestone: n % 10 === 0,
@@ -226,7 +231,8 @@ export class TowerSlice extends Game {
     const y = this.slotY(n);
     const delta = cur.x - top.x;
 
-    if (Math.abs(delta) <= TOL) {
+    const tol = Math.max(3, TOL - 1.5 * (this.pLevel - 1));
+    if (Math.abs(delta) <= tol) {
       // PERFECT DROP
       this.combo += 1;
       const isMilestone = (n % 10 === 0);
@@ -325,6 +331,12 @@ export class TowerSlice extends Game {
       this.sounds.slice();
       this.sounds.stack(1);
       this.haptics.light();
+    }
+
+    // Stage complete: spire topped out at the goal floor.
+    if (this.blocks.length - 1 >= FLOOR_GOAL && !this.won) {
+      this.won = true;
+      this.winReason = `Spire Reached Floor ${FLOOR_GOAL}! 🏰`;
     }
 
     this.spawnCur();

@@ -1,7 +1,7 @@
 {
-  "name": "Game Reels",
-  "short_name": "Game Reels",
-  "description": "Swipe-style arcade gauntlet with Jellybean Void Eater, Jelly Reef, and Albert Dock Runner",
+  "name": "Jelly Bean: 60s Challenge",
+  "short_name": "Jelly Bean",
+  "description": "20-game arcade gauntlet with Captain Bean. Survive the 60-second countdown in every game to conquer the challenge.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#05050c",

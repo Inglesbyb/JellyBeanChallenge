@@ -127,11 +127,11 @@ export class SubwaySurfers extends Game {
 
     // Restore saved session state if available
     if (saved) {
-      this.distance = saved.distance || 0;
-      this.coins = saved.coins || 0;
-      this.scoreMultiplier = saved.scoreMultiplier || 1;
-      this.hoverboardStock = saved.hoverboardStock ?? 2;
-      this.lettersCollected = saved.lettersCollected || { B: false, E: false, A: false, N: false };
+      this.distance = Number.isFinite(saved.distance) ? saved.distance : 0;
+      this.coins = Number.isFinite(saved.coins) ? saved.coins : 0;
+      this.scoreMultiplier = Number.isFinite(saved.scoreMultiplier) ? saved.scoreMultiplier : 1;
+      this.hoverboardStock = Number.isFinite(saved.hoverboardStock) ? saved.hoverboardStock : 2;
+      this.lettersCollected = Object.assign({ B: false, E: false, A: false, N: false }, saved.lettersCollected);
       this.grace = 1.5;
       this.introChaseTimer = 0;
       this.inspectorZ = -130;

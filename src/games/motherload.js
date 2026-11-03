@@ -173,11 +173,21 @@ export class Motherload extends Game {
       }
       if (saved.mined) {
         for (const key of saved.mined) {
-          this.minedTiles.add(key);
           const [c, r] = key.split(',').map(Number);
+          // Protect station foundation from ever being mined/corrupted in saved data
+          if (r === SURFACE_ROW && ((c >= 2 && c <= 7) || (c >= 9 && c <= 13) || (c >= 15 && c <= 19) || (c >= 21 && c <= 26))) {
+            continue;
+          }
+          this.minedTiles.add(key);
           if (this.grid[r] && this.grid[r][c] !== undefined) {
             this.grid[r][c] = 0;
           }
+        }
+      }
+      // Guarantee station foundations are intact
+      for (let c = 0; c < COLS; c++) {
+        if ((c >= 2 && c <= 7) || (c >= 9 && c <= 13) || (c >= 15 && c <= 19) || (c >= 21 && c <= 26)) {
+          if (this.grid[SURFACE_ROW]) this.grid[SURFACE_ROW][c] = 98;
         }
       }
       this.grace = 1.5;
@@ -229,6 +239,15 @@ export class Motherload extends Game {
         if (r < SURFACE_ROW) {
           this.grid[r][c] = 0; // Air
           continue;
+        }
+
+        // Station Runway Foundations at ground level (Indestructible steel pads)
+        if (r === SURFACE_ROW) {
+          const isUnderStation = (c >= 2 && c <= 7) || (c >= 9 && c <= 13) || (c >= 15 && c <= 19) || (c >= 21 && c <= 26);
+          if (isUnderStation) {
+            this.grid[r][c] = 98; // Station Foundation Steel Runway
+            continue;
+          }
         }
 
         // Subterranean Depth in feet
@@ -510,9 +529,13 @@ export class Motherload extends Game {
     // 8. Surface Station Docking Checks
     this.checkStationPrompts();
 
-    // Smooth Camera Tracking
+    // Smooth Camera Tracking: Anchor pod vertically at screen Y = 350
+    // When pod is at surface (p.y = 146): targetCamY = 146 - 350 = -204.
+    // Clamping minCamY to -190 gives clear headroom above surface buildings
     const targetCamX = clamp(p.x - this.W / 2, 0, COLS * TILE - this.W);
-    const targetCamY = Math.max(0, p.y - this.H * 0.42);
+    const minCamY = -190;
+    const maxCamY = (ROWS - 1) * TILE - 450;
+    const targetCamY = clamp(p.y - 350, minCamY, maxCamY);
     this.camX += (targetCamX - this.camX) * Math.min(1, dt * 8);
     this.camY += (targetCamY - this.camY) * Math.min(1, dt * 6);
 
@@ -520,8 +543,10 @@ export class Motherload extends Game {
   }
 
   isSolid(c, r) {
-    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
-    if (r < SURFACE_ROW) return false;
+    if (c < 0 || c >= COLS) return true;
+    if (r < -8) return true; // High ceiling in Martian stratosphere
+    if (r < SURFACE_ROW) return false; // Open sky above surface
+    if (r >= ROWS) return true;
     const tile = this.grid[r][c];
     return tile !== 0 && tile !== 31; // Air (0) and Lava (31) are passable
   }
@@ -529,7 +554,7 @@ export class Motherload extends Game {
   /* ------------------------------------------------ Drilling Action */
   startDrilling(c, r, dir) {
     const tile = this.grid[r][c];
-    if (tile === 99) return; // Unbreakable Bedrock!
+    if (tile === 99 || tile === 98) return; // Unbreakable Bedrock & Station Foundation!
 
     // Gas Pocket explosion check!
     if (tile === 30) {
@@ -634,30 +659,32 @@ export class Motherload extends Game {
     const p = this.pod;
     this.stationPrompt = null;
 
-    // Only prompt when pod is on Martian surface
-    if (p.y > (SURFACE_ROW + 1) * TILE) return;
+    // Prompt when pod is in vicinity of surface stations (y between stratosphere and 2.5 tiles into ground)
+    if (p.y > (SURFACE_ROW + 2.5) * TILE || p.y < -150) return;
 
     // 4 Surface Stations across columns:
     // 1. Mineral Processing: Cols 2..7 (x: 64 .. 224)
-    if (p.x >= 2 * TILE && p.x <= 7 * TILE) {
+    if (p.x >= 2 * TILE && p.x <= 7.5 * TILE) {
       this.stationPrompt = { name: 'MINERAL PROCESSING', type: 'mineral', col: '#06d6a0', icon: '💎' };
     }
     // 2. Fuel Depot: Cols 9..13 (x: 288 .. 416)
-    else if (p.x >= 9 * TILE && p.x <= 13 * TILE) {
+    else if (p.x >= 8.5 * TILE && p.x <= 13.5 * TILE) {
       this.stationPrompt = { name: 'FUEL DEPOT', type: 'fuel', col: '#ffd166', icon: '⛽' };
     }
     // 3. Repair Bay: Cols 15..19 (x: 480 .. 608)
-    else if (p.x >= 15 * TILE && p.x <= 19 * TILE) {
+    else if (p.x >= 14.5 * TILE && p.x <= 19.5 * TILE) {
       this.stationPrompt = { name: 'REPAIR & GEAR', type: 'repair', col: '#4cc9f0', icon: '🔧' };
     }
     // 4. Junk Yard Upgrades: Cols 21..26 (x: 672 .. 832)
-    else if (p.x >= 21 * TILE && p.x <= 26 * TILE) {
+    else if (p.x >= 20.5 * TILE && p.x <= 26.5 * TILE) {
       this.stationPrompt = { name: 'AUTOBUY 2000', type: 'junk', col: '#f72585', icon: '🛠️' };
     }
 
-    // Auto-open station terminal if landed cleanly, or if prompt is tapped
-    if (this.stationPrompt && p.grounded) {
-      if (this.input.key('e', 'enter', ' ') || (this.input.pressed && this.input.y < this.H * 0.75)) {
+    // Open station terminal if landed, or hovering in front of station with low vertical velocity
+    if (this.stationPrompt) {
+      const canDock = p.grounded || Math.abs(p.vy) < 140;
+      const wantsDock = this.input.key('e', 'enter', ' ') || (this.input.pressed && this.input.y < this.H * 0.75);
+      if (canDock && wantsDock) {
         this.openStation(this.stationPrompt.type);
       }
     }
@@ -841,7 +868,7 @@ export class Motherload extends Game {
       for (let r = pr - 1; r <= pr + 1; r++) {
         for (let c = pc - 1; c <= pc + 1; c++) {
           if (r >= SURFACE_ROW && r < ROWS && c > 0 && c < COLS - 1) {
-            if (this.grid[r][c] !== 99) {
+            if (this.grid[r][c] !== 99 && this.grid[r][c] !== 98) {
               this.grid[r][c] = 0;
               this.minedTiles.add(`${c},${r}`);
             }
@@ -869,23 +896,22 @@ export class Motherload extends Game {
     const { W, H } = this;
     const p = this.pod;
 
-    // Viewport camera offset with shake and 50px top headroom
-    const TOP_OFFSET = 50;
+    // Viewport camera offset with shake
     const off = this.fx.offset();
     const camX = clamp(Math.round(this.camX + off.x), 0, COLS * TILE - W);
-    const camY = Math.max(0, Math.round(this.camY + off.y));
+    const camY = clamp(Math.round(this.camY + off.y), -200, (ROWS - 1) * TILE - 450);
 
     ctx.fillStyle = '#0a0512';
     ctx.fillRect(0, 0, W, H);
 
     ctx.save();
-    ctx.translate(-camX, -camY + TOP_OFFSET);
+    ctx.translate(-camX, -camY);
 
     // 1. Martian Sky & Distant Craters
-    this.drawMartianSky(ctx, camX, camY, TOP_OFFSET);
+    this.drawMartianSky(ctx, camX, camY);
 
     // 2. Subterranean Crust & Tiles
-    this.drawTiles(ctx, camX, camY, TOP_OFFSET);
+    this.drawTiles(ctx, camX, camY);
 
     // 3. Surface Station Buildings
     this.drawSurfaceStations(ctx);
@@ -906,45 +932,48 @@ export class Motherload extends Game {
   }
 
   /* ------------------------------------------------ Sky & Mountains */
-  drawMartianSky(ctx, camX, camY, topOffset = 50) {
+  drawMartianSky(ctx, camX, camY) {
     const skyH = SURFACE_ROW * TILE;
-    if (camY >= skyH + 200) return;
+    if (camY >= skyH + 300) return;
 
-    // Deep space red nebula gradient extended upwards to top of canvas
-    const g = ctx.createLinearGradient(0, -topOffset, 0, skyH);
-    g.addColorStop(0, '#06030a');
-    g.addColorStop(0.5, '#1e0c1b');
-    g.addColorStop(1, '#521d28');
+    // Deep space red nebula gradient extended upwards into high sky
+    const minY = Math.min(-350, camY - 100);
+    const g = ctx.createLinearGradient(0, minY, 0, skyH);
+    g.addColorStop(0, '#040208');
+    g.addColorStop(0.35, '#130818');
+    g.addColorStop(0.7, '#2e1122');
+    g.addColorStop(1, '#5a1e2d');
     ctx.fillStyle = g;
-    ctx.fillRect(camX, -topOffset, this.W, skyH + topOffset);
+    ctx.fillRect(camX, minY, this.W, skyH - minY);
 
     // Distant jagged Martian mountain ridge
     ctx.fillStyle = '#30131d';
     ctx.beginPath();
     ctx.moveTo(0, skyH);
-    ctx.lineTo(80, skyH - 50);
-    ctx.lineTo(220, skyH - 25);
-    ctx.lineTo(380, skyH - 75);
-    ctx.lineTo(540, skyH - 35);
-    ctx.lineTo(720, skyH - 85);
+    ctx.lineTo(80, skyH - 65);
+    ctx.lineTo(220, skyH - 35);
+    ctx.lineTo(380, skyH - 95);
+    ctx.lineTo(540, skyH - 45);
+    ctx.lineTo(720, skyH - 110);
     ctx.lineTo(COLS * TILE, skyH);
     ctx.closePath();
     ctx.fill();
 
-    // Twinkling stars
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    for (let i = 0; i < 30; i++) {
+    // Twinkling stars scattered across the full sky height
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    for (let i = 0; i < 45; i++) {
       const sx = (i * 12345) % (COLS * TILE);
-      const sy = (i * 6789) % (skyH - 30);
-      ctx.fillRect(sx, sy, 2, 2);
+      const sy = -300 + ((i * 6789) % (skyH + 300));
+      const sz = (i % 3 === 0) ? 2.5 : 1.5;
+      ctx.fillRect(sx, sy, sz, sz);
     }
   }
 
   /* ------------------------------------------------ Subterranean Tiles & Minerals */
-  drawTiles(ctx, camX, camY, topOffset = 50) {
+  drawTiles(ctx, camX, camY) {
     const minC = Math.max(0, Math.floor(camX / TILE));
     const maxC = Math.min(COLS - 1, Math.ceil((camX + this.W) / TILE));
-    const minR = Math.max(SURFACE_ROW, Math.floor((camY - topOffset) / TILE));
+    const minR = Math.max(SURFACE_ROW, Math.floor(camY / TILE));
     const maxR = Math.min(ROWS - 1, Math.ceil((camY + this.H) / TILE));
 
     for (let r = minR; r <= maxR; r++) {
@@ -976,6 +1005,38 @@ export class Motherload extends Game {
           ctx.strokeStyle = '#27293d';
           ctx.lineWidth = 2;
           ctx.strokeRect(tx + 1, ty + 1, TILE - 2, TILE - 2);
+          continue;
+        }
+
+        // Station Runway Foundation (Indestructible Steel Pad)
+        if (t === 98) {
+          ctx.fillStyle = '#2b2d42';
+          ctx.fillRect(tx, ty, TILE, TILE);
+          // Steel plate border & bevel
+          ctx.fillStyle = '#4a4e69';
+          ctx.fillRect(tx, ty, TILE, 3);
+          ctx.fillStyle = '#1c1d2b';
+          ctx.fillRect(tx, ty + TILE - 3, TILE, 3);
+          // Industrial hazard stripes
+          ctx.fillStyle = '#ffd166';
+          ctx.beginPath();
+          ctx.moveTo(tx + 6, ty + TILE - 4);
+          ctx.lineTo(tx + 14, ty + TILE - 4);
+          ctx.lineTo(tx + 8, ty + 4);
+          ctx.lineTo(tx, ty + 4);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(tx + 20, ty + TILE - 4);
+          ctx.lineTo(tx + 28, ty + TILE - 4);
+          ctx.lineTo(tx + 22, ty + 4);
+          ctx.lineTo(tx + 14, ty + 4);
+          ctx.closePath();
+          ctx.fill();
+          // Runway Rivets
+          ctx.fillStyle = '#adb5bd';
+          ctx.fillRect(tx + 3, ty + 3, 2, 2);
+          ctx.fillRect(tx + TILE - 5, ty + 3, 2, 2);
           continue;
         }
 
@@ -1319,7 +1380,7 @@ export class Motherload extends Game {
     const cardW = 126;
     const cardH = 44;
     const lx = 14;
-    const ly = 100;
+    const ly = 116;
 
     ctx.fillStyle = 'rgba(10, 14, 28, 0.88)';
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
@@ -1341,7 +1402,7 @@ export class Motherload extends Game {
 
     // 2. TOP-RIGHT: Streamlined Mini Fuel, Hull & Cargo Gauges
     const rx = W - 156 - 14;
-    const ry = 100;
+    const ry = 116;
     const rW = 156;
     const rH = 46;
 

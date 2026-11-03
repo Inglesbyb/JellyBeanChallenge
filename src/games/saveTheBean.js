@@ -162,8 +162,8 @@ export class SaveTheBean extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
-    this.levelIdx = saved?.levelIdx || 0;
-    this.totalStars = saved?.totalStars || 0;
+    this.levelIdx = (saved && Number.isFinite(saved.levelIdx)) ? Math.max(0, saved.levelIdx) : 0;
+    this.totalStars = (saved && Number.isFinite(saved.totalStars)) ? Math.max(0, saved.totalStars) : 0;
 
     // Reset button bounds (top right, comfortably below Reel header)
     this.resetBtn = { x: 405, y: 108, r: 20, pressed: false };
@@ -766,6 +766,10 @@ export class SaveTheBean extends Game {
       levelIdx: this.levelIdx,
       totalStars: this.totalStars,
     };
+  }
+
+  restoreLabel() {
+    return `Level ${this.levelIdx + 1} · ⭐ ×${this.totalStars}`;
   }
 
   /* -------------------------------------------------------- Rendering */

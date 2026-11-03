@@ -85,14 +85,14 @@ export class SledSurfers extends Game {
 
     // Procedural Obstacles, Ramps & Pickups
     this.items = [];
-    this.nextItemZ = 200;
+    this.nextItemZ = this.playerZ + 200;
 
     // Rival AI Surfers with distinct personalities and aggression
     this.rivals = [
-      { id: 1, name: 'SplashBro', color: '#f72585', z: 45,  u: -0.35, speed: 520, y: 0, aggression: 1.04, fellTimer: 0 },
-      { id: 2, name: 'WaveKing',  color: '#ffb703', z: 95,  u:  0.30, speed: 540, y: 0, aggression: 1.07, fellTimer: 0 },
-      { id: 3, name: 'TurboBean', color: '#06d6a0', z: -25, u: -0.15, speed: 510, y: 0, aggression: 1.02, fellTimer: 0 },
-      { id: 4, name: 'DriftQueen',color: '#7209b7', z: 155, u:  0.45, speed: 550, y: 0, aggression: 1.09, fellTimer: 0 },
+      { id: 1, name: 'SplashBro', color: '#f72585', z: this.playerZ + 45,  u: -0.35, speed: 520, y: 0, aggression: 1.04, fellTimer: 0 },
+      { id: 2, name: 'WaveKing',  color: '#ffb703', z: this.playerZ + 95,  u:  0.30, speed: 540, y: 0, aggression: 1.07, fellTimer: 0 },
+      { id: 3, name: 'TurboBean', color: '#06d6a0', z: this.playerZ - 25, u: -0.15, speed: 510, y: 0, aggression: 1.02, fellTimer: 0 },
+      { id: 4, name: 'DriftQueen',color: '#7209b7', z: this.playerZ + 155, u:  0.45, speed: 550, y: 0, aggression: 1.09, fellTimer: 0 },
     ];
     this.lastRank = 4;
 
@@ -109,10 +109,11 @@ export class SledSurfers extends Game {
     }
 
     // Populate initial items with spacious breathing room
-    while (this.nextItemZ < 1800) {
+    while (this.nextItemZ < this.playerZ + 1800) {
       this.spawnItemBatch(this.nextItemZ);
       this.nextItemZ += 450 + Math.random() * 350;
     }
+    if (saved) this.grace = 1.5;
   }
 
   destroy() {
@@ -127,6 +128,10 @@ export class SledSurfers extends Game {
       speed: this.speed,
       coins: this.coins,
     };
+  }
+
+  restoreLabel() {
+    return `${Math.floor(this.playerZ / 10)}m · Coins $${this.coins}`;
   }
 
   /* ---------------------------------------------------- Procedural Spawning */

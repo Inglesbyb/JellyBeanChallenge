@@ -28,23 +28,23 @@ export class DoodleJump extends Game {
     this.t = 0;
 
     // Player Physics & State
-    this.x = saved ? saved.x : this.W / 2;
-    this.y = saved ? saved.y : this.H - 120;
+    this.x = (saved && Number.isFinite(saved.x)) ? saved.x : this.W / 2;
+    this.y = (saved && Number.isFinite(saved.y)) ? saved.y : this.H - 120;
     this.vx = 0;
-    this.vy = saved ? saved.vy : JUMP_VELOCITY;
+    this.vy = (saved && Number.isFinite(saved.vy)) ? saved.vy : JUMP_VELOCITY;
     this.w = 34;
     this.h = 42;
     this.dir = 1;
     this.squash = 1;
-    this.altitude = saved ? saved.altitude : 0;
-    this.maxAltitude = saved ? saved.maxAltitude : 0;
-    this.camY = saved ? saved.camY : 0;
+    this.altitude = (saved && Number.isFinite(saved.altitude)) ? saved.altitude : 0;
+    this.maxAltitude = (saved && Number.isFinite(saved.maxAltitude)) ? saved.maxAltitude : 0;
+    this.camY = (saved && Number.isFinite(saved.camY)) ? saved.camY : 0;
     this.recoilT = 0;
 
     // Active Equipment
-    this.powerup = saved ? saved.powerup : null; // 'propeller' | 'jetpack' | 'shield'
-    this.powerupTimer = saved ? saved.powerupTimer : 0;
-    this.hasShield = saved ? !!saved.hasShield : false;
+    this.powerup = saved?.powerup || null; // 'propeller' | 'jetpack' | 'shield'
+    this.powerupTimer = (saved && Number.isFinite(saved.powerupTimer)) ? saved.powerupTimer : 0;
+    this.hasShield = Boolean(saved?.hasShield);
 
     // World Elements
     this.platforms = [];

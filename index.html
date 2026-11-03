@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#05050c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>Game Reels — The Swipe-Style Arcade Gauntlet</title>
-    <meta name="description" content="Five hypercasual games, 90 seconds each. Survive the clock and your progress is frozen until the reel comes back around. Die and you're swiped to the next game." />
+    <title>Jelly Bean: 60s Challenge — The Arcade Gauntlet</title>
+    <meta name="description" content="Jelly Bean: 60s Challenge. 20 arcade mini-games, 60 seconds each. Survive the clock with Captain Bean to freeze progress and conquer the gauntlet." />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
     <link rel="apple-touch-icon" href="/icon-512.svg" />
@@ -25,13 +25,16 @@
         <div id="hud" class="hidden">
           <div class="hud-top">
             <div class="pips" id="pips"></div>
+            <div class="daily-hud-badge hidden" id="dailyHudBadge">📅 DAILY 1/10</div>
             <div class="score-pill"><span class="bean-ico">🫘</span><span id="score">0</span><small>PTS</small></div>
+            <button class="hud-btn" id="btnPause" aria-label="Pause game" title="Pause Game">⏸</button>
           </div>
           <div class="timer">
             <div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>
             <div class="timer-text"><span id="cycleLabel">CYCLE 1</span><span id="time">1:30</span></div>
           </div>
           <div class="welcome" id="welcome"></div>
+          <div class="prestige-badge hidden" id="prestigeBadge" aria-live="polite"></div>
           <div class="bottom">
             <div class="info">
               <div class="info-title" id="infoTitle"></div>
@@ -53,17 +56,80 @@
         <section id="menu" class="overlay">
           <div class="menu-inner">
             <div class="eyebrow">60-SECOND SURVIVAL GAUNTLET</div>
-            <h1 class="logo">JELLY<br />REELS</h1>
-            <p class="tagline">18 games. 60 seconds each.<br />Survive the clock to freeze your progress — die and you're eliminated!</p>
+            <h1 class="logo">JELLY BEAN<br /><span class="logo-sub">60s CHALLENGE</span></h1>
+            <p class="tagline">20 arcade games. 60 seconds each.<br />Survive the clock to freeze your progress — die and you're eliminated!</p>
             <div class="game-icons" id="menuIcons"></div>
             <ul class="rules">
               <li><b>⏱</b><span>Every game lasts <em>60 seconds</em>. Survive the countdown to freeze progress and advance.</span></li>
               <li><b>💀</b><span>Die and that game is <em>ELIMINATED</em> for the duration of the run.</span></li>
               <li><b>🔁</b><span>Loop back through surviving games with saved progress until <em>no games remain</em>!</span></li>
             </ul>
-            <button class="btn" id="btnPlay">START RUN</button>
-            <button class="btn ghost hidden" id="btnContinue">CONTINUE RUN</button>
-            <button class="link hidden" id="btnNew">Start fresh run</button>
+
+            <!-- Mode Switcher (TICKET-04) -->
+            <div class="menu-mode-switcher">
+              <button type="button" class="mode-tab active" id="tabModeStandard" data-mode="standard">⚔️ GAUNTLET</button>
+              <button type="button" class="mode-tab" id="tabModeDaily" data-mode="daily">📅 DAILY SEED <span class="daily-tab-streak" id="menuDailyStreakTag">🔥 0</span></button>
+            </div>
+
+            <!-- Standard Mode Content -->
+            <div id="standardMenuContent" class="mode-content">
+              <div class="player-pill" id="btnOpenProfile" role="button" aria-label="Open Player Profile" tabindex="0">
+                <div class="player-avatar-badge" id="menuPlayerAvatar">🫘</div>
+                <div class="player-info">
+                  <div class="player-name-row">
+                    <span class="player-name" id="menuPlayerName">Bean #429</span>
+                    <span class="player-rank-chip" id="menuPlayerRankChip">🌱 Sprout</span>
+                  </div>
+                  <div class="player-stats-mini" id="menuPlayerMiniStats">0 Lifetime PTS · Max Cycle 1</div>
+                </div>
+                <span class="player-pill-ico">⚙️</span>
+              </div>
+              <button class="btn" id="btnPlay">START RUN</button>
+              <button class="btn ghost hidden" id="btnContinue">CONTINUE RUN</button>
+              <button class="link hidden" id="btnNew">Start fresh run</button>
+            </div>
+
+            <!-- Daily Mode Content -->
+            <div id="dailyMenuContent" class="mode-content hidden">
+              <div class="daily-hero-card">
+                <div class="dh-top">
+                  <div class="dh-date-box">
+                    <span class="dh-badge">GLOBAL SEED</span>
+                    <span class="dh-date-str" id="dailyDateStr">NOV 02, 2026</span>
+                  </div>
+                  <div class="dh-streak-chip" id="dailyHeroStreakChip">🔥 0 STREAK</div>
+                </div>
+
+                <div class="dh-status-banner" id="dailyStatusBanner">
+                  <div class="dh-status-icon" id="dailyStatusIcon">🎯</div>
+                  <div class="dh-status-text">
+                    <div class="dh-status-title" id="dailyStatusTitle">10-Stage Seeded Gauntlet</div>
+                    <div class="dh-status-desc" id="dailyStatusDesc">Survive 10 curated games to claim today's medal!</div>
+                  </div>
+                </div>
+
+                <!-- Medal Targets Indicator -->
+                <div class="dh-targets-row">
+                  <div class="dh-target-badge" title="Bronze Medal">🥉 15K</div>
+                  <div class="dh-target-badge" title="Silver Medal">🥈 35K</div>
+                  <div class="dh-target-badge" title="Gold Medal">🥇 60K</div>
+                </div>
+
+                <!-- 10-Game Seed Preview -->
+                <div class="dh-preview-header">
+                  <span>TODAY'S 10-GAME SEQUENCE</span>
+                  <span class="dh-timer" id="dailyResetTimer">⏳ Resets in 08h 15m</span>
+                </div>
+                <div class="daily-preview-icons" id="dailyPreviewIcons"></div>
+
+                <button class="btn daily-play-btn" id="btnStartDaily">PLAY TODAY'S GAUNTLET ▶</button>
+              </div>
+            </div>
+
+            <div class="menu-sub-row">
+              <button class="menu-sub-btn" id="btnOpenCloset" aria-label="Captain Bean Mascot Closet">🎩 CLOSET</button>
+              <button class="menu-sub-btn" id="btnMenuSettings" aria-label="Game Settings">⚙️ SETTINGS</button>
+            </div>
           </div>
         </section>
 
@@ -79,7 +145,288 @@
               <div class="mult-sub" id="sumSub"></div>
             </div>
             <button class="btn" id="btnNext">KEEP GOING →</button>
+            <button class="btn ghost share-btn" id="btnShareRun">📸 SHARE RUN POSTER</button>
             <p class="foot" id="sumFoot">Survive cycles and keep your streak alive.</p>
+          </div>
+        </section>
+
+        <!-- Settings / Pause Modal -->
+        <section id="settingsModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="settingsTitle">
+          <div class="settings-card">
+            <div class="settings-header">
+              <div class="settings-title-group">
+                <div class="eyebrow" id="settingsEyebrow">TACTICAL PAUSE</div>
+                <h2 class="settings-title" id="settingsTitle">GAME PAUSED</h2>
+              </div>
+              <button class="modal-close" id="btnSettingsClose" aria-label="Close settings">✕</button>
+            </div>
+
+            <!-- Active Game Card (shown when paused mid-game) -->
+            <div class="active-game-banner" id="settingsGameBanner">
+              <div class="agb-icon" id="settingsGameIcon">🫘</div>
+              <div class="agb-details">
+                <div class="agb-title" id="settingsGameTitle">Game Name</div>
+                <div class="agb-sub" id="settingsGameSub">Time Left: 60s · Cycle 1</div>
+              </div>
+            </div>
+
+            <!-- Settings Options -->
+            <div class="settings-group">
+              <!-- SFX Volume -->
+              <div class="setting-row">
+                <div class="setting-label-col">
+                  <div class="setting-name">🔊 SFX Volume</div>
+                  <div class="setting-desc">Procedural audio & arcade effects</div>
+                </div>
+                <div class="setting-slider-col">
+                  <input type="range" id="settingVolume" min="0" max="100" step="5" value="80" aria-label="Sound Effects Volume" />
+                  <span class="slider-val" id="settingVolumeVal">80%</span>
+                </div>
+              </div>
+
+              <!-- Haptics -->
+              <div class="setting-row">
+                <div class="setting-label-col">
+                  <div class="setting-name">📳 Haptic Feedback</div>
+                  <div class="setting-desc">Vibrations on impacts & milestones</div>
+                </div>
+                <label class="switch" for="settingHaptics">
+                  <input type="checkbox" id="settingHaptics" checked />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- Screen Shake -->
+              <div class="setting-row">
+                <div class="setting-label-col">
+                  <div class="setting-name">💥 Screen Shake</div>
+                  <div class="setting-desc">Dynamic recoil & explosion impacts</div>
+                </div>
+                <label class="switch" for="settingShake">
+                  <input type="checkbox" id="settingShake" checked />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- Privacy Policy Link (TICKET-09) -->
+              <div class="setting-row">
+                <div class="setting-label-col">
+                  <div class="setting-name">📜 Privacy & Data Safety</div>
+                  <div class="setting-desc">Zero tracking · 100% local device storage</div>
+                </div>
+                <a href="/privacy.html" target="_blank" class="setting-link-btn" id="linkPrivacyPolicy">VIEW ↗</a>
+              </div>
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div class="settings-actions">
+              <button class="btn" id="btnResume">RESUME RUN ▶</button>
+              <button class="btn ghost danger" id="btnAbandon">ABANDON RUN ✕</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Player Profile & Lifetime Stats Modal (TICKET-02) -->
+        <section id="profileModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="profileTitle">
+          <div class="profile-card">
+            <div class="profile-header">
+              <div class="profile-title-group">
+                <div class="eyebrow">COMMANDER DOSSIER</div>
+                <h2 class="profile-title" id="profileTitle">PLAYER PROFILE</h2>
+              </div>
+              <button class="modal-close" id="btnProfileClose" aria-label="Close profile">✕</button>
+            </div>
+
+            <!-- Identity Customizer Card -->
+            <div class="identity-box">
+              <div class="avatar-picker-group">
+                <div class="current-avatar-preview" id="profileAvatarPreview">🫘</div>
+                <div class="avatar-options" id="avatarOptions">
+                  <button type="button" class="avatar-opt active" data-av="🫘">🫘</button>
+                  <button type="button" class="avatar-opt" data-av="👑">👑</button>
+                  <button type="button" class="avatar-opt" data-av="🚀">🚀</button>
+                  <button type="button" class="avatar-opt" data-av="⚡">⚡</button>
+                  <button type="button" class="avatar-opt" data-av="🎩">🎩</button>
+                  <button type="button" class="avatar-opt" data-av="👾">👾</button>
+                  <button type="button" class="avatar-opt" data-av="💎">💎</button>
+                  <button type="button" class="avatar-opt" data-av="🦊">🦊</button>
+                </div>
+              </div>
+
+              <div class="name-edit-group">
+                <label for="profileNameInput" class="name-label">CALLSIGN / CODENAME</label>
+                <div class="name-input-wrapper">
+                  <input type="text" id="profileNameInput" maxlength="18" placeholder="Enter nickname..." spellcheck="false" />
+                  <button type="button" class="btn-save-name" id="btnSaveName">SAVE</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Captain Bean Mascot Closet Shortcut -->
+            <button type="button" class="btn-profile-closet" id="btnProfileOpenCloset" aria-label="Customize Mascot Skins and Hats">
+              <div class="bpc-left">
+                <span class="bpc-icon">🎩</span>
+                <div class="bpc-text">
+                  <div class="bpc-title">CAPTAIN'S CLOSET</div>
+                  <div class="bpc-sub" id="profileClosetSummary">Cyan · No Hat</div>
+                </div>
+              </div>
+              <span class="bpc-arrow">CUSTOMIZE →</span>
+            </button>
+
+            <!-- Rank Tier Card -->
+            <div class="rank-card">
+              <div class="rank-top">
+                <div class="rank-badge" id="rankBadgeIcon">🌱</div>
+                <div class="rank-text">
+                  <div class="rank-name" id="rankTierName">Sprout Bean</div>
+                  <div class="rank-sub" id="rankNextSub">25,000 PTS to Bronze Bean</div>
+                </div>
+              </div>
+              <div class="rank-bar-bg">
+                <div class="rank-bar-fill" id="rankBarFill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- Lifetime Stats Grid -->
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-num" id="statLifetimePts">0</div>
+                <div class="stat-lbl">LIFETIME PTS 🌟</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statBestRun">0</div>
+                <div class="stat-lbl">BEST RUN 🏆</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statMaxCycle">1</div>
+                <div class="stat-lbl">MAX CYCLE 🔁</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statSurvived">0</div>
+                <div class="stat-lbl">60s SURVIVED ⏱️</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statStagesCleared">0</div>
+                <div class="stat-lbl">STAGES CLEARED ⭐</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statRunsAttempted">0</div>
+                <div class="stat-lbl">RUNS PLAYED ⚔️</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statDailyStreak">🔥 0</div>
+                <div class="stat-lbl">DAILY STREAK</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="statDailyMedals">🥇 0</div>
+                <div class="stat-lbl">DAILY MEDALS</div>
+              </div>
+            </div>
+
+            <!-- Favorite / Top Arcade Game -->
+            <div class="favorite-game-card" id="favoriteGameCard">
+              <div class="fav-icon" id="favGameIcon">🎮</div>
+              <div class="fav-info">
+                <div class="fav-title" id="favGameTitle">No Games Recorded</div>
+                <div class="fav-sub" id="favGameSub">Play gauntlet runs to establish personal bests</div>
+              </div>
+            </div>
+
+            <div class="profile-actions-row">
+              <button class="btn" id="btnProfileDone">DONE ✓</button>
+              <button class="btn ghost share-btn" id="btnShareProfile">📸 SHARE POSTER</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Captain Bean Mascot Closet Modal (TICKET-03) -->
+        <section id="closetModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="closetTitle">
+          <div class="closet-card">
+            <div class="closet-header">
+              <div class="closet-title-group">
+                <div class="eyebrow">MASCOT CUSTOMIZER</div>
+                <h2 class="closet-title" id="closetTitle">CAPTAIN'S CLOSET</h2>
+              </div>
+              <button class="modal-close" id="btnClosetClose" aria-label="Close closet">✕</button>
+            </div>
+
+            <!-- Live Animated Mascot Preview Stage -->
+            <div class="closet-stage">
+              <canvas id="closetCanvas" width="220" height="170"></canvas>
+              <div class="closet-stage-info">
+                <div class="stage-skin-pill" id="closetActivePill">
+                  <span class="sap-skin" id="closetSkinLabel">Electric Cyan</span>
+                  <span class="sap-sep">·</span>
+                  <span class="sap-hat" id="closetHatLabel">No Hat</span>
+                </div>
+                <div class="closet-balance-pill" id="closetBalancePill">🌟 0 LIFETIME PTS</div>
+              </div>
+            </div>
+
+            <!-- Tab Switcher: Skins vs Hats -->
+            <div class="closet-tabs">
+              <button type="button" class="closet-tab active" id="tabSkins" data-tab="skins">🎨 SKINS (<span id="skinsCount">8</span>)</button>
+              <button type="button" class="closet-tab" id="tabHats" data-tab="hats">🎩 HATS (<span id="hatsCount">8</span>)</button>
+            </div>
+
+            <!-- Item Grid -->
+            <div class="closet-grid-container">
+              <div class="closet-grid" id="closetGrid"></div>
+            </div>
+
+            <!-- Bottom Done Button -->
+            <button class="btn" id="btnClosetDone">EQUIP & EXIT ✓</button>
+          </div>
+        </section>
+
+        <!-- Daily Challenge Summary Modal (TICKET-04) -->
+        <section id="dailySummaryModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="dsTitle">
+          <div class="daily-summary-card">
+            <div class="eyebrow" id="dsEyebrow">DAILY SEED COMPLETED</div>
+            <div class="ds-medal-icon" id="dsMedalIcon">🥇</div>
+            <h2 class="ds-title" id="dsTitle">GOLD MEDALIST!</h2>
+            <div class="ds-score-banner">
+              <span class="ds-score-val" id="dsScoreVal">68,450</span>
+              <span class="ds-score-lbl">DAILY PTS</span>
+            </div>
+            
+            <div class="ds-streak-box">
+              <div class="ds-streak-val" id="dsStreakVal">🔥 1 DAY</div>
+              <div class="ds-streak-desc" id="dsStreakDesc">Daily Gauntlet streak kept alive!</div>
+            </div>
+
+            <div class="ds-chips-row" id="dsChipsRow"></div>
+
+            <button class="btn" id="btnDailyDone">CLAIM DAILY REWARDS ✓</button>
+            <button class="btn ghost share-btn" id="btnShareDaily">📸 SHARE DAILY RECORD</button>
+          </div>
+        </section>
+
+        <!-- Shareable Run Summary Card Modal (TICKET-05) -->
+        <section id="shareModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="shareTitle">
+          <div class="share-card-container">
+            <div class="share-header">
+              <div class="share-title-group">
+                <div class="eyebrow" id="shareEyebrow">ARCADE TRANSMISSION</div>
+                <h2 class="share-title" id="shareTitle">SHARE RUN CARD</h2>
+              </div>
+              <button class="modal-close" id="btnShareClose" aria-label="Close share preview">✕</button>
+            </div>
+
+            <!-- Scaled Canvas Preview -->
+            <div class="share-canvas-wrap">
+              <canvas id="shareCanvas" width="800" height="1060"></canvas>
+            </div>
+
+            <!-- Share / Save Actions -->
+            <div class="share-actions-row">
+              <button class="btn share-action-btn primary" id="btnWebShare">📤 SHARE / SEND</button>
+              <button class="btn share-action-btn ghost" id="btnDownloadCard">💾 SAVE PNG</button>
+            </div>
+
+            <!-- Live Toast Feedback -->
+            <div class="share-toast hidden" id="shareToast">Card downloaded to device!</div>
           </div>
         </section>
       </main>

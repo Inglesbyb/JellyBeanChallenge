@@ -1,20 +1,25 @@
 // Master Jellybean Mascot Renderer
 // Bloons TD 6 glossy 3D-vector look meets Fall Guys squishy pill character.
 
+import { store, SKINS } from './store.js';
+
 const TAU = Math.PI * 2;
 
 export function drawBean(ctx, x, y, size = 30, opts = {}) {
+  const closet = store?.data?.closet || { skinId: 'cyan', hatId: 'none' };
+  const currentSkin = SKINS?.find((s) => s.id === closet.skinId) || { color: '#25e6ff', belly: '#1ec0db' };
+
   const {
-    color = '#25e6ff',       // Primary candy color
-    bellyColor = null,       // Secondary belly color (defaults to lighter tint)
-    dir = 1,                 // Facing direction: 1 (right) or -1 (left)
-    walkT = 0,               // Walk cycle animation time
-    squash = 1,              // Squash & stretch scale factor
-    eyes = 'happy',          // 'happy', 'blink', 'squish', 'dizzy', 'wink'
-    hat = null,              // 'crown', 'scuba', 'chef', 'none'
-    ufo = false,             // Sitting in a hover-kart
-    holding = null,          // Object/fruit tier held above head
-    holdingTierDraw = null,  // Function to draw held object
+    color = currentSkin.color,
+    bellyColor = currentSkin.belly,
+    dir = 1,
+    walkT = 0,
+    squash = 1,
+    eyes = 'happy',
+    hat = (closet.hatId !== 'none' ? closet.hatId : null),
+    ufo = false,
+    holding = null,
+    holdingTierDraw = null,
     dead = false,
   } = opts;
 
@@ -271,6 +276,142 @@ export function drawBean(ctx, x, y, size = 30, opts = {}) {
     ctx.beginPath(); ctx.arc(0, cy - 6, 2.8, 0, TAU); ctx.fill();
     ctx.beginPath(); ctx.arc(-radius * 0.3, cy - 3, 2.2, 0, TAU); ctx.fill();
     ctx.beginPath(); ctx.arc(radius * 0.3, cy - 3, 2.2, 0, TAU); ctx.fill();
+  } else if (hat === 'tophat') {
+    const cy = topY - radius * 0.72;
+    // Brim
+    ctx.fillStyle = '#181824';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.ellipse(0, cy + 2, radius * 0.85, radius * 0.22, 0, 0, TAU);
+    ctx.fill(); ctx.stroke();
+
+    // Cylinder
+    ctx.fillStyle = '#222233';
+    ctx.beginPath();
+    ctx.rect(-radius * 0.5, cy - radius * 0.95, radius, radius * 0.95);
+    ctx.fill(); ctx.stroke();
+
+    // Red ribbon
+    ctx.fillStyle = '#ff3366';
+    ctx.fillRect(-radius * 0.5, cy - radius * 0.25, radius, radius * 0.25);
+    ctx.strokeRect(-radius * 0.5, cy - radius * 0.25, radius, radius * 0.25);
+
+    // Sheen
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(-radius * 0.4, cy - radius * 0.9, radius * 0.2, radius * 0.65);
+  } else if (hat === 'astro') {
+    // Glass bubble space helmet
+    ctx.fillStyle = 'rgba(180, 240, 255, 0.32)';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(0, topY - radius * 0.1, radius * 1.35, 0, TAU);
+    ctx.fill(); ctx.stroke();
+
+    // Reflection shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.beginPath();
+    ctx.ellipse(-radius * 0.65, topY - radius * 0.7, radius * 0.45, radius * 0.16, -0.65, 0, TAU);
+    ctx.fill();
+
+    // Collar
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    ctx.ellipse(0, topY + radius * 1.05, radius * 0.9, radius * 0.25, 0, 0, TAU);
+    ctx.fill(); ctx.stroke();
+  } else if (hat === 'viking') {
+    const cy = topY - radius * 0.55;
+    // Iron Cap
+    ctx.fillStyle = '#94a3b8';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(0, cy, radius * 0.68, Math.PI, 0, false);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Horns
+    ctx.fillStyle = '#fef08a';
+    // Left horn
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.55, cy - 2);
+    ctx.quadraticCurveTo(-radius * 1.15, cy - radius * 0.4, -radius * 0.9, cy - radius * 0.95);
+    ctx.quadraticCurveTo(-radius * 0.8, cy - radius * 0.3, -radius * 0.35, cy - radius * 0.3);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Right horn
+    ctx.beginPath();
+    ctx.moveTo(radius * 0.55, cy - 2);
+    ctx.quadraticCurveTo(radius * 1.15, cy - radius * 0.4, radius * 0.9, cy - radius * 0.95);
+    ctx.quadraticCurveTo(radius * 0.8, cy - radius * 0.3, radius * 0.35, cy - radius * 0.3);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  } else if (hat === 'chef') {
+    const cy = topY - radius * 0.65;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.2;
+
+    // Puffy top
+    ctx.beginPath();
+    ctx.arc(0, cy - radius * 0.6, radius * 0.5, 0, TAU);
+    ctx.arc(-radius * 0.4, cy - radius * 0.35, radius * 0.42, 0, TAU);
+    ctx.arc(radius * 0.4, cy - radius * 0.35, radius * 0.42, 0, TAU);
+    ctx.fill(); ctx.stroke();
+
+    // Band
+    ctx.fillRect(-radius * 0.55, cy - radius * 0.15, radius * 1.1, radius * 0.3);
+    ctx.strokeRect(-radius * 0.55, cy - radius * 0.15, radius * 1.1, radius * 0.3);
+  } else if (hat === 'ninja') {
+    const cy = topY - radius * 0.1;
+    // Headband
+    ctx.fillStyle = '#ff2a5f';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.ellipse(0, cy, radius * 0.72, radius * 0.22, 0, 0, TAU);
+    ctx.fill(); ctx.stroke();
+
+    // Silver symbol plate
+    ctx.fillStyle = '#e2e8f0';
+    ctx.beginPath();
+    ctx.rect(-radius * 0.25, cy - radius * 0.16, radius * 0.5, radius * 0.28);
+    ctx.fill(); ctx.stroke();
+
+    // Trailing ribbons behind head
+    ctx.fillStyle = '#ff2a5f';
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.65, cy);
+    ctx.quadraticCurveTo(-radius * 1.1, cy - 8, -radius * 1.35, cy - 2);
+    ctx.lineTo(-radius * 1.25, cy + 8);
+    ctx.quadraticCurveTo(-radius * 0.95, cy + 4, -radius * 0.6, cy + 6);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  } else if (hat === 'party') {
+    const cy = topY - radius * 0.65;
+    // Cone
+    ctx.fillStyle = '#a855f7';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.45, cy + 4);
+    ctx.lineTo(0, cy - radius * 1.2);
+    ctx.lineTo(radius * 0.45, cy + 4);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Confetti spots
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(-radius * 0.1, cy - radius * 0.3, 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.arc(radius * 0.15, cy - radius * 0.65, 3, 0, TAU); ctx.fill();
+
+    // Pom pom
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(0, cy - radius * 1.22, radius * 0.18, 0, TAU);
+    ctx.fill(); ctx.stroke();
   } else if (hat === 'scuba') {
     // Glass bubble scuba dome
     ctx.fillStyle = 'rgba(180, 240, 255, 0.28)';
