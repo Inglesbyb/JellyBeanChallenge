@@ -1125,37 +1125,41 @@ export class AgeOfBeans extends Game {
     const shake = this.fx.offset();
 
     ctx.save();
-    ctx.translate(shake.x, shake.y);
+    try {
+      ctx.translate(shake.x, shake.y);
 
-    // 1. Sky & Celestial Energy (Screen-Space)
-    this.renderSky(ctx);
+      // 1. Sky & Celestial Energy (Screen-Space)
+      this.renderSky(ctx);
 
-    // 2. Parallax Backdrop (Screen-Space: Mountains, Royal Liver clocktower, Lollipop hills)
-    this.renderParallaxBackground(ctx);
+      // 2. Parallax Backdrop (Screen-Space: Mountains, Royal Liver clocktower, Lollipop hills)
+      this.renderParallaxBackground(ctx);
 
-    // 3. World Space Layer (Camera Transformed)
-    ctx.save();
-    ctx.translate(-Math.floor(this.camX), 0);
+      // 3. World Space Layer (Camera Transformed)
+      ctx.save();
+      try {
+        ctx.translate(-Math.floor(this.camX), 0);
 
-    this.renderGround(ctx);
-    this.renderBases(ctx);
-    this.renderUnits(ctx);
-    this.renderTurrets(ctx);
-    this.renderProjectiles(ctx);
-    this.renderSpecialAttacksWorld(ctx);
-    this.renderSlashArcs(ctx);
-    this.renderMuzzleFlashes(ctx);
-    this.fx.render(ctx);
+        this.renderGround(ctx);
+        this.renderBases(ctx);
+        this.renderUnits(ctx);
+        this.renderTurrets(ctx);
+        this.renderProjectiles(ctx);
+        this.renderSpecialAttacksWorld(ctx);
+        this.renderSlashArcs(ctx);
+        this.renderMuzzleFlashes(ctx);
+        this.fx.render(ctx);
+      } finally {
+        ctx.restore();
+      }
 
-    ctx.restore();
-
-    // 4. Screen-Space UI & HUD Deck
-    this.renderTopRadar(ctx);
-    this.renderTopHud(ctx);
-    this.renderHomeBaseTracker(ctx);
-    this.renderBottomCommandDeck(ctx);
-
-    ctx.restore();
+      // 4. Screen-Space UI & HUD Deck
+      this.renderTopRadar(ctx);
+      this.renderTopHud(ctx);
+      this.renderHomeBaseTracker(ctx);
+      this.renderBottomCommandDeck(ctx);
+    } finally {
+      ctx.restore();
+    }
   }
 
   renderSky(ctx) {
@@ -2625,23 +2629,27 @@ export class AgeOfBeans extends Game {
         const curY = s.startY + (GROUND_Y - s.startY) * t;
 
         ctx.save();
-        if (s.era === 0) {
-          // Fiery Sugar Asteroid
-          ctx.fillStyle = '#f72585';
-          ctx.beginPath();
-          ctx.arc(curX, curY, 14, 0, TAU);
-          ctx.fill();
-          ctx.fillStyle = '#ffd166';
-          ctx.beginPath();
-          ctx.arc(curX - 3, curY - 3, 7, 0, TAU);
-          ctx.fill();
-        } else if (s.era === 4) {
-          // Orbital Ion Beam Targeting Reticle
-          ctx.strokeStyle = '#00f5d4';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(s.targetX, GROUND_Y - 10, 25, 0, TAU);
-          ctx.stroke();
+        try {
+          if (s.era === 0) {
+            // Fiery Sugar Asteroid
+            ctx.fillStyle = '#f72585';
+            ctx.beginPath();
+            ctx.arc(curX, curY, 14, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = '#ffd166';
+            ctx.beginPath();
+            ctx.arc(curX - 3, curY - 3, 7, 0, TAU);
+            ctx.fill();
+          } else if (s.era === 4) {
+            // Orbital Ion Beam Targeting Reticle
+            ctx.strokeStyle = '#00f5d4';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(s.targetX, GROUND_Y - 10, 25, 0, TAU);
+            ctx.stroke();
+          }
+        } finally {
+          ctx.restore();
         }
       }
     }
@@ -2813,7 +2821,7 @@ export class AgeOfBeans extends Game {
     ctx.fill();
 
     // Body
-    const hpRatio = clamp(this.playerBaseHp / this.playerMaxBaseHp, 0, 1);
+    const hpRatio = clamp(this.playerBaseHp / (this.playerBaseMaxHp || 500), 0, 1);
     const isLow = hpRatio < 0.3;
     const underAttack = (this.playerBaseFlashTimer || 0) > 0;
 

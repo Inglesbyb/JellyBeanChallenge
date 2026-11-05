@@ -418,6 +418,17 @@ export const store = {
     this.save();
   },
 
+  abandonSession() {
+    const likes = this.data.likes;
+    const settings = this.data.settings || defaultSettings();
+    const profile = this.data.profile || defaultProfile();
+    const stats = this.data.stats || defaultStats();
+    const closet = this.data.closet || defaultCloset();
+    const daily = this.data.daily || defaultDaily();
+    this.data = { started: false, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily };
+    this.save();
+  },
+
   likeCount(id, base) {
     return base + (this.data.likes[id] || 0);
   },

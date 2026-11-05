@@ -903,7 +903,15 @@ export class Reel {
     s.style.display = 'block';
 
     this.destroyGame();
-    this.loadGame(i);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    try {
+      this.loadGame(i);
+    } catch (err) {
+      console.error('Failed to load game during transition:', err);
+      this.snap.style.display = 'none';
+      this.mode = 'playing';
+      return;
+    }
 
     void s.offsetWidth;
     s.style.transition = `transform ${dur}s cubic-bezier(.7,0,.2,1)`;
@@ -917,7 +925,7 @@ export class Reel {
     this.snap.style.display = 'none';
     this.mode = 'playing';
     this.input.reset();
-    if (this.restored) {
+    if (this.restored && this.game) {
       this.showWelcome(this.game.restoreLabel());
       sounds.welcome();
     }
@@ -1047,14 +1055,24 @@ export class Reel {
       this.runType = 'standard';
       this.buildPips();
     }
+
+    // Terminate and clear active run session
+    store.abandonSession();
+
+    // Reset canvas and snap overlay
+    this.snap.style.display = 'none';
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.globalAlpha = 1;
+    this.ctx.globalCompositeOperation = 'source-over';
+    this.ctx.clearRect(0, 0, this.W, this.H);
+
     this.mode = 'menu';
     $('#hud').classList.add('hidden');
+    $('#welcome').classList.remove('show');
     $('#menu').classList.remove('hidden');
-    if (store.hasSession()) {
-      $('#btnPlay').classList.add('hidden');
-      $('#btnContinue').classList.remove('hidden');
-      $('#btnNew').classList.remove('hidden');
-    }
+    $('#btnPlay').classList.remove('hidden');
+    $('#btnContinue').classList.add('hidden');
+    $('#btnNew').classList.add('hidden');
     this.stage.classList.remove('urgent');
   }
 
@@ -1593,9 +1611,22 @@ export class Reel {
       this.game.updateDying(dt * 0.4);
     }
 
-    // 3) Render.
+    // 3) Render with guaranteed transform isolation
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.globalAlpha = 1;
+    this.ctx.globalCompositeOperation = 'source-over';
     this.ctx.clearRect(0, 0, W, H);
-    if (this.game && this.mode !== 'menu') this.game.render();
+    if (this.game && this.mode !== 'menu') {
+      try {
+        this.game.render();
+      } catch (err) {
+        console.error(`Render error in ${this.game.constructor?.meta?.id || 'game'}:`, err);
+      } finally {
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        this.ctx.globalAlpha = 1;
+        this.ctx.globalCompositeOperation = 'source-over';
+      }
+    }
 
     if (this.game && (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'secured' || this.mode === 'dying')) {
       const live = Math.max(0, Math.round(this.game.score - this.roundStartScore));
