@@ -1,6 +1,18 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  mixColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  drawToyEyes,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -12,6 +24,15 @@ export class ZombieFortress extends Game {
     icon: '🧟',
     hint: 'DRAG to aim & unleash heavy fire · SPEND gold live on Upgrades · DEFEND the wall!',
     baseLikes: 3420,
+    isPrestige: false,
+    parScore60s: 2800,
+    cue: 'DEFEND THE WALL!',
+    prestigeCue: 'TOUGHER HORDE · FASTER ZOMBIES!',
+    scaling: {
+      zombieHpMult:    { base: 1.0, rate: 0.16, cap: 1.85, mode: 'up', label: 'Zombie HP' },
+      zombieSpeedMult: { base: 1.0, rate: 0.15, cap: 1.40, mode: 'up', label: 'Zombie Speed' },
+      waveSizeMult:    { base: 1.0, rate: 0.15, cap: 1.50, mode: 'up', label: 'Horde Size' },
+    },
   };
 
   init(saved, score = 0) {
@@ -212,7 +233,7 @@ export class ZombieFortress extends Game {
   /* ------------------------------------------------------------- Wave Director */
   startNextWave() {
     this.waveActive = true;
-    this.waveTotalEnemies = 18 + Math.floor(this.wave * 7.5);
+    this.waveTotalEnemies = Math.round((18 + Math.floor(this.wave * 7.5)) * (this.diff.waveSizeMult ?? 1));
     this.waveEnemiesLeft = this.waveTotalEnemies;
     this.waveSpawnTimer = 0.2;
 
@@ -309,6 +330,12 @@ export class ZombieFortress extends Game {
       bounty = 80;
       walkSpeed = 0.85;
     }
+
+    const hpScale = this.diff.zombieHpMult ?? 1;
+    const spdScale = this.diff.zombieSpeedMult ?? 1;
+    hp = Math.round(hp * hpScale);
+    speed *= spdScale;
+    if (shieldHp > 0) shieldHp = Math.round(shieldHp * hpScale);
 
     this.zombies.push({
       x: 35 + Math.random() * (this.W - 70),
@@ -842,66 +869,118 @@ export class ZombieFortress extends Game {
     const ctx = this.ctx;
     const { W, H } = this;
 
-    // 1. Dark Post-Apocalyptic Highway Background
-    ctx.fillStyle = '#0b0f19';
+    // 1. Stylized Toy Diorama Highway Backdrop
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0f172a');
+    bg.addColorStop(0.6, '#131c31');
+    bg.addColorStop(1, '#0b1020');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // Highway asphalt lanes
-    ctx.fillStyle = '#141a29';
+    // Highway asphalt deck with soft top-down spotlight
+    const roadGrad = ctx.createLinearGradient(20, 0, W - 20, 0);
+    roadGrad.addColorStop(0, '#182034');
+    roadGrad.addColorStop(0.5, '#202a42');
+    roadGrad.addColorStop(1, '#182034');
+    ctx.fillStyle = roadGrad;
     ctx.fillRect(20, 0, W - 40, this.wallY);
 
-    // Broken highway dashed lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([20, 24]);
-    ctx.beginPath();
-    ctx.moveTo(W / 2 - 70, 0); ctx.lineTo(W / 2 - 70, this.wallY);
-    ctx.moveTo(W / 2 + 70, 0); ctx.lineTo(W / 2 + 70, this.wallY);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Raised concrete toy side curbs
+    drawToyBevelRect(ctx, 4, -4, 16, this.wallY + 8, 4, '#334155', {
+      depth: 0,
+      rimColor: '#0f172a',
+      lineWidth: 1.2,
+      gloss: false,
+    });
+    drawToyBevelRect(ctx, W - 20, -4, 16, this.wallY + 8, 4, '#334155', {
+      depth: 0,
+      rimColor: '#0f172a',
+      lineWidth: 1.2,
+      gloss: false,
+    });
 
-    // Craters and blood stains
+    // Broken highway rounded dashed lines
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.14)';
+    for (let y = 12; y < this.wallY - 24; y += 44) {
+      traceRoundRect(ctx, W / 2 - 72, y, 4, 20, 2);
+      ctx.fill();
+      traceRoundRect(ctx, W / 2 + 68, y, 4, 20, 2);
+      ctx.fill();
+    }
+
+    // Craters and toy battle scuffs
     for (const s of this.scraps) {
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.rotate(s.rot);
-      ctx.fillStyle = s.type === 'blood' ? 'rgba(157, 2, 8, 0.35)' : 'rgba(0, 0, 0, 0.4)';
+      ctx.fillStyle = s.type === 'blood' ? 'rgba(190, 18, 60, 0.28)' : 'rgba(12, 20, 42, 0.34)';
       ctx.beginPath();
       ctx.ellipse(0, 0, s.w, s.h, 0, 0, TAU);
       ctx.fill();
       ctx.restore();
     }
 
-    // 2. Barbed Wire & Danger Zone ahead of wall (Y = 590 to 620)
-    ctx.fillStyle = 'rgba(255, 0, 84, 0.08)';
+    // 2. Barbed Wire & Danger Zone ahead of wall
+    ctx.fillStyle = 'rgba(244, 63, 94, 0.10)';
     ctx.fillRect(20, this.wallY - 30, W - 40, 30);
-    ctx.strokeStyle = '#6c757d';
-    ctx.lineWidth = 1.5;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 2.4;
+    for (let bx = 30; bx < W - 30; bx += 22) {
+      ctx.beginPath();
+      ctx.moveTo(bx, this.wallY - 25);
+      ctx.lineTo(bx + 11, this.wallY - 5);
+      ctx.lineTo(bx + 20, this.wallY - 25);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+    ctx.lineWidth = 1.0;
     for (let bx = 30; bx < W - 30; bx += 22) {
       ctx.beginPath();
       ctx.moveTo(bx, this.wallY - 26);
-      ctx.lineTo(bx + 12, this.wallY - 4);
-      ctx.lineTo(bx + 20, this.wallY - 26);
+      ctx.lineTo(bx + 11, this.wallY - 6);
       ctx.stroke();
     }
+    ctx.restore();
 
-    // 3. Render Acid Pools
+    // 3. Render Glossy Acid Pools
     for (const pool of this.acidPools) {
-      ctx.fillStyle = `rgba(114, 9, 183, ${Math.min(0.8, pool.life * 0.35)})`;
+      ctx.save();
+      ctx.globalAlpha = clamp(pool.life * 0.42, 0.15, 0.88);
+      const pg = ctx.createRadialGradient(pool.x - 4, pool.y - 2, 2, pool.x, pool.y, 24);
+      pg.addColorStop(0, '#e879f9');
+      pg.addColorStop(0.5, '#9333ea');
+      pg.addColorStop(1, '#581c87');
+      ctx.fillStyle = pg;
+      ctx.strokeStyle = '#3b0764';
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.ellipse(pool.x, pool.y, 24, 8, 0, 0, TAU);
+      ctx.ellipse(pool.x, pool.y, 24, 8.5, 0, 0, TAU);
       ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+      ctx.beginPath();
+      ctx.ellipse(pool.x - 7, pool.y - 2.5, 6, 2, -0.1, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     }
 
-    // 4. Render Acid Projectiles
+    // 4. Render Acid Projectiles (3D glossy purple venom spheres)
     for (const a of this.acidProjectiles) {
-      ctx.fillStyle = '#7209b7';
-      ctx.shadowColor = '#7209b7';
-      ctx.shadowBlur = 10;
+      ctx.save();
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.28)';
       ctx.beginPath();
-      ctx.arc(a.x, a.y, 7, 0, TAU);
+      ctx.arc(a.x, a.y, 11.5, 0, TAU);
       ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.restore();
+      drawToySphere(ctx, a.x, a.y, 7.5, '#c084fc', {
+        rimColor: '#581c87',
+        lineWidth: 1.4,
+        shine: 0.82,
+      });
     }
 
     // 5. Render Zombies
@@ -909,26 +988,34 @@ export class ZombieFortress extends Game {
       this.drawZombie(ctx, z);
     }
 
-    // 6. Render Bullets
+    // 6. Render Bullets (3D glowing tracer beads)
     ctx.save();
     for (const b of this.bullets) {
-      const col = b.crit ? '#ffd166' : (b.col || '#ffffff');
-      const glow = b.crit ? '#ffb703' : (b.col || '#00f5d4');
+      const col = b.crit ? '#ffd166' : (b.col || '#38bdf8');
+      const r = b.crit ? 4.2 : 3.1;
       ctx.fillStyle = col;
-      ctx.shadowColor = glow;
-      ctx.shadowBlur = 8;
+      ctx.globalAlpha = 0.28;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.crit ? 3.5 : 2.5, 0, TAU);
+      ctx.arc(b.x, b.y, r * 2.1, 0, TAU);
       ctx.fill();
+
+      ctx.globalAlpha = 1;
+      drawToySphere(ctx, b.x, b.y, r, col, {
+        rimColor: toyRim(col, 0.52),
+        lineWidth: 0.8,
+        shine: 0.88,
+        bottomBounce: false,
+      });
     }
     ctx.restore();
 
     // 7. Render Floating Gold Coins
     for (const c of this.coins) {
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, 4, 0, TAU);
-      ctx.fill();
+      drawToySphere(ctx, c.x, c.y, 5.2, '#ffd166', {
+        rimColor: '#92400e',
+        lineWidth: 1.0,
+        shine: 0.78,
+      });
     }
 
     // 8. Render Brass Shell Casings
@@ -936,8 +1023,11 @@ export class ZombieFortress extends Game {
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.rotate(c.rot);
-      ctx.fillStyle = '#d4af37';
-      ctx.fillRect(-2, -4, 4, 8);
+      drawToyPill(ctx, -2, -4, 4, 8, '#facc15', {
+        rimColor: '#92400e',
+        lineWidth: 0.8,
+        gloss: false,
+      });
       ctx.restore();
     }
 
@@ -1003,68 +1093,91 @@ export class ZombieFortress extends Game {
     const bodyH = h * 0.85;
     const topY = -bodyH * 0.5 + radius;
     const botY = bodyH * 0.5 - radius;
+    const rim = hitFlash ? '#cbd5e1' : toyRim(z.col, 0.58);
+    const lw = toyLineW(size * 2, 0.036, 0.9, 1.85);
 
-    // 1. Soft Floor Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.beginPath();
-    ctx.ellipse(0, h * 0.54, w * 0.72, radius * 0.38, 0, 0, TAU);
-    ctx.fill();
+    // 1. Soft Grounding Shadow
+    drawToyShadow(ctx, 0, h * 0.54, w * 0.72, radius * 0.36, 0.34);
 
-    // 2. Cartoon Stubby Shuffling Zombie Feet
+    // 2. Volumetric 3D Stubby Shuffling Zombie Feet
     const footR = radius * 0.38;
     const footY = h * 0.48;
     const legSwing = Math.sin(walkT * (kind === 'runner' ? 14 : 7)) * (radius * 0.45);
+    const footBase = hitFlash ? '#ffffff' : (z.feetCol || '#1b4332');
 
-    ctx.fillStyle = hitFlash ? '#ffffff' : (z.feetCol || '#1b4332');
-    ctx.strokeStyle = '#051820';
-    ctx.lineWidth = 2;
+    const drawFoot = (fx, fy, rot) => {
+      ctx.save();
+      ctx.translate(fx, fy);
+      ctx.rotate(rot);
+      const fg = ctx.createRadialGradient(-footR * 0.25, -footR * 0.25, 1, 0, 0, footR);
+      fg.addColorStop(0, shadeColor(footBase, 0.3));
+      fg.addColorStop(0.65, footBase);
+      fg.addColorStop(1, shadeColor(footBase, -0.28));
+      ctx.fillStyle = fg;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, footR, footR * 0.7, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
 
-    // Left Foot
-    ctx.beginPath();
-    ctx.ellipse(-w * 0.32, footY + legSwing, footR, footR * 0.7, -0.2, 0, TAU);
-    ctx.fill(); ctx.stroke();
-    // Right Foot
-    ctx.beginPath();
-    ctx.ellipse(w * 0.32, footY - legSwing, footR, footR * 0.7, 0.2, 0, TAU);
-    ctx.fill(); ctx.stroke();
+    drawFoot(-w * 0.32, footY + legSwing, -0.2);
+    drawFoot(w * 0.32, footY - legSwing, 0.2);
 
-    // 3. Floppy Outstretched Zombie Arms
+    // 3. Soft Vinyl Outstretched Zombie Arms
     const armY = topY + radius * 0.75;
     const armLen = radius * 0.85;
     const armSwing = Math.sin(walkT * 6) * (radius * 0.2);
+    const armBase = hitFlash ? '#ffffff' : (z.skinCol || z.col);
 
-    ctx.fillStyle = hitFlash ? '#ffffff' : (z.skinCol || z.col);
-    ctx.strokeStyle = '#051820';
-    ctx.lineWidth = 2;
-
-    // Left Arm (reaching forward toward fortress)
-    ctx.beginPath();
-    ctx.ellipse(-w * 0.56, armY + armSwing, armLen * 0.48, armLen * 0.85, -0.25, 0, TAU);
-    ctx.fill(); ctx.stroke();
-
-    // Right Arm (if not holding riot shield)
-    if (kind !== 'brute' || z.shieldBroken) {
+    const drawArm = (ax, ay, rot) => {
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(rot);
+      const ag = ctx.createRadialGradient(-armLen * 0.15, -armLen * 0.3, 1, 0, 0, armLen);
+      ag.addColorStop(0, shadeColor(armBase, 0.34));
+      ag.addColorStop(0.55, armBase);
+      ag.addColorStop(1, shadeColor(armBase, -0.28));
+      ctx.fillStyle = ag;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = lw;
       ctx.beginPath();
-      ctx.ellipse(w * 0.56, armY - armSwing, armLen * 0.48, armLen * 0.85, 0.25, 0, TAU);
-      ctx.fill(); ctx.stroke();
+      ctx.ellipse(0, 0, armLen * 0.48, armLen * 0.85, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    drawArm(-w * 0.56, armY + armSwing, -0.25);
+    if (kind !== 'brute' || z.shieldBroken) {
+      drawArm(w * 0.56, armY - armSwing, 0.25);
     }
 
-    // 4. Rounded Pill Capsule Zombie Body
+    // 4. Volumetric 3D Vinyl Capsule Zombie Body
     ctx.save();
-    const bg = ctx.createLinearGradient(-w * 0.5, -bodyH * 0.5, w * 0.5, bodyH * 0.5);
+    const bg = ctx.createRadialGradient(
+      -radius * 0.34,
+      topY - radius * 0.22,
+      Math.max(1, radius * 0.12),
+      radius * 0.1,
+      0,
+      bodyH * 0.92,
+    );
     if (hitFlash) {
       bg.addColorStop(0, '#ffffff');
-      bg.addColorStop(1, '#ffffff');
+      bg.addColorStop(1, '#e2e8f0');
     } else {
-      bg.addColorStop(0, z.colLight || '#74c69d');
-      bg.addColorStop(0.35, z.col);
-      bg.addColorStop(0.85, z.colDark || '#2d6a4f');
-      bg.addColorStop(1, z.bellyCol || '#1b4332');
+      bg.addColorStop(0, z.colLight || shadeColor(z.col, 0.48));
+      bg.addColorStop(0.36, z.col);
+      bg.addColorStop(0.82, mixColor(z.col, z.bellyCol || z.colDark || z.col, 0.48));
+      bg.addColorStop(1, shadeColor(z.bellyCol || z.colDark || z.col, -0.28));
     }
 
     ctx.fillStyle = bg;
-    ctx.strokeStyle = '#051820';
-    ctx.lineWidth = Math.max(2, size * 0.08);
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
 
     ctx.beginPath();
     ctx.arc(0, topY, radius, Math.PI, 0, false);
@@ -1073,321 +1186,314 @@ export class ZombieFortress extends Game {
     ctx.fill();
     ctx.stroke();
 
-    // 5. Bloons 3D Specular Highlight on Head & Belly
+    // 5. Studio Vinyl Specular Forehead & Lower Bounce Highlight
     if (!hitFlash) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.50)';
       ctx.beginPath();
-      ctx.ellipse(-radius * 0.32, topY - radius * 0.28, radius * 0.36, radius * 0.18, -0.45, 0, TAU);
+      ctx.ellipse(-radius * 0.3, topY - radius * 0.34, radius * 0.36, radius * 0.16, -0.4, 0, TAU);
       ctx.fill();
 
-      // Specular shine dot
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
       ctx.beginPath();
-      ctx.arc(-radius * 0.52, topY - radius * 0.04, radius * 0.09, 0, TAU);
-      ctx.fill();
-
-      // Belly shine
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-      ctx.beginPath();
-      ctx.ellipse(0, botY * 0.35, radius * 0.5, radius * 0.38, 0, 0, TAU);
+      ctx.ellipse(0, botY + radius * 0.24, radius * 0.5, radius * 0.22, 0, 0, TAU);
       ctx.fill();
     }
 
-    // 6. Distinct Professional Archetype Features & Accessories
+    // 6. Distinct 3D Vinyl Toy Archetype Features & Crisp Eyes
     this.drawZombieFeatures(ctx, z, {
-      topY, botY, radius, w, h, hitFlash, size
+      topY, botY, radius, w, h, hitFlash, size, rim, lw,
     });
 
     ctx.restore();
 
-    // 7. Health Bar (only shown if damaged)
+    // 7. Health Bar (Crisp 3D pill bar when damaged)
     if (z.hp < z.maxHp) {
       const barW = Math.max(28, w * 1.5);
-      const barH = 5;
-      const barY = -bodyH * 0.5 - 14;
-      ctx.fillStyle = 'rgba(10, 14, 24, 0.85)';
-      this.rr(ctx, -barW / 2, barY, barW, barH, 2.5);
-      ctx.fill();
-
+      const barH = 5.5;
+      const barY = -bodyH * 0.5 - 15;
       const hpRatio = clamp(z.hp / z.maxHp, 0, 1);
-      ctx.fillStyle = (hpRatio > 0.45) ? '#38b000' : (hpRatio > 0.2) ? '#ffb703' : '#ff0054';
-      this.rr(ctx, -barW / 2, barY, barW * hpRatio, barH, 2.5);
-      ctx.fill();
+      const hpCol = (hpRatio > 0.45) ? '#22c55e' : (hpRatio > 0.2) ? '#f59e0b' : '#f43f5e';
+
+      drawToyPill(ctx, -barW / 2, barY, barW, barH, '#0f172a', {
+        rimColor: '#334155',
+        lineWidth: 0.9,
+        gloss: false,
+      });
+      if (barW * hpRatio >= 3) {
+        drawToyPill(ctx, -barW / 2, barY, barW * hpRatio, barH, hpCol, {
+          rimColor: toyRim(hpCol, 0.5),
+          lineWidth: 0.6,
+          gloss: true,
+        });
+      }
     }
 
     ctx.restore();
   }
 
   drawZombieFeatures(ctx, z, geo) {
-    const { topY, botY, radius, w, hitFlash } = geo;
+    const { topY, botY, radius, w, hitFlash, rim, lw } = geo;
     const kind = z.kind;
 
     if (kind === 'walker') {
       // 1. Rotten Bean (Walker)
-      // Decay mould patch on cheek
       if (!hitFlash) {
-        ctx.fillStyle = '#1b4332';
+        ctx.fillStyle = 'rgba(27, 67, 50, 0.52)';
         ctx.beginPath();
-        ctx.ellipse(-radius * 0.42, botY * 0.22, radius * 0.28, radius * 0.2, 0.3, 0, TAU);
+        ctx.ellipse(-radius * 0.42, botY * 0.22, radius * 0.26, radius * 0.18, 0.3, 0, TAU);
         ctx.fill();
       }
 
-      // Suture surgical stitches across skull
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 1.8;
+      // Clean suture surgical stitches across forehead
+      ctx.strokeStyle = rim;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1.2, lw * 0.95);
       ctx.beginPath();
-      ctx.moveTo(-radius * 0.4, topY - radius * 0.2);
-      ctx.lineTo(radius * 0.3, topY - radius * 0.05);
+      ctx.moveTo(-radius * 0.4, topY - radius * 0.22);
+      ctx.lineTo(radius * 0.3, topY - radius * 0.08);
       ctx.stroke();
 
       for (let sx = -radius * 0.3; sx <= radius * 0.2; sx += radius * 0.22) {
         ctx.beginPath();
         ctx.moveTo(sx, topY - radius * 0.3);
-        ctx.lineTo(sx + 2, topY - radius * 0.0);
+        ctx.lineTo(sx + 2, topY - radius * 0.03);
         ctx.stroke();
       }
 
-      // Mismatched zombie eyes
-      const eyeY = topY + radius * 0.35;
-      // Left eye: Big bulging sickly yellow eye
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(-radius * 0.36, eyeY, radius * 0.28, radius * 0.36, 0, 0, TAU);
-      ctx.fill(); ctx.stroke();
+      // Expressive Toy Eyes (clean white/ink catchlights, zero muddy black blobs)
+      const eyeY = topY + radius * 0.34;
+      drawToyEyes(ctx, 0, eyeY, Math.max(2.2, radius * 0.24), {
+        spacing: radius * 0.72,
+        style: 'bright',
+        lookX: -0.15,
+        lookY: 0.35,
+        ink: '#0f172a',
+      });
 
-      ctx.fillStyle = '#061a24';
+      // Quirky raised brow on left eye
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = Math.max(1.3, radius * 0.13);
       ctx.beginPath();
-      ctx.arc(-radius * 0.34, eyeY + 1, radius * 0.14, 0, TAU);
+      ctx.moveTo(-radius * 0.56, eyeY - radius * 0.36);
+      ctx.lineTo(-radius * 0.16, eyeY - radius * 0.26);
+      ctx.stroke();
+
+      // Rounded open mouth pill with chipped tooth & mint drool bead
+      drawToyPill(ctx, -radius * 0.3, botY * 0.42 - radius * 0.16, radius * 0.6, radius * 0.36, '#0f172a', {
+        rimColor: rim,
+        lineWidth: 1.0,
+        gloss: false,
+      });
+
+      ctx.fillStyle = '#fef08a';
+      traceRoundRect(ctx, -2, botY * 0.42 - radius * 0.13, 4.2, 4, 1.5);
       ctx.fill();
 
-      // Right eye: Sunken dead milky eye with bruised ring
-      ctx.fillStyle = '#2d6a4f';
-      ctx.beginPath();
-      ctx.ellipse(radius * 0.36, eyeY, radius * 0.22, radius * 0.26, 0, 0, TAU);
-      ctx.fill(); ctx.stroke();
-
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.beginPath();
-      ctx.arc(radius * 0.36, eyeY, radius * 0.1, 0, TAU);
-      ctx.fill();
-
-      // Open drooling mouth with a chipped yellow tooth
-      ctx.fillStyle = '#081c15';
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(0, botY * 0.45, radius * 0.32, radius * 0.22, 0, 0, TAU);
-      ctx.fill(); ctx.stroke();
-
-      // Chipped tooth
-      ctx.fillStyle = '#ffeaa7';
-      ctx.fillRect(-2, botY * 0.45 - 5, 4, 4);
-
-      // Drool drip
       if (!hitFlash) {
-        ctx.fillStyle = '#74c69d';
-        ctx.beginPath();
-        ctx.ellipse(radius * 0.12, botY * 0.45 + radius * 0.25, 2.5, 4.5, 0, 0, TAU);
-        ctx.fill();
+        drawToySphere(ctx, radius * 0.14, botY * 0.42 + radius * 0.26, 2.8, '#86efac', {
+          rimColor: rim,
+          lineWidth: 0.7,
+          shine: 0.6,
+          bottomBounce: false,
+        });
       }
     } else if (kind === 'runner') {
       // 2. Infected Sprinter (Runner)
-      // Tattered Neon Athletic Headband
-      const bandY = topY - radius * 0.05;
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#3d2600';
-      ctx.lineWidth = 2;
-      ctx.fillRect(-radius * 0.88, bandY, radius * 1.76, radius * 0.34);
-      ctx.strokeRect(-radius * 0.88, bandY, radius * 1.76, radius * 0.34);
-
+      const bandY = topY - radius * 0.08;
       // Trailing frayed ribbon ends flapping in the wind
-      const ribSwing = Math.sin(this.time * 16) * 6;
-      ctx.fillStyle = '#e76f51';
+      const ribSwing = Math.sin(this.time * 16) * 5.5;
+      ctx.fillStyle = '#f97316';
+      ctx.strokeStyle = toyRim('#f97316', 0.58);
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(-radius * 0.88, bandY + 2);
       ctx.lineTo(-radius * 1.35, bandY - 4 + ribSwing);
       ctx.lineTo(-radius * 1.25, bandY + 8 + ribSwing);
-      ctx.lineTo(-radius * 0.88, bandY + radius * 0.32);
+      ctx.lineTo(-radius * 0.88, bandY + radius * 0.3);
       ctx.closePath();
       ctx.fill();
+      ctx.stroke();
 
-      // Enraged Glowing Red Eyes
-      const eyeY = topY + radius * 0.42;
-      const eyeSpacing = radius * 0.38;
-
-      [-eyeSpacing, eyeSpacing].forEach((ex, idx) => {
-        ctx.fillStyle = '#ff0054';
-        ctx.shadowColor = '#ff0054';
-        ctx.shadowBlur = 6;
-        ctx.beginPath();
-        ctx.ellipse(ex, eyeY, radius * 0.24, radius * 0.32, (idx === 0 ? 0.15 : -0.15), 0, TAU);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        ctx.fillStyle = '#10002b';
-        ctx.beginPath();
-        ctx.arc(ex + (idx === 0 ? 1 : -1), eyeY, radius * 0.1, 0, TAU);
-        ctx.fill();
+      // 3D Beveled Athletic Headband
+      drawToyPill(ctx, -radius * 0.92, bandY, radius * 1.84, radius * 0.34, '#ffd166', {
+        rimColor: toyRim('#f59e0b', 0.58),
+        lineWidth: 1.3,
+        gloss: true,
       });
 
-      // Sharp angry eyebrows
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 2.5;
+      // Fierce Runner Toy Eyes with glowing crimson rings + symmetric V-brows
+      const eyeY = topY + radius * 0.42;
+      const eyeSp = radius * 0.74;
+      [-eyeSp * 0.5, eyeSp * 0.5].forEach((ex) => {
+        ctx.fillStyle = 'rgba(255, 0, 84, 0.36)';
+        ctx.beginPath();
+        ctx.arc(ex, eyeY, radius * 0.33, 0, TAU);
+        ctx.fill();
+      });
+      drawToyEyes(ctx, 0, eyeY, Math.max(2.1, radius * 0.23), {
+        spacing: eyeSp,
+        style: 'bright',
+        lookX: 0,
+        lookY: 0.42,
+        ink: '#0f172a',
+      });
+
+      // Sharp symmetric angry brows
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1.5, radius * 0.16);
       ctx.beginPath();
-      ctx.moveTo(-radius * 0.65, eyeY - radius * 0.38);
-      ctx.lineTo(-radius * 0.15, eyeY - radius * 0.15);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(radius * 0.65, eyeY - radius * 0.38);
-      ctx.lineTo(radius * 0.15, eyeY - radius * 0.15);
+      ctx.moveTo(-radius * 0.62, eyeY - radius * 0.38);
+      ctx.lineTo(-radius * 0.16, eyeY - radius * 0.18);
+      ctx.moveTo(radius * 0.62, eyeY - radius * 0.38);
+      ctx.lineTo(radius * 0.16, eyeY - radius * 0.18);
       ctx.stroke();
 
-      // Snarling jagged mouth
-      ctx.fillStyle = '#370617';
-      ctx.beginPath();
-      ctx.ellipse(0, botY * 0.42, radius * 0.35, radius * 0.18, 0, 0, TAU);
-      ctx.fill();
+      // Snarling mouth pill
+      drawToyPill(ctx, -radius * 0.34, botY * 0.36, radius * 0.68, radius * 0.28, '#4c0519', {
+        rimColor: rim,
+        lineWidth: 1.0,
+        gloss: false,
+      });
     } else if (kind === 'brute') {
       // 3. Ironclad Juggernaut (Brute)
-      // Steel Military / Welder Helmet
       const helmY = topY - radius * 0.35;
-      ctx.fillStyle = '#343a40';
-      ctx.strokeStyle = '#111827';
-      ctx.lineWidth = 2.5;
+      const hg = ctx.createRadialGradient(-radius * 0.35, topY - radius * 0.5, 2, 0, topY, radius * 1.15);
+      hg.addColorStop(0, '#94a3b8');
+      hg.addColorStop(0.5, '#475569');
+      hg.addColorStop(1, '#1e293b');
+      ctx.fillStyle = hg;
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = lw;
 
       ctx.beginPath();
       ctx.arc(0, topY, radius * 1.08, Math.PI, 0);
       ctx.lineTo(radius * 1.08, helmY + radius * 0.95);
       ctx.lineTo(-radius * 1.08, helmY + radius * 0.95);
       ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      ctx.fill();
+      ctx.stroke();
 
-      // Steel Rivets
-      ctx.fillStyle = '#adb5bd';
-      for (let rx = -radius * 0.8; rx <= radius * 0.8; rx += radius * 0.4) {
-        ctx.beginPath();
-        ctx.arc(rx, helmY + radius * 0.85, 2.2, 0, TAU);
-        ctx.fill();
+      // Metallic helmet top sheen
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.34)';
+      ctx.beginPath();
+      ctx.ellipse(-radius * 0.3, topY - radius * 0.56, radius * 0.42, radius * 0.16, -0.35, 0, TAU);
+      ctx.fill();
+
+      // Steel 3D Rivets
+      for (let rx = -radius * 0.78; rx <= radius * 0.78; rx += radius * 0.39) {
+        drawToySphere(ctx, rx, helmY + radius * 0.85, 2.2, '#cbd5e1', {
+          rimColor: '#1e293b',
+          lineWidth: 0.8,
+          bottomBounce: false,
+        });
       }
 
-      // Red Glowing Visor Slit
-      ctx.fillStyle = '#ff0054';
-      ctx.shadowColor = '#ff0054';
-      ctx.shadowBlur = 8;
-      ctx.fillRect(-radius * 0.65, helmY + radius * 0.45, radius * 1.3, 4);
-      ctx.shadowBlur = 0;
+      // Glowing Red Visor Slit Pill
+      drawToyPill(ctx, -radius * 0.65, helmY + radius * 0.42, radius * 1.3, 5, '#ff0054', {
+        rimColor: '#4c0519',
+        lineWidth: 1.0,
+        gloss: true,
+      });
 
-      // Heavy Ballistic Riot Shield (Strapped to right arm)
+      // Heavy 3D Beveled Ballistic Riot Shield (Strapped to right arm)
       if (!z.shieldBroken) {
         const shX = w * 0.55;
         const shY = botY * 0.15;
-        const shW = radius * 1.1;
-        const shH = radius * 1.8;
+        const shW = radius * 1.12;
+        const shH = radius * 1.82;
 
         ctx.save();
         ctx.translate(shX, shY);
 
-        // Shield plate
-        ctx.fillStyle = '#212529';
-        ctx.strokeStyle = '#adb5bd';
-        ctx.lineWidth = 2.5;
-        this.rr(ctx, -shW / 2, -shH / 2, shW, shH, 6);
-        ctx.fill(); ctx.stroke();
+        drawToyBevelRect(ctx, -shW / 2, -shH / 2, shW, shH, 6.5, '#334155', {
+          depth: 4,
+          rimColor: '#0f172a',
+          lineWidth: 1.5,
+          gloss: true,
+        });
 
-        // Yellow & Black Hazard Stripes
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(-shW / 2 + 3, -4, shW - 6, 8);
-        ctx.fillStyle = '#111111';
+        // Yellow & Slate Hazard Stripe Band
+        drawToyBevelRect(ctx, -shW / 2 + 2.5, -4.5, shW - 5, 9, 2.5, '#ffd166', {
+          depth: 0,
+          rimColor: '#92400e',
+          lineWidth: 0.9,
+          gloss: false,
+        });
+        ctx.fillStyle = '#1e293b';
         ctx.beginPath();
-        ctx.moveTo(-shW / 2 + 5, -4); ctx.lineTo(-shW / 2 + 13, 4); ctx.lineTo(-shW / 2 + 8, 4); ctx.lineTo(-shW / 2 + 3, -1);
+        ctx.moveTo(-shW / 2 + 6, -4); ctx.lineTo(-shW / 2 + 12, 4); ctx.lineTo(-shW / 2 + 8, 4); ctx.lineTo(-shW / 2 + 3, -1);
         ctx.fill();
         ctx.beginPath();
-        ctx.moveTo(0, -4); ctx.lineTo(8, 4); ctx.lineTo(3, 4); ctx.lineTo(-5, -4);
+        ctx.moveTo(0, -4); ctx.lineTo(6, 4); ctx.lineTo(2, 4); ctx.lineTo(-4, -4);
         ctx.fill();
 
-        // Spiked steel boss
-        ctx.fillStyle = '#adb5bd';
-        ctx.beginPath();
-        ctx.arc(0, 0, 4, 0, TAU);
-        ctx.fill();
+        // Glossy steel center boss
+        drawToySphere(ctx, 0, 0, 4.2, '#cbd5e1', { rimColor: '#1e293b', lineWidth: 1.0 });
 
         ctx.restore();
       }
     } else if (kind === 'boomer') {
       // 4. Toxic Biohazard (Boomer)
-      // Pulsing Glowing Chemical Pustules / Boils
       const boils = [
-        { x: -radius * 0.5, y: topY - radius * 0.25, r: radius * 0.4 },
-        { x: radius * 0.45, y: topY - radius * 0.15, r: radius * 0.32 },
-        { x: radius * 0.65, y: botY * 0.2, r: radius * 0.36 },
+        { x: -radius * 0.5, y: topY - radius * 0.25, r: radius * 0.38 },
+        { x: radius * 0.45, y: topY - radius * 0.15, r: radius * 0.30 },
+        { x: radius * 0.65, y: botY * 0.2, r: radius * 0.34 },
       ];
 
       for (let i = 0; i < boils.length; i++) {
         const b = boils[i];
         const pulse = 1 + Math.sin(this.time * 8 + i * 2) * 0.14;
-        const curR = b.r * pulse;
-
-        const bg = ctx.createRadialGradient(b.x, b.y, 2, b.x, b.y, curR);
-        bg.addColorStop(0, '#ffffff');
-        bg.addColorStop(0.3, '#d8f3dc');
-        bg.addColorStop(0.7, '#74c69d');
-        bg.addColorStop(1, '#2d6a4f');
-
-        ctx.fillStyle = bg;
-        ctx.strokeStyle = '#051820';
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, curR, 0, TAU);
-        ctx.fill(); ctx.stroke();
+        drawToySphere(ctx, b.x, b.y, b.r * pulse, '#bef264', {
+          rimColor: toyRim('#65a30d', 0.55),
+          lineWidth: 1.2,
+          shine: 0.85,
+        });
       }
 
-      // Yellow Biohazard Strap
+      // 3D Biohazard Strap
+      ctx.save();
+      ctx.strokeStyle = toyRim('#eab308', 0.58);
       ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(-radius * 0.85, topY + radius * 0.5);
       ctx.lineTo(radius * 0.85, botY * 0.35);
       ctx.lineTo(radius * 0.85, botY * 0.35 + 8);
       ctx.lineTo(-radius * 0.85, topY + radius * 0.5 + 8);
       ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
 
-      // Bulging crazy yellow eyes
+      // Expressive Wide Toy Eyes
       const eyeY = topY + radius * 0.4;
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(-radius * 0.35, eyeY, radius * 0.3, radius * 0.36, -0.1, 0, TAU);
-      ctx.ellipse(radius * 0.35, eyeY, radius * 0.34, radius * 0.38, 0.15, 0, TAU);
-      ctx.fill(); ctx.stroke();
+      drawToyEyes(ctx, 0, eyeY, Math.max(2.5, radius * 0.27), {
+        spacing: radius * 0.72,
+        style: 'bright',
+        lookX: 0.32,
+        lookY: -0.15,
+        ink: '#0f172a',
+      });
 
-      ctx.fillStyle = '#051820';
-      ctx.beginPath();
-      ctx.arc(-radius * 0.32, eyeY, 3, 0, TAU);
-      ctx.arc(radius * 0.38, eyeY - 2, 3.5, 0, TAU);
-      ctx.fill();
-
-      // Gaping drooling chemical mouth
-      ctx.fillStyle = '#1b4332';
-      ctx.beginPath();
-      ctx.ellipse(0, botY * 0.5, radius * 0.4, radius * 0.28, 0, 0, TAU);
-      ctx.fill(); ctx.stroke();
-      // Acid foam
-      ctx.fillStyle = '#b7e4c7';
-      ctx.beginPath();
-      ctx.arc(-4, botY * 0.5 + 4, 3, 0, TAU);
-      ctx.arc(3, botY * 0.5 + 5, 4, 0, TAU);
-      ctx.fill();
+      // Gaping chemical mouth + foam spheres
+      drawToyPill(ctx, -radius * 0.38, botY * 0.42, radius * 0.76, radius * 0.42, '#14532d', {
+        rimColor: rim,
+        lineWidth: 1.2,
+        gloss: false,
+      });
+      drawToySphere(ctx, -4, botY * 0.55, 2.8, '#d9f99d', { rimColor: '#3f6212', lineWidth: 0.7 });
+      drawToySphere(ctx, 3.5, botY * 0.56, 3.4, '#d9f99d', { rimColor: '#3f6212', lineWidth: 0.7 });
     } else if (kind === 'spitter') {
       // 5. Grave Spitter
-      // Tattered Dark Sorcerer Cowl / Hood
       const hoodY = topY - radius * 0.35;
-      ctx.fillStyle = '#240046';
-      ctx.strokeStyle = '#051820';
-      ctx.lineWidth = 2.2;
+      const cg = ctx.createRadialGradient(-radius * 0.3, topY - radius * 0.3, 2, 0, topY, radius * 1.2);
+      cg.addColorStop(0, '#7e22ce');
+      cg.addColorStop(0.55, '#4c1d95');
+      cg.addColorStop(1, '#2e1065');
+      ctx.fillStyle = cg;
+      ctx.strokeStyle = '#1e1b4b';
+      ctx.lineWidth = lw;
 
       ctx.beginPath();
       ctx.arc(0, topY, radius * 1.12, Math.PI, 0);
@@ -1397,44 +1503,51 @@ export class ZombieFortress extends Game {
       ctx.lineTo(-radius * 0.6, hoodY + radius * 0.85);
       ctx.lineTo(-radius * 1.15, hoodY + radius * 1.1);
       ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      ctx.fill();
+      ctx.stroke();
 
-      // Shadow face underneath hood
-      ctx.fillStyle = '#10002b';
+      // Deep cowl shadow face
+      ctx.fillStyle = '#0f172a';
       ctx.beginPath();
       ctx.ellipse(0, topY + radius * 0.4, radius * 0.72, radius * 0.45, 0, 0, TAU);
       ctx.fill();
 
-      // Piercing glowing toxic green eyes
+      // Piercing toxic cyan toy eyes
       const eyeY = topY + radius * 0.38;
-      ctx.fillStyle = '#00f5d4';
-      ctx.shadowColor = '#00f5d4';
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.ellipse(-radius * 0.32, eyeY, radius * 0.16, radius * 0.28, -0.2, 0, TAU);
-      ctx.ellipse(radius * 0.32, eyeY, radius * 0.16, radius * 0.28, 0.2, 0, TAU);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      [-radius * 0.32, radius * 0.32].forEach((ex) => {
+        ctx.fillStyle = 'rgba(0, 245, 212, 0.32)';
+        ctx.beginPath();
+        ctx.arc(ex, eyeY, radius * 0.28, 0, TAU);
+        ctx.fill();
+      });
+      drawToyEyes(ctx, 0, eyeY, Math.max(2.1, radius * 0.21), {
+        spacing: radius * 0.64,
+        style: 'bright',
+        lookX: 0,
+        lookY: 0.3,
+        ink: '#0d9488',
+      });
 
-      // Pulsing venom throat sac
-      const sacPulse = 1 + Math.sin(this.time * 6) * 0.15;
-      const sacR = radius * 0.42 * sacPulse;
-      const sacGrad = ctx.createRadialGradient(0, botY * 0.45, 2, 0, botY * 0.45, sacR);
-      sacGrad.addColorStop(0, '#f72585');
-      sacGrad.addColorStop(0.5, '#7209b7');
-      sacGrad.addColorStop(1, 'rgba(58, 12, 163, 0.4)');
-
-      ctx.fillStyle = sacGrad;
-      ctx.beginPath();
-      ctx.arc(0, botY * 0.45, sacR, 0, TAU);
-      ctx.fill();
+      // Pulsing 3D venom throat sac orb
+      const sacPulse = 1 + Math.sin(this.time * 6) * 0.14;
+      const sacR = radius * 0.38 * sacPulse;
+      drawToySphere(ctx, 0, botY * 0.46, sacR, '#e879f9', {
+        rimColor: '#581c87',
+        lineWidth: 1.2,
+        shine: 0.75,
+      });
     } else if (kind === 'titan') {
       // 6. Colossal Titan Boss
-      // Cracked Golden Skull Crown
+      // Sculpted 3D Golden Crown
       const cy = topY - radius * 0.85;
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#5a3d00';
-      ctx.lineWidth = 2.5;
+      const cg = ctx.createLinearGradient(-radius * 0.6, cy - 24, radius * 0.6, cy + 8);
+      cg.addColorStop(0, '#fff3b0');
+      cg.addColorStop(0.5, '#ffd166');
+      cg.addColorStop(1, '#d97706');
+      ctx.fillStyle = cg;
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = Math.max(1.5, lw);
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-radius * 0.6, cy + 8);
       ctx.lineTo(-radius * 0.6, cy - 18);
@@ -1444,32 +1557,49 @@ export class ZombieFortress extends Game {
       ctx.lineTo(radius * 0.6, cy - 18);
       ctx.lineTo(radius * 0.6, cy + 8);
       ctx.closePath();
-      ctx.fill(); ctx.stroke();
-
-      // Blood Rubies on Crown
-      ctx.fillStyle = '#d90429';
-      ctx.beginPath();
-      ctx.arc(0, cy - 8, 3.5, 0, TAU);
-      ctx.arc(-radius * 0.35, cy + 2, 3, 0, TAU);
-      ctx.arc(radius * 0.35, cy + 2, 3, 0, TAU);
       ctx.fill();
+      ctx.stroke();
 
-      // Twin Demonic Glowing Red Eyes
+      // Glossy Ruby Gems on Crown
+      drawToySphere(ctx, 0, cy - 8, 3.8, '#ff0054', { rimColor: '#881337', lineWidth: 0.9 });
+      drawToySphere(ctx, -radius * 0.35, cy + 1, 3.2, '#ff0054', { rimColor: '#881337', lineWidth: 0.9 });
+      drawToySphere(ctx, radius * 0.35, cy + 1, 3.2, '#ff0054', { rimColor: '#881337', lineWidth: 0.9 });
+
+      // Twin Fierce Titan Eyes + crimson aura
       const eyeY = topY + radius * 0.36;
-      ctx.fillStyle = '#ff0054';
-      ctx.shadowColor = '#ff0054';
-      ctx.shadowBlur = 10;
+      [-radius * 0.36, radius * 0.36].forEach((ex) => {
+        ctx.fillStyle = 'rgba(255, 0, 84, 0.35)';
+        ctx.beginPath();
+        ctx.arc(ex, eyeY, radius * 0.32, 0, TAU);
+        ctx.fill();
+      });
+      drawToyEyes(ctx, 0, eyeY, Math.max(3.2, radius * 0.22), {
+        spacing: radius * 0.72,
+        style: 'bright',
+        lookX: 0,
+        lookY: 0.38,
+        ink: '#0f172a',
+      });
+      // Fierce symmetric Titan V-brows
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(2.0, radius * 0.14);
       ctx.beginPath();
-      ctx.arc(-radius * 0.36, eyeY, radius * 0.2, 0, TAU);
-      ctx.arc(radius * 0.36, eyeY, radius * 0.2, 0, TAU);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.moveTo(-radius * 0.64, eyeY - radius * 0.34);
+      ctx.lineTo(-radius * 0.16, eyeY - radius * 0.14);
+      ctx.moveTo(radius * 0.64, eyeY - radius * 0.34);
+      ctx.lineTo(radius * 0.16, eyeY - radius * 0.14);
+      ctx.stroke();
 
       // Glowing Magma Lava Fissure in Chest
       const lavaPulse = 0.8 + Math.sin(this.time * 5) * 0.2;
-      ctx.fillStyle = `rgba(255, 183, 3, ${lavaPulse})`;
-      ctx.shadowColor = '#ff0054';
-      ctx.shadowBlur = 12;
+      const lg = ctx.createRadialGradient(0, botY * 0.34, 2, 0, botY * 0.34, radius * 0.4);
+      lg.addColorStop(0, `rgba(254, 240, 138, ${lavaPulse})`);
+      lg.addColorStop(0.55, `rgba(249, 115, 22, ${lavaPulse})`);
+      lg.addColorStop(1, `rgba(225, 29, 72, ${lavaPulse})`);
+      ctx.fillStyle = lg;
+      ctx.strokeStyle = '#4c0519';
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(-radius * 0.3, botY * 0.3);
       ctx.lineTo(0, botY * 0.1);
@@ -1478,47 +1608,66 @@ export class ZombieFortress extends Game {
       ctx.lineTo(-radius * 0.1, botY * 0.6);
       ctx.closePath();
       ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.stroke();
     }
   }
 
   drawWall(ctx, W) {
     const y = this.wallY;
 
-    // Concrete Wall Foundation
-    ctx.fillStyle = '#1e2433';
-    ctx.fillRect(0, y, W, 40);
+    // 3D Extruded Toy Fortress Wall Foundation
+    drawToyBevelRect(ctx, 0, y, W, 42, 4, '#334155', {
+      depth: 5,
+      rimColor: '#0f172a',
+      lineWidth: 1.6,
+      gloss: true,
+    });
 
-    // Steel battlements & reinforced plating
-    ctx.fillStyle = '#2c3549';
+    // Steel 3D beveled battlements along parapet
     for (let x = 10; x < W - 20; x += 44) {
-      ctx.fillRect(x, y - 4, 34, 12);
+      drawToyBevelRect(ctx, x, y - 6, 34, 14, 5, '#475569', {
+        depth: 3,
+        rimColor: '#0f172a',
+        lineWidth: 1.3,
+        gloss: true,
+      });
     }
 
-    // Wall Health Bar on top
+    // Wall Health Bar on top (3D glossy pill meter)
     const barW = W - 80;
-    const barH = 8;
+    const barH = 10;
     const barX = 40;
-    const barY = y - 16;
+    const barY = y - 19;
     const hpRatio = clamp(this.wallHp / this.maxWallHp, 0, 1);
+    const hpCol = hpRatio > 0.45 ? '#22c55e' : hpRatio > 0.2 ? '#f59e0b' : '#f43f5e';
 
-    ctx.fillStyle = 'rgba(10, 14, 24, 0.85)';
-    this.rr(ctx, barX, barY, barW, barH, 4);
-    ctx.fill();
+    drawToyPill(ctx, barX, barY, barW, barH, '#0f172a', {
+      rimColor: '#334155',
+      lineWidth: 1.4,
+      gloss: false,
+    });
 
-    ctx.fillStyle = hpRatio > 0.45 ? '#38b000' : hpRatio > 0.2 ? '#ffb703' : '#ff0054';
-    ctx.shadowColor = ctx.fillStyle;
-    ctx.shadowBlur = hpRatio < 0.25 ? 8 : 0;
-    this.rr(ctx, barX, barY, barW * hpRatio, barH, 4);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    if (barW * hpRatio >= 6) {
+      drawToyPill(ctx, barX, barY, barW * hpRatio, barH, hpCol, {
+        rimColor: toyRim(hpCol, 0.5),
+        lineWidth: 1.0,
+        gloss: true,
+      });
+    }
 
     // Wall Label & HP numbers
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.font = '800 10px Outfit, sans-serif';
+    ctx.save();
+    ctx.font = "700 10.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`FORTRESS WALL: ${Math.ceil(this.wallHp)} / ${this.maxWallHp} HP`, W / 2, barY - 8);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3.0;
+    const wallLabel = `FORTRESS WALL: ${Math.ceil(this.wallHp)} / ${this.maxWallHp} HP`;
+    ctx.strokeText(wallLabel, W / 2, barY - 10);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText(wallLabel, W / 2, barY - 10);
+    ctx.restore();
   }
 
   drawTurret(ctx) {
@@ -1545,7 +1694,7 @@ export class ZombieFortress extends Game {
     if (isMain && this.isManualAim) {
       ctx.save();
       ctx.strokeStyle = 'rgba(0, 245, 212, 0.45)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.6;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
       ctx.moveTo(0, 0);
@@ -1555,55 +1704,63 @@ export class ZombieFortress extends Game {
 
       const rx = Math.cos(a) * 220;
       const ry = Math.sin(a) * 220;
-      ctx.strokeStyle = 'rgba(0, 245, 212, 0.6)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0, 245, 212, 0.7)';
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.arc(rx, ry, 7, 0, TAU);
       ctx.stroke();
       ctx.restore();
     }
 
-    // Turret Base / Heavy Swivel Mount
+    // Grounding Shadow & 3D Swivel Turret Base
     const baseRadius = isMain ? 22 : 16;
-    ctx.fillStyle = '#111726';
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = g.color;
-    ctx.lineWidth = isMain ? 2.5 : 1.8;
-    ctx.stroke();
+    drawToyShadow(ctx, 0, 10, baseRadius + 4, baseRadius * 0.48, 0.3);
+    drawToySphere(ctx, 0, 0, baseRadius, '#334155', {
+      rimColor: g.color,
+      lineWidth: isMain ? 2.4 : 1.8,
+      shine: 0.45,
+    });
 
-    // Rotating gun barrels towards aim
+    // Rotating 3D gun barrels towards aim
     ctx.save();
     ctx.rotate(a);
     const recoilOffset = (recoil > 0) ? -recoil : 0;
-    ctx.fillStyle = '#2b2d42';
+
+    const drawBarrel = (bx, by, bw, bh, tipCol) => {
+      const bg = ctx.createLinearGradient(0, by, 0, by + bh);
+      bg.addColorStop(0, '#94a3b8');
+      bg.addColorStop(0.4, '#475569');
+      bg.addColorStop(1, '#1e293b');
+      ctx.fillStyle = bg;
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 1.1;
+      traceRoundRect(ctx, bx, by, bw, bh, bh * 0.42);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glossy colored muzzle tip
+      drawToyPill(ctx, bx + bw - 6.5, by, 7, bh, tipCol, {
+        rimColor: toyRim(tipCol, 0.52),
+        lineWidth: 0.9,
+        gloss: true,
+      });
+    };
 
     if (isMain) {
       if (this.multiShotLevel === 1) {
-        ctx.fillRect(recoilOffset, -4, 30, 8);
-        ctx.fillStyle = '#4cc9f0';
-        ctx.fillRect(recoilOffset + 24, -3, 6, 6);
+        drawBarrel(recoilOffset, -4, 30, 8, '#4cc9f0');
       } else if (this.multiShotLevel === 2) {
-        ctx.fillRect(recoilOffset, -9, 30, 6);
-        ctx.fillRect(recoilOffset, 3, 30, 6);
-        ctx.fillStyle = '#4cc9f0';
-        ctx.fillRect(recoilOffset + 24, -9, 6, 6);
-        ctx.fillRect(recoilOffset + 24, 3, 6, 6);
+        drawBarrel(recoilOffset, -9, 30, 6, '#4cc9f0');
+        drawBarrel(recoilOffset, 3, 30, 6, '#4cc9f0');
       } else {
-        ctx.fillRect(recoilOffset, -11, 28, 5);
-        ctx.fillRect(recoilOffset, -2.5, 32, 5);
-        ctx.fillRect(recoilOffset, 6, 28, 5);
-        ctx.fillStyle = '#ff0054';
-        ctx.fillRect(recoilOffset + 24, -2.5, 8, 5);
+        drawBarrel(recoilOffset, -11, 28, 5, '#4cc9f0');
+        drawBarrel(recoilOffset, -2.5, 32, 5, '#ff0054');
+        drawBarrel(recoilOffset, 6, 28, 5, '#4cc9f0');
       }
     } else {
       // Compact dual sentry barrel for auxiliary guns
-      ctx.fillRect(recoilOffset, -6, 22, 4);
-      ctx.fillRect(recoilOffset, 2, 22, 4);
-      ctx.fillStyle = g.color;
-      ctx.fillRect(recoilOffset + 18, -6, 4, 4);
-      ctx.fillRect(recoilOffset + 18, 2, 4, 4);
+      drawBarrel(recoilOffset, -6, 22, 4.5, g.color);
+      drawBarrel(recoilOffset, 1.5, 22, 4.5, g.color);
     }
     ctx.restore();
 
@@ -1617,7 +1774,7 @@ export class ZombieFortress extends Game {
       walkT: this.time * 2,
       squash: (recoil > 0) ? 0.88 : 1,
       dir: (Math.cos(a) < 0) ? -1 : 1,
-      eyes: isMain ? 'happy' : 'focused',
+      eyes: isMain ? 'happy' : 'bright',
       hat: g.hat || 'none',
     });
 
@@ -1628,43 +1785,62 @@ export class ZombieFortress extends Game {
   drawTopHUD(ctx, W) {
     ctx.save();
 
-    // Wave Badge (Top Left)
-    ctx.fillStyle = 'rgba(12, 16, 32, 0.9)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 1;
-    this.rr(ctx, 14, 106, 120, 34, 10);
-    ctx.fill();
-    ctx.stroke();
+    // Wave Badge (Top Left) — 3D Beveled Toy Card
+    drawToyBevelRect(ctx, 14, 106, 120, 34, 11, '#0f172a', {
+      depth: 3,
+      rimColor: '#334155',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
-    ctx.fillStyle = '#ff0054';
-    ctx.font = '900 13px Outfit, sans-serif';
+    ctx.font = "700 13.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.6;
+    ctx.strokeText(`WAVE ${this.wave}`, 74, 123);
+    ctx.fillStyle = '#ff4d6d';
     ctx.fillText(`WAVE ${this.wave}`, 74, 123);
 
-    // Gold Counter Badge (Top Right)
-    ctx.fillStyle = 'rgba(12, 16, 32, 0.9)';
-    this.rr(ctx, W - 120, 106, 106, 34, 10);
-    ctx.fill();
-    ctx.stroke();
+    // Gold Counter Badge (Top Right) — 3D Beveled Toy Card
+    drawToyBevelRect(ctx, W - 120, 106, 106, 34, 11, '#0f172a', {
+      depth: 3,
+      rimColor: '#334155',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
+    ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
+    ctx.strokeText(`🪙 ${this.gold}`, W - 67, 123);
     ctx.fillStyle = '#ffd166';
-    ctx.font = '900 14px Outfit, sans-serif';
     ctx.fillText(`🪙 ${this.gold}`, W - 67, 123);
 
-    // Wave Progress Bar (under badges)
+    // Wave Progress Pill Meter (under badges)
     if (this.waveActive && this.waveTotalEnemies > 0) {
       const remaining = this.zombies.length + this.waveEnemiesLeft;
-      const progress = 1 - (remaining / this.waveTotalEnemies);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-      ctx.fillRect(W / 2 - 80, 148, 160, 4);
-      ctx.fillStyle = '#00f5d4';
-      ctx.fillRect(W / 2 - 80, 148, 160 * progress, 4);
+      const progress = clamp(1 - (remaining / this.waveTotalEnemies), 0, 1);
+      drawToyPill(ctx, W / 2 - 80, 148, 160, 6, '#0f172a', {
+        rimColor: '#334155',
+        lineWidth: 1.0,
+        gloss: false,
+      });
+      if (160 * progress >= 5) {
+        drawToyPill(ctx, W / 2 - 80, 148, 160 * progress, 6, '#00f5d4', {
+          rimColor: '#0d9488',
+          lineWidth: 0.7,
+          gloss: true,
+        });
+      }
     } else if (!this.waveActive) {
-      ctx.fillStyle = '#ffd166';
-      ctx.font = '900 11px Outfit, sans-serif';
+      ctx.font = "700 11.5px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(`NEXT WAVE IN ${Math.max(0, Math.ceil(this.waveBreakTimer))}s...`, W / 2, 150);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.8;
+      const msg = `NEXT WAVE IN ${Math.max(0, Math.ceil(this.waveBreakTimer))}s...`;
+      ctx.strokeText(msg, W / 2, 151);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(msg, W / 2, 151);
     }
 
     ctx.restore();
@@ -1673,18 +1849,18 @@ export class ZombieFortress extends Game {
   drawUpgradeDrawer(ctx, W) {
     ctx.save();
 
-    // Bottom Upgrade Dock Panel
-    ctx.fillStyle = 'rgba(11, 15, 26, 0.95)';
+    // Bottom 3D Upgrade Dock Panel
+    const dg = ctx.createLinearGradient(0, 610, 0, 694);
+    dg.addColorStop(0, '#162033');
+    dg.addColorStop(1, '#0b101d');
+    ctx.fillStyle = dg;
     ctx.fillRect(0, 610, W, 84);
 
-    // Divider Line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, 610); ctx.lineTo(W, 610);
-    ctx.stroke();
+    // Top studio rim highlight line
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.fillRect(0, 610, W, 1.5);
 
-    // Render the 5 Upgrade Buttons
+    // Render the 5 Tactile 3D Beveled Upgrade Buttons
     for (const btn of this.upgradeButtons) {
       const canAfford = this.canUpgrade(btn.id);
       const cost = this.getUpgradeCost(btn.id);
@@ -1697,52 +1873,34 @@ export class ZombieFortress extends Game {
       else if (btn.id === 'multi') lvlStr = (this.multiShotLevel >= 5) ? 'MAX' : `Lv.${this.multiShotLevel}`;
       else if (btn.id === 'wall') lvlStr = `Lv.${this.wallLevel}`;
 
-      // Button Chassis
-      ctx.fillStyle = canAfford ? '#1b2838' : '#10141e';
-      this.rr(ctx, btn.x, btn.y, btn.w, btn.h, 10);
-      ctx.fill();
-
-      // Border: Pulsing neon green if affordable
-      if (canAfford) {
-        ctx.strokeStyle = '#00f5d4';
-        ctx.lineWidth = 2;
-        ctx.shadowColor = '#00f5d4';
-        ctx.shadowBlur = 6;
-      } else {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        ctx.shadowBlur = 0;
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      drawToyBevelRect(ctx, btn.x, btn.y, btn.w, btn.h - 2, 11, canAfford ? '#253549' : '#131a29', {
+        depth: canAfford ? 3.5 : 1.5,
+        rimColor: canAfford ? '#00f5d4' : '#334155',
+        lineWidth: canAfford ? 1.9 : 1.1,
+        gloss: canAfford,
+      });
 
       // Label & Level
       ctx.fillStyle = canAfford ? '#ffffff' : 'rgba(255, 255, 255, 0.5)';
-      ctx.font = '900 12px Outfit, sans-serif';
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 8);
 
-      ctx.fillStyle = '#4cc9f0';
-      ctx.font = '800 10px Outfit, sans-serif';
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(lvlStr, btn.x + btn.w / 2, btn.y + 24);
 
       // Cost in Gold
-      ctx.fillStyle = canAfford ? '#ffd166' : 'rgba(255, 209, 102, 0.4)';
-      ctx.font = '900 11px Outfit, sans-serif';
-      ctx.fillText(isMax ? 'MAXED' : `🪙 ${cost}`, btn.x + btn.w / 2, btn.y + 44);
+      ctx.fillStyle = canAfford ? '#ffd166' : 'rgba(255, 209, 102, 0.42)';
+      ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+      ctx.fillText(isMax ? 'MAXED' : `🪙 ${cost}`, btn.x + btn.w / 2, btn.y + 42);
     }
 
     ctx.restore();
   }
 
   rr(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    traceRoundRect(ctx, x, y, w, h, r);
   }
 }

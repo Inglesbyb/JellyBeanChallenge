@@ -1,7 +1,6 @@
 import { store } from './store.js';
 
-// Lightweight particle / ring / floating-text effects layer.
-// Renders in whatever coordinate space the caller has active.
+// Glossy Toy FX Layer (particles with specular shine, glowing rings, bold rounded floating numbers).
 const TAU = Math.PI * 2;
 
 export class FX {
@@ -15,7 +14,7 @@ export class FX {
   }
 
   burst(x, y, color, n = 12, speed = 160, life = 0.6, size = 3, grav = 0) {
-    if (this.parts.length > 180) return; // Drop excessive particles to keep 60 FPS
+    if (this.parts.length > 180) return;
     const count = Math.min(n, 20);
     for (let i = 0; i < count; i++) {
       const a = Math.random() * TAU;
@@ -25,7 +24,7 @@ export class FX {
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s,
         life, max: life,
-        size: size * (0.6 + Math.random() * 0.8),
+        size: size * (0.65 + Math.random() * 0.75),
         color, grav,
       });
     }
@@ -37,8 +36,7 @@ export class FX {
   }
 
   text(x, y, str, color = '#fff', size = 22, life = 0.65) {
-    // Smart merge: if adding a numeric "+pts" near an existing one, combine them cleanly
-    const existing = this.texts.find(t => Math.hypot(t.x - x, t.y - y) < 60);
+    const existing = this.texts.find((t) => Math.hypot(t.x - x, t.y - y) < 60);
     if (existing) {
       if (str.startsWith('+') && existing.str.startsWith('+')) {
         const v1 = parseInt(existing.str.replace(/\D/g, ''), 10) || 0;
@@ -51,11 +49,9 @@ export class FX {
           return;
         }
       }
-      // Nudge slightly up to avoid direct overlap
       y = existing.y - 26;
     }
 
-    // Keep active text count low to prevent jitter and screen crowding
     if (this.texts.length >= 6) {
       this.texts.shift();
     }
@@ -63,7 +59,6 @@ export class FX {
   }
 
   shake(mag = 6, t = 0.22) {
-    // Prevent cumulative violent shaking
     this.shakeMag = Math.min(8, Math.max(this.shakeMag, mag));
     this.shakeT = Math.min(0.25, Math.max(this.shakeT, t));
     this.shakeDur = Math.max(this.shakeDur, this.shakeT);
@@ -103,15 +98,24 @@ export class FX {
     }
   }
 
-  // scale = camera zoom, so lines & text keep a constant on-screen size
   render(ctx, scale = 1) {
     const k = 1 / scale;
     for (const p of this.parts) {
-      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      const a = Math.max(0, p.life / p.max);
+      const pr = p.size * k * (0.45 + 0.55 * a);
+      ctx.globalAlpha = a;
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * k, 0, TAU);
+      ctx.arc(p.x, p.y, pr, 0, TAU);
       ctx.fill();
+
+      // Tiny glossy droplet shine
+      if (pr >= 1.8) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.beginPath();
+        ctx.arc(p.x - pr * 0.28, p.y - pr * 0.28, pr * 0.34, 0, TAU);
+        ctx.fill();
+      }
     }
     for (const r of this.rings) {
       const t = 1 - r.life / r.max;
@@ -125,13 +129,14 @@ export class FX {
     if (this.texts.length > 0) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
       for (const t of this.texts) {
         const a = t.life / t.max;
         ctx.globalAlpha = Math.min(1, a * 2.2);
-        const pop = 1 + Math.max(0, a - 0.8) * 0.8;
-        ctx.font = `900 ${Math.round(t.size * k * pop)}px Outfit, system-ui, sans-serif`;
-        ctx.lineWidth = 4 * k;
-        ctx.strokeStyle = '#000000';
+        const pop = 1 + Math.max(0, a - 0.8) * 0.75;
+        ctx.font = `700 ${Math.round(t.size * k * pop)}px 'Fredoka', 'Outfit', system-ui, sans-serif`;
+        ctx.lineWidth = Math.min(4.2, Math.max(2.2, t.size * 0.16)) * k;
+        ctx.strokeStyle = '#0f172a';
         ctx.strokeText(t.str, t.x, t.y);
         ctx.fillStyle = t.color;
         ctx.fillText(t.str, t.x, t.y);

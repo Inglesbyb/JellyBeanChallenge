@@ -1,5 +1,16 @@
-// Persistence: frozen game snapshots + run meta, saved to localStorage.
-const KEY = 'GAME_REELS_V2';
+// Persistence: frozen game snapshots, normalized RP progression, World 1 map & quests saved to localStorage.
+import {
+  GAME_PACKS,
+  WORLD_1_NODES,
+  WORLD_1_CHESTS,
+  QUEST_POOL,
+  getPackForGame,
+  getWorldNodeById,
+  getStarsForScore,
+} from '../games/registry.js';
+
+const KEY = 'GAME_REELS_V3';
+const LEGACY_KEY = 'GAME_REELS_V2';
 
 export const RANKS = [
   { min: 0, title: 'Sprout Bean', icon: '🌱', next: 25000 },
@@ -30,9 +41,10 @@ const freshMeta = () => ({
   index: 0,
   global: 0,
   cycleBase: 0,
-  results: new Array(32).fill(null),
+  results: {}, // gameId -> 'survived' | 'eliminated'
   eliminated: {}, // gameId -> boolean
-  prestige: {}, // gameId -> completed-run rank (absent = 1). Wiped on every new run.
+  prestige: {}, // gameId -> current prestige rank (absent = 1). Wiped on every new run.
+  seenInRun: {}, // gameId -> true after first play in the current run. Wiped on every new run.
 });
 
 const defaultSettings = () => ({
@@ -63,10 +75,11 @@ export const HATS = [
   { id: 'party', name: 'Party Cone', icon: '🎉', unlockCost: 600000, desc: 'Confetti jubilee celebration' },
 ];
 
+// Calibrated to the normalized 10-stage Reel Points economy (~16,100 RP avg for full clear)
 export const DAILY_MEDALS = [
-  { id: 'gold', name: 'Gold Medal', icon: '🥇', minScore: 60000, desc: 'Apex Gauntlet Master' },
-  { id: 'silver', name: 'Silver Medal', icon: '🥈', minScore: 35000, desc: 'Veteran Gauntlet Runner' },
-  { id: 'bronze', name: 'Bronze Medal', icon: '🥉', minScore: 15000, desc: 'Proven Challenger' },
+  { id: 'gold', name: 'Gold Medal', icon: '🥇', minScore: 20000, desc: 'Apex Gauntlet Master' },
+  { id: 'silver', name: 'Silver Medal', icon: '🥈', minScore: 15000, desc: 'Veteran Gauntlet Runner' },
+  { id: 'bronze', name: 'Bronze Medal', icon: '🥉', minScore: 10000, desc: 'Proven Challenger' },
 ];
 
 export function getDailyMedal(score = 0) {
@@ -88,7 +101,7 @@ export function getDailySeed(dateStr = getUtcDayKey()) {
   return h >>> 0;
 }
 
-export function getDailyGameIndices(totalGames = 20, count = 10, dateStr = getUtcDayKey()) {
+export function getDailyGameIndices(eligible = 20, count = 10, dateStr = getUtcDayKey()) {
   const seed = getDailySeed(dateStr);
   let s = seed;
   const rng = () => {
@@ -98,12 +111,15 @@ export function getDailyGameIndices(totalGames = 20, count = 10, dateStr = getUt
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 
-  const indices = Array.from({ length: totalGames }, (_, i) => i);
+  const indices = Array.isArray(eligible)
+    ? [...eligible]
+    : Array.from({ length: eligible }, (_, i) => i);
+
   for (let i = indices.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [indices[i], indices[j]] = [indices[j], indices[i]];
   }
-  return indices.slice(0, count);
+  return indices.slice(0, Math.min(count, indices.length));
 }
 
 const defaultCloset = () => ({
@@ -134,6 +150,73 @@ const defaultStats = () => ({
   gameHighScores: {},
 });
 
+const defaultProgression = () => ({
+  unlockedPacks: ['starter'],
+  revealedPacks: ['starter'],
+});
+
+const defaultQuests = () => ({
+  setIndex: 1,
+  multiplier: 1.0,
+  active: [
+    { id: 'survive_reels', progress: 0, claimed: false },
+    { id: 'prestige_up', progress: 0, claimed: false },
+    { id: 'score_run', progress: 0, claimed: false },
+  ],
+});
+
+const defaultWorlds = () => ({
+  selectedWorldId: 'world-1',
+  selectedNodeId: '1-1',
+  nodes: {
+    '1-1': { unlocked: true, cleared: false, stars: 0, bestScore: 0 },
+  },
+  claimedChests: [],
+  world2Unlocked: false,
+});
+
+function normalizeWorldsState(raw) {
+  const base = defaultWorlds();
+  const w = { ...base, ...(raw || {}) };
+  w.nodes = { ...base.nodes, ...(raw?.nodes || {}) };
+  w.nodes['1-1'] = { unlocked: true, cleared: false, stars: 0, bestScore: 0, ...(w.nodes['1-1'] || {}) };
+  w.nodes['1-1'].unlocked = true;
+  // Ensure sequential node unlock integrity
+  for (let i = 1; i < WORLD_1_NODES.length; i++) {
+    const prev = WORLD_1_NODES[i - 1];
+    const cur = WORLD_1_NODES[i];
+    const existing = w.nodes[cur.id] || { unlocked: false, cleared: false, stars: 0, bestScore: 0 };
+    if (w.nodes[prev.id]?.cleared) {
+      existing.unlocked = true;
+    }
+    w.nodes[cur.id] = existing;
+  }
+  if (!Array.isArray(w.claimedChests)) w.claimedChests = [];
+  if (w.nodes['1-5']?.cleared) w.world2Unlocked = true;
+  if (!getWorldNodeById(w.selectedNodeId) || !w.nodes[w.selectedNodeId]?.unlocked) {
+    w.selectedNodeId = '1-1';
+  }
+  return w;
+}
+
+function normalizeQuestsState(raw) {
+  const base = defaultQuests();
+  const q = { ...base, ...(raw || {}) };
+  q.setIndex = Math.max(1, Number(q.setIndex) || 1);
+  q.multiplier = Math.min(2.0, Math.max(1.0, Number(q.multiplier) || 1.0));
+  if (!Array.isArray(q.active) || q.active.length !== 3) {
+    q.active = base.active;
+  } else {
+    q.active = q.active.map((slot, i) => {
+      const valid = QUEST_POOL.some((t) => t.id === slot?.id);
+      return valid
+        ? { id: slot.id, progress: Math.max(0, Number(slot.progress) || 0), claimed: !!slot.claimed }
+        : base.active[i];
+    });
+  }
+  return q;
+}
+
 export const store = {
   data: {
     started: false,
@@ -145,9 +228,13 @@ export const store = {
     stats: defaultStats(),
     closet: defaultCloset(),
     daily: defaultDaily(),
+    progression: defaultProgression(),
+    worlds: defaultWorlds(),
+    quests: defaultQuests(),
   },
 
   load() {
+    if (typeof localStorage === 'undefined') return;
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
@@ -160,22 +247,34 @@ export const store = {
         if (!meta.prestige || typeof meta.prestige !== 'object') {
           meta.prestige = {};
         }
-        if (Array.isArray(meta.results) && meta.results.length < fresh.results.length) {
-          while (meta.results.length < fresh.results.length) {
-            meta.results.push(null);
-          }
+        if (!meta.seenInRun || typeof meta.seenInRun !== 'object') {
+          meta.seenInRun = {};
         }
+        if (!meta.results || Array.isArray(meta.results) || typeof meta.results !== 'object') {
+          meta.results = {};
+        }
+
         const settings = { ...defaultSettings(), ...(p.settings || {}) };
         const profile = { ...defaultProfile(), ...(p.profile || {}) };
         const stats = { ...defaultStats(), ...(p.stats || {}) };
         const closet = { ...defaultCloset(), ...(p.closet || {}) };
         const daily = { ...defaultDaily(), ...(p.daily || {}) };
+        const progression = { ...defaultProgression(), ...(p.progression || {}) };
+        if (!Array.isArray(progression.unlockedPacks) || !progression.unlockedPacks.includes('starter')) {
+          progression.unlockedPacks = ['starter', ...(Array.isArray(progression.unlockedPacks) ? progression.unlockedPacks : [])];
+        }
+        if (!Array.isArray(progression.revealedPacks) || !progression.revealedPacks.includes('starter')) {
+          progression.revealedPacks = ['starter', ...(Array.isArray(progression.revealedPacks) ? progression.revealedPacks : [])];
+        }
         if (!stats.gameHighScores || typeof stats.gameHighScores !== 'object') {
           stats.gameHighScores = {};
         }
         if (!daily.history || typeof daily.history !== 'object') {
           daily.history = {};
         }
+        const worlds = normalizeWorldsState(p.worlds);
+        const quests = normalizeQuestsState(p.quests);
+
         this.data = {
           started: !!p.started,
           meta,
@@ -186,7 +285,33 @@ export const store = {
           stats,
           closet,
           daily,
+          progression,
+          worlds,
+          quests,
         };
+        this.checkPackUnlocks();
+        return;
+      }
+
+      // Migrate non-economy preferences from legacy V2 save so existing players keep their name, avatar, settings & likes
+      const legacyRaw = localStorage.getItem(LEGACY_KEY);
+      if (legacyRaw) {
+        const lp = JSON.parse(legacyRaw);
+        this.data = {
+          started: false,
+          meta: freshMeta(),
+          games: {},
+          likes: lp.likes || {},
+          settings: { ...defaultSettings(), ...(lp.settings || {}) },
+          profile: { ...defaultProfile(), ...(lp.profile || {}) },
+          stats: defaultStats(),
+          closet: defaultCloset(),
+          daily: defaultDaily(),
+          progression: defaultProgression(),
+          worlds: defaultWorlds(),
+          quests: defaultQuests(),
+        };
+        this.save();
       }
     } catch (e) {
       console.warn('store load failed', e);
@@ -194,6 +319,7 @@ export const store = {
   },
 
   save() {
+    if (typeof localStorage === 'undefined') return;
     try {
       localStorage.setItem(KEY, JSON.stringify(this.data));
     } catch (e) {
@@ -203,6 +329,11 @@ export const store = {
 
   get meta() {
     return this.data.meta;
+  },
+
+  get progression() {
+    if (!this.data.progression) this.data.progression = defaultProgression();
+    return this.data.progression;
   },
 
   hasSession() {
@@ -234,25 +365,146 @@ export const store = {
     this.save();
   },
 
-  // Prestige rank for a game in this run (1 = never completed).
-  getPrestige(id) {
-    return this.data.meta.prestige?.[id] || 1;
+  hasSeenInRun(id) {
+    return !!this.data.meta.seenInRun?.[id];
   },
 
-  // Mark a game as COMPLETED: it stays in rotation, but its frozen (maxed-out)
-  // board is discarded and it restarts at the next prestige rank. Returns the new rank.
-  promote(id) {
+  markSeenInRun(id) {
+    if (!this.data.meta.seenInRun) this.data.meta.seenInRun = {};
+    if (!this.data.meta.seenInRun[id]) {
+      this.data.meta.seenInRun[id] = true;
+      this.save();
+    }
+  },
+
+  getPrestige(id) {
+    return Math.max(1, this.data.meta.prestige?.[id] || 1);
+  },
+
+  promote(id, { clearState = false } = {}) {
     if (!this.data.meta.prestige) this.data.meta.prestige = {};
     const next = this.getPrestige(id) + 1;
     this.data.meta.prestige[id] = next;
-    delete this.data.games[id];
+    if (clearState) {
+      delete this.data.games[id];
+    }
     this.save();
     return next;
   },
 
-  // How many distinct games have been completed at least once this run.
   clearedCount() {
     return Object.values(this.data.meta.prestige || {}).filter((v) => v > 1).length;
+  },
+
+  /* ----------------------------------------------------------- Pack Progression */
+  isPackUnlocked(packId) {
+    return this.progression.unlockedPacks.includes(packId);
+  },
+
+  isPackRevealed(packId) {
+    return this.progression.revealedPacks.includes(packId);
+  },
+
+  isGameUnlocked(gameId) {
+    const pack = getPackForGame(gameId);
+    return !!pack && !pack.comingSoon && this.isPackUnlocked(pack.id);
+  },
+
+  getUnlockedGameIds() {
+    const ids = [];
+    for (const pack of GAME_PACKS) {
+      if (!pack.comingSoon && this.isPackUnlocked(pack.id)) {
+        ids.push(...pack.gameIds);
+      }
+    }
+    return ids;
+  },
+
+  getTotalPlayableGameCount() {
+    return GAME_PACKS.reduce((sum, p) => sum + (p.comingSoon ? 0 : p.gameIds.length), 0);
+  },
+
+  getStatValue(type) {
+    const s = this.stats;
+    if (type === 'timersSurvived') return s.timersSurvived || 0;
+    if (type === 'stagesCleared') return s.stagesCleared || 0;
+    if (type === 'maxCycle') return s.maxCycle || 1;
+    return s.lifetimeScore || 0;
+  },
+
+  getPackProgress(pack) {
+    const unlocked = !pack.comingSoon && this.isPackUnlocked(pack.id);
+    const req = pack.unlockRequirement;
+    if (!req) {
+      return { current: 1, target: 1, pct: 1, remaining: 0, unlocked: true, comingSoon: false };
+    }
+    const current = this.getStatValue(req.type);
+    const target = Math.max(1, req.target);
+    const pct = unlocked ? 1 : Math.min(1, Math.max(0, current / target));
+    const remaining = unlocked ? 0 : Math.max(0, target - current);
+    return { current, target, pct, remaining, unlocked, comingSoon: !!pack.comingSoon };
+  },
+
+  getNextLockedPack() {
+    return (
+      GAME_PACKS.find((p) => !p.comingSoon && !this.isPackUnlocked(p.id)) ||
+      GAME_PACKS.find((p) => p.comingSoon) ||
+      null
+    );
+  },
+
+  getPendingRevealPacks() {
+    return GAME_PACKS.filter(
+      (p) => !p.comingSoon && this.isPackUnlocked(p.id) && !this.isPackRevealed(p.id)
+    );
+  },
+
+  checkPackUnlocks() {
+    const newlyUnlocked = [];
+    for (const pack of GAME_PACKS) {
+      if (pack.comingSoon || this.isPackUnlocked(pack.id)) continue;
+      const req = pack.unlockRequirement;
+      if (!req || this.getStatValue(req.type) >= req.target) {
+        this.progression.unlockedPacks.push(pack.id);
+        newlyUnlocked.push(pack);
+      }
+    }
+    if (newlyUnlocked.length > 0) this.save();
+    return newlyUnlocked;
+  },
+
+  markPackRevealed(packId) {
+    if (!this.progression.revealedPacks.includes(packId)) {
+      this.progression.revealedPacks.push(packId);
+      this.save();
+    }
+  },
+
+  adminUnlockAllPacks() {
+    for (const p of GAME_PACKS) {
+      if (p.comingSoon) continue;
+      if (!this.progression.unlockedPacks.includes(p.id)) this.progression.unlockedPacks.push(p.id);
+      if (!this.progression.revealedPacks.includes(p.id)) this.progression.revealedPacks.push(p.id);
+    }
+    this.save();
+  },
+
+  adminResetPacks() {
+    this.progression.unlockedPacks = ['starter'];
+    this.progression.revealedPacks = ['starter'];
+    this.save();
+  },
+
+  adminAddRP(delta = 10000) {
+    this.stats.lifetimeScore = Math.max(0, (this.stats.lifetimeScore || 0) + delta);
+    const newly = this.checkPackUnlocks();
+    this.save();
+    return newly;
+  },
+
+  adminReviveAll() {
+    this.data.meta.eliminated = {};
+    this.save();
   },
 
   get settings() {
@@ -297,28 +549,36 @@ export const store = {
     this.save();
   },
 
-  recordRoundSurvive(gameId, score) {
+  recordRoundSurvive(gameId, rawScore, netRP) {
     const stats = this.stats;
     stats.timersSurvived = (stats.timersSurvived || 0) + 1;
-    stats.lifetimeScore = (stats.lifetimeScore || 0) + Math.max(0, Math.round(score || 0));
+    stats.lifetimeScore = (stats.lifetimeScore || 0) + Math.max(0, Math.round(netRP || 0));
     if (!stats.gameHighScores) stats.gameHighScores = {};
-    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(score || 0));
+    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(rawScore || 0));
     this.save();
   },
 
-  recordGameScore(gameId, score) {
+  recordRoundDeath(gameId, rawScore, netRP = 0) {
+    const stats = this.stats;
+    stats.lifetimeScore = (stats.lifetimeScore || 0) + Math.max(0, Math.round(netRP || 0));
+    if (!stats.gameHighScores) stats.gameHighScores = {};
+    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(rawScore || 0));
+    this.save();
+  },
+
+  recordGameScore(gameId, rawScore) {
     const stats = this.stats;
     if (!stats.gameHighScores) stats.gameHighScores = {};
-    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(score || 0));
+    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(rawScore || 0));
     this.save();
   },
 
-  recordStageVictory(gameId, score, bonus) {
+  recordStageVictory(gameId, rawScore, netRP) {
     const stats = this.stats;
     stats.stagesCleared = (stats.stagesCleared || 0) + 1;
-    stats.lifetimeScore = (stats.lifetimeScore || 0) + Math.max(0, Math.round(bonus || 0));
+    stats.lifetimeScore = (stats.lifetimeScore || 0) + Math.max(0, Math.round(netRP || 0));
     if (!stats.gameHighScores) stats.gameHighScores = {};
-    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(score || 0));
+    stats.gameHighScores[gameId] = Math.max(stats.gameHighScores[gameId] || 0, Math.round(rawScore || 0));
     this.save();
   },
 
@@ -373,8 +633,6 @@ export const store = {
   recordDailyResult(score) {
     const today = getUtcDayKey();
     const daily = this.daily;
-    const medalObj = getDailyMedal(score);
-
     const existing = daily.history[today];
     const bestScore = existing ? Math.max(existing.score, Math.round(score)) : Math.round(score);
     const bestMedalObj = getDailyMedal(bestScore);
@@ -396,7 +654,7 @@ export const store = {
       timestamp: Date.now(),
     };
 
-    this.stats.lifetimeScore = (this.stats.lifetimeScore || 0) + Math.max(0, Math.round(score));
+    // Individual daily stages already credit netRP into lifetimeScore on survive/victory/death.
     this.save();
 
     return {
@@ -414,7 +672,10 @@ export const store = {
     const stats = this.data.stats || defaultStats();
     const closet = this.data.closet || defaultCloset();
     const daily = this.data.daily || defaultDaily();
-    this.data = { started: true, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily };
+    const progression = this.progression;
+    const worlds = this.worlds;
+    const quests = this.quests;
+    this.data = { started: true, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily, progression, worlds, quests };
     this.save();
   },
 
@@ -425,8 +686,233 @@ export const store = {
     const stats = this.data.stats || defaultStats();
     const closet = this.data.closet || defaultCloset();
     const daily = this.data.daily || defaultDaily();
-    this.data = { started: false, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily };
+    const progression = this.progression;
+    const worlds = this.worlds;
+    const quests = this.quests;
+    this.data = { started: false, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily, progression, worlds, quests };
     this.save();
+  },
+
+  /* ----------------------------------------------------------- World 1 Progression */
+  get worlds() {
+    if (!this.data.worlds) this.data.worlds = defaultWorlds();
+    return this.data.worlds;
+  },
+
+  isNodeUnlocked(nodeId) {
+    if (nodeId === '1-1') return true;
+    const w = this.worlds;
+    if (w.nodes?.[nodeId]?.unlocked) return true;
+    const idx = WORLD_1_NODES.findIndex((n) => n.id === nodeId);
+    if (idx > 0 && w.nodes?.[WORLD_1_NODES[idx - 1].id]?.cleared) return true;
+    return false;
+  },
+
+  getNodeState(nodeId) {
+    const raw = this.worlds.nodes?.[nodeId] || {};
+    return {
+      unlocked: this.isNodeUnlocked(nodeId),
+      cleared: !!raw.cleared,
+      stars: Math.min(3, Math.max(0, raw.stars || 0)),
+      bestScore: Math.max(0, raw.bestScore || 0),
+    };
+  },
+
+  selectWorldNode(nodeId) {
+    if (!this.isNodeUnlocked(nodeId)) return false;
+    this.worlds.selectedNodeId = nodeId;
+    this.save();
+    return true;
+  },
+
+  getWorld1Stars() {
+    return WORLD_1_NODES.reduce((sum, n) => sum + (this.getNodeState(n.id).stars || 0), 0);
+  },
+
+  getNextUnclaimedChest() {
+    const stars = this.getWorld1Stars();
+    const claimed = this.worlds.claimedChests || [];
+    for (const chest of WORLD_1_CHESTS) {
+      if (!claimed.includes(chest.id)) {
+        return { ...chest, stars, ready: stars >= chest.starsReq };
+      }
+    }
+    return null;
+  },
+
+  getClaimableChestCount() {
+    const stars = this.getWorld1Stars();
+    const claimed = this.worlds.claimedChests || [];
+    return WORLD_1_CHESTS.filter((c) => !claimed.includes(c.id) && stars >= c.starsReq).length;
+  },
+
+  isChestClaimed(chestId) {
+    return (this.worlds.claimedChests || []).includes(chestId);
+  },
+
+  claimStarChest(chestId) {
+    const chest = WORLD_1_CHESTS.find((c) => c.id === chestId);
+    if (!chest) return null;
+    if (this.isChestClaimed(chestId)) return null;
+    if (this.getWorld1Stars() < chest.starsReq) return null;
+
+    if (!Array.isArray(this.worlds.claimedChests)) this.worlds.claimedChests = [];
+    this.worlds.claimedChests.push(chest.id);
+    this.stats.lifetimeScore = (this.stats.lifetimeScore || 0) + (chest.rewardRP || 0);
+    const newlyUnlockedPacks = this.checkPackUnlocks();
+    this.save();
+    return { chest, newlyUnlockedPacks };
+  },
+
+  recordWorldRunResult(nodeId, rawRunScore = 0) {
+    const node = getWorldNodeById(nodeId);
+    const score = Math.max(0, Math.round(rawRunScore || 0));
+    const starsEarned = getStarsForScore(node, score);
+    const prev = this.getNodeState(node.id);
+    const prevCleared = !!prev.cleared;
+    const clearedNow = score >= node.clearScore;
+    const isFirstClear = clearedNow && !prevCleared;
+    const bonusRP = isFirstClear ? (node.firstClearBonusRP || 0) : 0;
+
+    if (!this.worlds.nodes) this.worlds.nodes = {};
+    this.worlds.nodes[node.id] = {
+      unlocked: true,
+      cleared: prevCleared || clearedNow,
+      stars: Math.max(prev.stars || 0, starsEarned),
+      bestScore: Math.max(prev.bestScore || 0, score),
+    };
+
+    let nextUnlockedNode = null;
+    let world2JustUnlocked = false;
+    if (clearedNow) {
+      const nextNode = WORLD_1_NODES[node.index + 1] || null;
+      if (nextNode) {
+        const hadNext = !!this.worlds.nodes[nextNode.id]?.unlocked;
+        const existingNext = this.worlds.nodes[nextNode.id] || { unlocked: true, cleared: false, stars: 0, bestScore: 0 };
+        this.worlds.nodes[nextNode.id] = { ...existingNext, unlocked: true };
+        if (!hadNext || isFirstClear) {
+          nextUnlockedNode = nextNode;
+          this.worlds.selectedNodeId = nextNode.id;
+        }
+      } else {
+        world2JustUnlocked = !this.worlds.world2Unlocked;
+        this.worlds.world2Unlocked = true;
+      }
+    }
+
+    if (bonusRP > 0) {
+      this.stats.lifetimeScore = (this.stats.lifetimeScore || 0) + bonusRP;
+    }
+
+    // Update Star Hunter quest if active
+    this.recordQuestProgress('world1Stars', this.getWorld1Stars());
+    const newlyUnlockedPacks = this.checkPackUnlocks();
+    this.save();
+
+    return {
+      node,
+      score,
+      starsEarned,
+      bestStars: this.worlds.nodes[node.id].stars,
+      clearedNow,
+      isFirstClear,
+      firstClearBonusRP: bonusRP,
+      nextUnlockedNode,
+      world2JustUnlocked,
+      newlyUnlockedPacks,
+    };
+  },
+
+  /* ----------------------------------------------------------- Quests & Multiplier */
+  get quests() {
+    if (!this.data.quests) this.data.quests = defaultQuests();
+    return this.data.quests;
+  },
+
+  getQuestMultiplier() {
+    return Math.min(2.0, Math.max(1.0, Number(this.quests.multiplier) || 1.0));
+  },
+
+  getActiveQuests() {
+    const active = this.quests.active || [];
+    const totalStars = this.getWorld1Stars();
+    return active.map((slot, idx) => {
+      const tpl = QUEST_POOL.find((t) => t.id === slot.id) || QUEST_POOL[idx % QUEST_POOL.length];
+      const progress = tpl.metric === 'world1Stars' ? Math.max(slot.progress || 0, totalStars) : (slot.progress || 0);
+      const capped = Math.min(tpl.target, progress);
+      return {
+        slotIndex: idx,
+        ...tpl,
+        progress: capped,
+        ready: !slot.claimed && capped >= tpl.target,
+        claimed: !!slot.claimed,
+      };
+    });
+  },
+
+  getClaimableQuestCount() {
+    return this.getActiveQuests().filter((q) => q.ready).length;
+  },
+
+  recordQuestProgress(metric, value = 1) {
+    const active = this.quests.active;
+    if (!Array.isArray(active)) return false;
+    let changed = false;
+    for (let i = 0; i < active.length; i++) {
+      const slot = active[i];
+      if (!slot || slot.claimed) continue;
+      const tpl = QUEST_POOL.find((t) => t.id === slot.id);
+      if (!tpl || tpl.metric !== metric) continue;
+
+      let nextVal = slot.progress || 0;
+      if (metric === 'timersSurvived' || metric === 'stagesCleared') {
+        nextVal = Math.min(tpl.target, nextVal + Math.max(0, value));
+      } else if (metric === 'prestige2' || metric === 'dailyPlayed') {
+        if (value >= 1) nextVal = Math.max(nextVal, metric === 'prestige2' ? (value >= 2 ? 1 : 0) : 1);
+      } else {
+        nextVal = Math.min(tpl.target, Math.max(nextVal, Math.round(value || 0)));
+      }
+      if (nextVal !== slot.progress) {
+        slot.progress = nextVal;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+    return changed;
+  },
+
+  claimQuest(slotIndex) {
+    const qList = this.getActiveQuests();
+    const item = qList[slotIndex];
+    if (!item || !item.ready || item.claimed) return null;
+
+    this.quests.active[slotIndex].claimed = true;
+    this.stats.lifetimeScore = (this.stats.lifetimeScore || 0) + (item.rewardRP || 0);
+
+    let setCompleted = false;
+    if (this.quests.active.every((s) => s.claimed)) {
+      setCompleted = true;
+      this.quests.setIndex = (this.quests.setIndex || 1) + 1;
+      this.quests.multiplier = Math.min(2.0, Math.round(((this.quests.multiplier || 1.0) + 0.1) * 10) / 10);
+      // Rotate next 3 quests cleanly from pool
+      const offset = ((this.quests.setIndex - 1) * 3) % QUEST_POOL.length;
+      const nextSlots = [];
+      for (let k = 0; k < 3; k++) {
+        const tpl = QUEST_POOL[(offset + k) % QUEST_POOL.length];
+        nextSlots.push({ id: tpl.id, progress: tpl.metric === 'world1Stars' ? this.getWorld1Stars() : 0, claimed: false });
+      }
+      this.quests.active = nextSlots;
+    }
+
+    const newlyUnlockedPacks = this.checkPackUnlocks();
+    this.save();
+    return {
+      quest: item,
+      rewardRP: item.rewardRP,
+      setCompleted,
+      multiplier: this.getQuestMultiplier(),
+      newlyUnlockedPacks,
+    };
   },
 
   likeCount(id, base) {

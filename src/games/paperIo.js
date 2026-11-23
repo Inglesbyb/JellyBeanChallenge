@@ -1,6 +1,14 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  toyRim,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 // Screen Viewport dimensions
 const W = 450;
@@ -88,8 +96,16 @@ export class PaperIo extends Game {
     id: 'paper-turf',
     title: 'Paper Turf',
     icon: '🗺️',
-    hint: 'EXPLORE the giant map! STEER with Arrows/WASD or DRAG! Check RADAR & TOP SCORES, slice enemy trails & conquer the world!',
+    hint: 'STEER with Arrows/WASD or DRAG · slice enemy trails & conquer the map!',
     baseLikes: 6420,
+    isPrestige: true,
+    parScore60s: 2100,
+    cue: 'CLAIM TERRITORY!',
+    prestigeCue: 'AGGRESSIVE HUNTER BOTS!',
+    scaling: {
+      botSpeedMult: { base: 1.0, rate: 0.16, cap: 1.32, mode: 'up', label: 'Bot Speed' },
+      hunterRatio:  { base: 0.0, rate: 0.22, cap: 0.75, mode: 'up', deltaFormat: 'abs', unit: '%', label: 'Hunter Bots' },
+    },
   };
 
   init(saved, score = 0) {
@@ -158,11 +174,16 @@ export class PaperIo extends Game {
       this.createEntity(20, 'Hyper Nitro',      1850, 3400, false, 'nibbler',       '#4cc9f0'),
     ];
 
-    // Prestige: roughly one extra bot in three turns into a trail-hunting predator per level.
-    if (this.pLevel > 1) {
+    // Prestige: progressively more bots become trail-hunting predators.
+    const hunterShare = this.diff.hunterRatio || 0;
+    if (hunterShare > 0) {
+      const convertCap = Math.round(this.bots.length * hunterShare);
+      let converted = 0;
       for (const b of this.bots) {
-        if (b.personality !== 'hunter' && (b.id % 3) < Math.min(3, this.pLevel - 1)) {
+        if (converted >= convertCap) break;
+        if (b.personality !== 'hunter') {
           b.personality = 'hunter';
+          converted++;
         }
       }
     }
@@ -223,8 +244,8 @@ export class PaperIo extends Game {
       maxTrail = 28;
     }
 
-    // Prestige: bots (never the human) get +5% speed per level.
-    if (!isHuman) speed *= 1 + 0.05 * ((this.pLevel || 1) - 1);
+    // Prestige: bots (never the human) scale smoothly up to cap.
+    if (!isHuman) speed *= (this.diff.botSpeedMult ?? 1);
 
     return {
       id,
@@ -1082,18 +1103,14 @@ export class PaperIo extends Game {
     }
     ctx.globalAlpha = 1;
 
-    // 5. Active Player & Bot Trails (Glowing Neon Ribbons)
+    // 5. Active Player & Bot Trails (3D Glossy Vinyl Toy Ribbons)
     for (const e of this.allEntities) {
       if (!e.alive || e.trail.length < 2) continue;
       const pal = PALETTES[e.id];
 
       ctx.save();
-      ctx.strokeStyle = pal.trail;
-      ctx.lineWidth = 8;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.shadowColor = pal.glow;
-      ctx.shadowBlur = 12;
 
       ctx.beginPath();
       ctx.moveTo(e.trail[0].x, e.trail[0].y);
@@ -1101,22 +1118,37 @@ export class PaperIo extends Game {
         ctx.lineTo(e.trail[i].x, e.trail[i].y);
       }
       ctx.lineTo(e.x, e.y);
+
+      // Tinted soft rim beneath ribbon
+      ctx.strokeStyle = toyRim(pal.main, 0.56);
+      ctx.lineWidth = 10.5;
       ctx.stroke();
 
-      // Inner white neon core
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
-      ctx.shadowBlur = 0;
+      // Saturated vinyl ribbon body
+      ctx.strokeStyle = pal.trail;
+      ctx.lineWidth = 7.5;
+      ctx.stroke();
+
+      // Glossy top specular core
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+      ctx.lineWidth = 2.4;
       ctx.stroke();
       ctx.restore();
     }
 
-    // 6. Giant Arena Perimeter Barrier Rails (Neon boundary)
+    // 6. Giant Arena Perimeter Barrier Rails (3D Toy Bumper Frame)
     ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = toyRim('#ff007f', 0.62);
+    ctx.lineWidth = 11;
+    ctx.strokeRect(CELL, CELL, WORLD_W - CELL * 2, WORLD_H - CELL * 2);
+
     ctx.strokeStyle = '#ff007f';
-    ctx.lineWidth = 8;
-    ctx.shadowColor = '#ff007f';
-    ctx.shadowBlur = 18;
+    ctx.lineWidth = 6.5;
+    ctx.strokeRect(CELL, CELL, WORLD_W - CELL * 2, WORLD_H - CELL * 2);
+
+    ctx.strokeStyle = 'rgba(255, 224, 242, 0.7)';
+    ctx.lineWidth = 2;
     ctx.strokeRect(CELL, CELL, WORLD_W - CELL * 2, WORLD_H - CELL * 2);
     ctx.restore();
 
@@ -1148,11 +1180,16 @@ export class PaperIo extends Game {
     ctx.save();
     ctx.translate(e.x, e.y);
 
-    // Glow under entity
-    ctx.fillStyle = pal.trail;
-    ctx.globalAlpha = 0.38;
+    // Soft grounding shadow & radiant territory glow
+    drawToyShadow(ctx, 0, 16, 17, 6.5, 0.28);
+
+    const aura = ctx.createRadialGradient(0, 0, 4, 0, 0, 24);
+    aura.addColorStop(0, pal.trail);
+    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = aura;
     ctx.beginPath();
-    ctx.arc(0, 0, 22, 0, TAU);
+    ctx.arc(0, 0, 24, 0, TAU);
     ctx.fill();
     ctx.globalAlpha = 1;
 
@@ -1178,41 +1215,52 @@ export class PaperIo extends Game {
       dir: Math.cos(e.angle) >= 0 ? 1 : -1,
       walkT: this.t * 8,
       squash: e.boost ? 0.85 : 1.0,
-      eyes: e.mood === 'hunting' ? 'angry' : e.mood === 'panicking' ? 'shocked' : 'happy',
+      eyes: e.mood === 'hunting' ? 'angry' : e.mood === 'panicking' ? 'alert' : 'happy',
       hat: isLeader ? 'crown' : null,
     });
 
-    // Directional aim arrow indicator
+    // Crisp 3D directional aim pointer chevron
     ctx.rotate(e.angle);
     ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = toyRim(pal.main, 0.58);
+    ctx.lineWidth = 1.4;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(15, 0);
-    ctx.lineTo(8, -5);
-    ctx.lineTo(8, 5);
+    ctx.moveTo(19, 0);
+    ctx.lineTo(11, -5);
+    ctx.lineTo(11, 5);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
 
     ctx.restore();
 
-    // Name tag & Mood reaction badge above head
+    // Name tag pill & Mood reaction badge above head
     ctx.save();
-    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(10, 13, 24, 0.78)';
+    ctx.lineJoin = 'round';
     const textW = ctx.measureText(e.name).width;
-    ctx.fillRect(e.x - textW / 2 - 5, e.y - 32, textW + 10, 15);
+    drawToyPill(ctx, e.x - textW / 2 - 8, e.y - 36, textW + 16, 17, '#0f172a', {
+      rimColor: toyRim(pal.main, 0.45),
+      lineWidth: 1.2,
+      gloss: false,
+    });
 
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.4;
+    ctx.strokeText(e.name, e.x, e.y - 24);
     ctx.fillStyle = pal.trail;
-    ctx.fillText(e.name, e.x, e.y - 20);
+    ctx.fillText(e.name, e.x, e.y - 24);
 
     // Expressive combat mood badge above head
     if (e.mood && e.mood !== 'normal') {
-      ctx.font = '14px system-ui';
+      ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
       const badge = e.mood === 'hunting' ? '⚔️' : e.mood === 'panicking' ? '💦' : '😈';
-      ctx.fillText(badge, e.x, e.y - 38);
+      ctx.fillText(badge, e.x, e.y - 41);
     } else if (isLeader) {
-      ctx.font = '13px system-ui';
-      ctx.fillText('👑', e.x, e.y - 38);
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+      ctx.fillText('👑', e.x, e.y - 41);
     }
     ctx.restore();
   }
@@ -1220,25 +1268,27 @@ export class PaperIo extends Game {
   /* ------------------------------------------------------------ Radar Minimap */
   renderMinimap(ctx) {
     ctx.save();
-    // Compact, sleek radar in top-left below top reel timer
+    // Compact, sleek 3D Toy Radar in top-left below top reel timer
     const cardW = 90;
     const cardH = 162;
     const x = 12;
     const y = 86;
 
-    // Glassmorphism background
-    ctx.fillStyle = 'rgba(13, 17, 28, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 0, 127, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(x, y, cardW, cardH, 10);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, x, y, cardW, cardH, 12, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#ff007f',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
     // Header
-    ctx.font = '900 9.5px system-ui, sans-serif';
-    ctx.fillStyle = '#ff99cc';
+    ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.4;
+    ctx.strokeText('RADAR 🛰️', x + cardW / 2, y + 14);
+    ctx.fillStyle = '#ff99cc';
     ctx.fillText('RADAR 🛰️', x + cardW / 2, y + 14);
 
     // Inner Map Viewport
@@ -1252,8 +1302,8 @@ export class PaperIo extends Game {
     ctx.drawImage(this.offCanvas, mapX, mapY, mapW, mapH);
 
     // Subtle map border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(mapX, mapY, mapW, mapH);
 
     // Camera view rectangle showing where screen currently looks
@@ -1279,15 +1329,17 @@ export class PaperIo extends Game {
         // Pulsing radar ping for YOU
         const pingR = 3 + (this.t * 4) % 5;
         ctx.strokeStyle = '#ff007f';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.arc(dotX, dotY, pingR, 0, TAU);
         ctx.stroke();
 
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 2.5, 0, TAU);
-        ctx.fill();
+        drawToySphere(ctx, dotX, dotY, 2.8, '#ffffff', {
+          rimColor: '#ff007f',
+          lineWidth: 1,
+          shine: 0,
+          bottomBounce: false,
+        });
       } else {
         ctx.fillStyle = pal.main;
         ctx.beginPath();
@@ -1297,7 +1349,7 @@ export class PaperIo extends Game {
 
       // Leader crown on map
       if (e.id === leaderId) {
-        ctx.font = '8px system-ui';
+        ctx.font = "700 8px 'Fredoka', 'Outfit', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('👑', dotX, dotY - 3);
       }
@@ -1309,38 +1361,42 @@ export class PaperIo extends Game {
   /* ------------------------------------------------------------ Top Scores Leaderboard & Live Kill Feed */
   renderTopScores(ctx) {
     ctx.save();
-    // Glassmorphic card in top right below top timer bar
+    // 3D Toy Leaderboard card in top right below top timer bar
     const cardW = 152;
     const cardH = 208;
     const x = W - cardW - 12;
     const y = 86;
 
-    ctx.fillStyle = 'rgba(13, 17, 28, 0.9)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(x, y, cardW, cardH, 10);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, x, y, cardW, cardH, 12, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#334155',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
     // Header
-    ctx.font = '900 11px system-ui, sans-serif';
-    ctx.fillStyle = '#ffd166';
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
-    ctx.fillText('TOP 5 / 20 MAP 🏆', x + 10, y + 16);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.6;
+    ctx.strokeText('TOP 5 / 20 MAP 🏆', x + 10, y + 17);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('TOP 5 / 20 MAP 🏆', x + 10, y + 17);
 
     // List top 5 contenders
-    ctx.font = 'bold 9.5px system-ui, sans-serif';
+    ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
     const top5 = this.rankings.slice(0, 5);
 
     top5.forEach((r, idx) => {
       const rowY = y + 34 + idx * 19;
 
-      // Color indicator dot
-      ctx.fillStyle = r.color;
-      ctx.beginPath();
-      ctx.arc(x + 12, rowY - 3, 3.5, 0, TAU);
-      ctx.fill();
+      // 3D Glossy Color Indicator Dot
+      drawToySphere(ctx, x + 12, rowY - 3, 3.6, r.color, {
+        rimColor: toyRim(r.color, 0.55),
+        lineWidth: 0.9,
+        bottomBounce: false,
+      });
 
       // Rank & Name
       ctx.fillStyle = r.isHuman ? '#ffffff' : '#cbd5e1';
@@ -1356,7 +1412,7 @@ export class PaperIo extends Game {
     });
 
     // Divider line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x + 8, y + 132);
@@ -1365,20 +1421,19 @@ export class PaperIo extends Game {
 
     // Live Battle Kill Feed ticker
     if (this.killFeed && this.killFeed.length > 0) {
-      ctx.font = 'bold 8.5px system-ui, sans-serif';
+      ctx.font = "700 8.5px 'Fredoka', 'Outfit', sans-serif";
       const kfY = y + 148;
       this.killFeed.slice(0, 2).forEach((kf, idx) => {
         const itemY = kfY + idx * 15;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-        ctx.beginPath();
-        ctx.roundRect(x + 6, itemY - 10, cardW - 12, 13, 3);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        traceRoundRect(ctx, x + 6, itemY - 10, cardW - 12, 13, 5);
         ctx.fill();
         ctx.fillStyle = kf.color;
         const text = kf.text.length > 21 ? kf.text.slice(0, 20) + '…' : kf.text;
         ctx.fillText(text, x + 9, itemY);
       });
     } else {
-      ctx.font = 'italic 8.5px system-ui, sans-serif';
+      ctx.font = "italic 700 8.5px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillStyle = '#64748b';
       ctx.fillText('⚔️ Contenders fighting...', x + 10, y + 152);
     }
@@ -1387,7 +1442,7 @@ export class PaperIo extends Game {
     const myRank = this.rankings.findIndex((r) => r.isHuman) + 1;
     if (myRank > 5) {
       const rowY = y + cardH - 11;
-      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillStyle = '#ff007f';
       ctx.fillText(`... #${myRank} YOU: ${Math.round(this.score)}`, x + 10, rowY);
     }
@@ -1403,38 +1458,61 @@ export class PaperIo extends Game {
     const myRank = this.rankings.findIndex((r) => r.isHuman) + 1;
     const myPct = this.rankings.find((r) => r.isHuman)?.pct || 0;
 
-    // Compact status strip below the radar minimap
+    // Compact 3D Toy status strip below the radar minimap
     const cardW = 104;
     const cardH = 68;
     const x = 12;
     const y = 256;
 
-    ctx.fillStyle = 'rgba(13, 17, 28, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 0, 127, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(x, y, cardW, cardH, 8);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, x, y, cardW, cardH, 10, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#ff007f',
+      lineWidth: 1.8,
+      gloss: false,
+    });
+
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
 
     // Turf % & Kills
-    ctx.font = '900 13px system-ui, sans-serif';
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 2.6;
+    const turfTxt = `${myPct.toFixed(1)}% TURF`;
+    ctx.strokeText(turfTxt, x + 8, y + 17);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${myPct.toFixed(1)}% TURF`, x + 8, y + 17);
+    ctx.fillText(turfTxt, x + 8, y + 17);
 
-    ctx.font = 'bold 9.5px system-ui, sans-serif';
+    ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 2.2;
+    const killsTxt = `KILLS: ${p.kills} ⚔️ · #${myRank}`;
+    ctx.strokeText(killsTxt, x + 8, y + 33);
     ctx.fillStyle = '#ffd166';
-    ctx.fillText(`KILLS: ${p.kills} ⚔️ · #${myRank}`, x + 8, y + 33);
+    ctx.fillText(killsTxt, x + 8, y + 33);
 
-    // Nitro stamina bar
-    ctx.font = 'bold 8px system-ui, sans-serif';
+    // Nitro stamina bar (Glossy Toy Pill)
+    ctx.font = "700 8px 'Fredoka', 'Outfit', sans-serif";
     ctx.fillStyle = '#94a3b8';
     ctx.fillText('NITRO [SPACE]', x + 8, y + 47);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.fillRect(x + 8, y + 53, cardW - 16, 6);
-    ctx.fillStyle = p.boost ? '#ff0054' : '#00f59b';
-    ctx.fillRect(x + 8, y + 53, (p.stamina / 100) * (cardW - 16), 6);
+    const barW = cardW - 16;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    traceRoundRect(ctx, x + 8, y + 52, barW, 7, 3.5);
+    ctx.fill();
+
+    const fillW = Math.max(0, (p.stamina / 100) * barW);
+    if (fillW > 2) {
+      const ng = ctx.createLinearGradient(x + 8, y + 52, x + 8 + fillW, y + 52);
+      if (p.boost) {
+        ng.addColorStop(0, '#ff758f');
+        ng.addColorStop(1, '#ff0054');
+      } else {
+        ng.addColorStop(0, '#6ee7b7');
+        ng.addColorStop(1, '#00f59b');
+      }
+      ctx.fillStyle = ng;
+      traceRoundRect(ctx, x + 8, y + 52, fillW, 7, 3.5);
+      ctx.fill();
+    }
 
     ctx.restore();
   }

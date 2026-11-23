@@ -1,6 +1,16 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  mixColor,
+  toyRim,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TILE = 32;
 const COLS = 28; // 28 columns = 896px wide world
@@ -97,8 +107,16 @@ export class Motherload extends Game {
     id: 'motherload',
     title: 'Motherload',
     icon: '⛏️',
-    hint: 'STEER & DRILL: A/D or ARROWS · FLY: W or UP · Return to surface stations to refuel, cash in & upgrade!',
+    hint: 'STEER & DRILL: A/D or ARROWS · FLY: W or UP · Return to surface to refuel & upgrade!',
     baseLikes: 8420,
+    isPrestige: false,
+    parScore60s: 1900,
+    cue: 'DRILL ORE, REFUEL!',
+    prestigeCue: 'HIGHER FUEL BURN & HAZARDS!',
+    scaling: {
+      fuelBurnMult:  { base: 1.0, rate: 0.16, cap: 1.45, mode: 'up', label: 'Fuel Burn' },
+      hazardDmgMult: { base: 1.0, rate: 0.18, cap: 1.65, mode: 'up', label: 'Hazard Dmg' },
+    },
   };
 
   init(saved, score = 0) {
@@ -393,7 +411,7 @@ export class Motherload extends Game {
       if (Math.random() < 0.6) {
         this.fx.burst(tx + (Math.random() - 0.5) * 16, ty + (Math.random() - 0.5) * 16, '#c18c5d', 2, 40, 0.25, 2.5);
       }
-      p.fuel = Math.max(0, p.fuel - dt * 0.15); // Drilling consumes fuel
+      p.fuel = Math.max(0, p.fuel - dt * 0.15 * (this.diff.fuelBurnMult ?? 1)); // Drilling consumes fuel
 
       if (p.drilling.progress >= p.drilling.max) {
         this.finishDrilling(p.drilling.col, p.drilling.row);
@@ -412,7 +430,7 @@ export class Motherload extends Game {
     if (up && p.fuel > 0) {
       // Upward jetpack thrust fighting gravity & cargo weight
       p.vy = Math.max(-210, p.vy - (engineSpec.thrust / weightPenalty) * 3.4 * dt);
-      p.fuel = Math.max(0, p.fuel - dt * 0.45); // Thrusters burn fuel steadily
+      p.fuel = Math.max(0, p.fuel - dt * 0.45 * (this.diff.fuelBurnMult ?? 1)); // Thrusters burn fuel steadily
       p.flying = true;
       p.grounded = false;
 
@@ -480,7 +498,7 @@ export class Motherload extends Game {
         // Impact on landing!
         if (p.vy > 215) {
           // Hard fall impact damage
-          const dmg = Math.round((p.vy - 215) * 0.22);
+          const dmg = Math.round((p.vy - 215) * 0.22 * (this.diff.hazardDmgMult ?? 1));
           p.hull = Math.max(0, p.hull - dmg);
           this.fx.shake(7, 0.25);
           this.fx.text(p.x, p.y - 20, `FALL IMPACT! -${dmg} HP`, '#ff0054', 16);
@@ -507,7 +525,7 @@ export class Motherload extends Game {
     const curTile = this.grid[row] ? this.grid[row][col] : 0;
     if (curTile === 31) {
       const rad = UPGRADES.radiator[this.upgrades.radiator].resist;
-      const heatDmg = (1 - rad) * 24 * dt;
+      const heatDmg = (1 - rad) * 24 * (this.diff.hazardDmgMult ?? 1) * dt;
       p.hull = Math.max(0, p.hull - heatDmg);
       this.fx.burst(p.x, p.y, '#ff0054', 3, 30, 0.2, 3);
       if (p.hull <= 0) {
@@ -561,7 +579,7 @@ export class Motherload extends Game {
       this.grid[r][c] = 0;
       this.minedTiles.add(`${c},${r}`);
       const rad = UPGRADES.radiator[this.upgrades.radiator].resist;
-      const dmg = Math.round(35 * (1 - rad));
+      const dmg = Math.round(35 * (1 - rad) * (this.diff.hazardDmgMult ?? 1));
       this.pod.hull = Math.max(0, this.pod.hull - dmg);
       this.fx.burst(c * TILE + TILE / 2, r * TILE + TILE / 2, '#ffbe0b', 28, 120, 0.6, 5);
       this.fx.shake(10, 0.35);
@@ -639,9 +657,10 @@ export class Motherload extends Game {
             const bx = c * TILE + TILE / 2;
             const by = (r + 1) * TILE + TILE / 2;
             if (Math.hypot(p.x - bx, p.y - by) < 26) {
-              p.hull = Math.max(0, p.hull - 45);
+              const dmg = Math.round(45 * (this.diff.hazardDmgMult ?? 1));
+              p.hull = Math.max(0, p.hull - dmg);
               this.fx.shake(12, 0.4);
-              this.fx.text(p.x, p.y - 30, 'CRUSHED BY BOULDER! -45 HP', '#ff0054', 18);
+              this.fx.text(p.x, p.y - 30, `CRUSHED BY BOULDER! -${dmg} HP`, '#ff0054', 18);
               this.sounds.hit();
               this.haptics.heavy();
               if (p.hull <= 0) {
@@ -936,37 +955,60 @@ export class Motherload extends Game {
     const skyH = SURFACE_ROW * TILE;
     if (camY >= skyH + 300) return;
 
-    // Deep space red nebula gradient extended upwards into high sky
+    // Deep space-to-dusk Martian toy diorama sky gradient
     const minY = Math.min(-350, camY - 100);
     const g = ctx.createLinearGradient(0, minY, 0, skyH);
-    g.addColorStop(0, '#040208');
-    g.addColorStop(0.35, '#130818');
-    g.addColorStop(0.7, '#2e1122');
-    g.addColorStop(1, '#5a1e2d');
+    g.addColorStop(0, '#090614');
+    g.addColorStop(0.35, '#190b28');
+    g.addColorStop(0.7, '#3b1530');
+    g.addColorStop(1, '#712639');
     ctx.fillStyle = g;
     ctx.fillRect(camX, minY, this.W, skyH - minY);
 
-    // Distant jagged Martian mountain ridge
-    ctx.fillStyle = '#30131d';
-    ctx.beginPath();
-    ctx.moveTo(0, skyH);
-    ctx.lineTo(80, skyH - 65);
-    ctx.lineTo(220, skyH - 35);
-    ctx.lineTo(380, skyH - 95);
-    ctx.lineTo(540, skyH - 45);
-    ctx.lineTo(720, skyH - 110);
-    ctx.lineTo(COLS * TILE, skyH);
-    ctx.closePath();
-    ctx.fill();
-
-    // Twinkling stars scattered across the full sky height
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    // Twinkling circular stars scattered across the full sky height
+    ctx.save();
     for (let i = 0; i < 45; i++) {
       const sx = (i * 12345) % (COLS * TILE);
       const sy = -300 + ((i * 6789) % (skyH + 300));
-      const sz = (i % 3 === 0) ? 2.5 : 1.5;
-      ctx.fillRect(sx, sy, sz, sz);
+      const sz = (i % 3 === 0) ? 2.1 : 1.3;
+      ctx.fillStyle = i % 5 === 0 ? 'rgba(255, 224, 130, 0.85)' : 'rgba(255, 255, 255, 0.78)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, sz, 0, TAU);
+      ctx.fill();
     }
+    ctx.restore();
+
+    // Soft glowing Martian Moon / Phobos Toy Orb in the sky
+    drawToySphere(ctx, 590, skyH - 135, 30, '#fca5a5', {
+      rimColor: toyRim('#fb7185', 0.55),
+      lineWidth: 1.4,
+      shine: 0.45,
+    });
+
+    // Distant smooth layered Martian mesa ridges
+    const backRidge = ctx.createLinearGradient(0, skyH - 120, 0, skyH);
+    backRidge.addColorStop(0, '#5a2134');
+    backRidge.addColorStop(1, '#371220');
+    ctx.fillStyle = backRidge;
+    ctx.beginPath();
+    ctx.moveTo(0, skyH);
+    ctx.quadraticCurveTo(95, skyH - 95, 190, skyH - 42);
+    ctx.quadraticCurveTo(340, skyH - 128, 495, skyH - 52);
+    ctx.quadraticCurveTo(680, skyH - 135, COLS * TILE, skyH);
+    ctx.closePath();
+    ctx.fill();
+
+    const frontRidge = ctx.createLinearGradient(0, skyH - 80, 0, skyH);
+    frontRidge.addColorStop(0, '#441626');
+    frontRidge.addColorStop(1, '#260c16');
+    ctx.fillStyle = frontRidge;
+    ctx.beginPath();
+    ctx.moveTo(0, skyH);
+    ctx.quadraticCurveTo(140, skyH - 72, 260, skyH - 28);
+    ctx.quadraticCurveTo(420, skyH - 85, 580, skyH - 36);
+    ctx.quadraticCurveTo(750, skyH - 80, COLS * TILE, skyH);
+    ctx.closePath();
+    ctx.fill();
   }
 
   /* ------------------------------------------------ Subterranean Tiles & Minerals */
@@ -979,125 +1021,162 @@ export class Motherload extends Game {
     for (let r = minR; r <= maxR; r++) {
       const depthFt = (r - SURFACE_ROW) * 10;
 
-      // Layered soil palettes matching Bloons/Jelly Reels vector style
+      // Rich Nintendo toy-diorama subterranean strata palettes
       let soilCol, darkCol, litCol;
       if (depthFt > 4000) {
-        soilCol = '#241019'; darkCol = '#16080e'; litCol = '#381625';
+        soilCol = '#2a1220'; darkCol = '#180912'; litCol = '#471d34';
       } else if (depthFt > 2000) {
-        soilCol = '#1e1c38'; darkCol = '#111024'; litCol = '#2f2c57';
+        soilCol = '#232046'; darkCol = '#14122b'; litCol = '#38346e';
       } else if (depthFt > 800) {
-        soilCol = '#3d1a2c'; darkCol = '#28101c'; litCol = '#57263f';
+        soilCol = '#4a1d35'; darkCol = '#2e1020'; litCol = '#6c2b4e';
       } else {
-        soilCol = '#6b2d35'; darkCol = '#471c22'; litCol = '#8a3c46';
+        soilCol = '#7a333c'; darkCol = '#501e26'; litCol = '#9e4550';
       }
+
+      const rowY = r * TILE;
+      const soilGrad = ctx.createLinearGradient(0, rowY, 0, rowY + TILE);
+      soilGrad.addColorStop(0, litCol);
+      soilGrad.addColorStop(0.32, soilCol);
+      soilGrad.addColorStop(1, darkCol);
 
       for (let c = minC; c <= maxC; c++) {
         const t = this.grid[r][c];
         if (t === 0) continue; // Mined tunnel
 
         const tx = c * TILE;
-        const ty = r * TILE;
+        const ty = rowY;
 
-        // Bedrock
+        // Bedrock (3D beveled obsidian block)
         if (t === 99) {
-          ctx.fillStyle = '#0f1118';
+          ctx.fillStyle = '#141826';
           ctx.fillRect(tx, ty, TILE, TILE);
-          ctx.strokeStyle = '#27293d';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(tx + 1, ty + 1, TILE - 2, TILE - 2);
+          ctx.fillStyle = '#252b42';
+          traceRoundRect(ctx, tx + 2, ty + 2, TILE - 4, TILE - 4, 6);
+          ctx.fill();
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
           continue;
         }
 
-        // Station Runway Foundation (Indestructible Steel Pad)
+        // Station Runway Foundation (3D Steel Toy Pad)
         if (t === 98) {
-          ctx.fillStyle = '#2b2d42';
+          const padGrad = ctx.createLinearGradient(tx, ty, tx, ty + TILE);
+          padGrad.addColorStop(0, '#475569');
+          padGrad.addColorStop(0.4, '#334155');
+          padGrad.addColorStop(1, '#1e293b');
+          ctx.fillStyle = padGrad;
           ctx.fillRect(tx, ty, TILE, TILE);
-          // Steel plate border & bevel
-          ctx.fillStyle = '#4a4e69';
+
+          // Top metallic lip & bottom depth
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
           ctx.fillRect(tx, ty, TILE, 3);
-          ctx.fillStyle = '#1c1d2b';
+          ctx.fillStyle = '#0f172a';
           ctx.fillRect(tx, ty + TILE - 3, TILE, 3);
+
           // Industrial hazard stripes
           ctx.fillStyle = '#ffd166';
           ctx.beginPath();
-          ctx.moveTo(tx + 6, ty + TILE - 4);
-          ctx.lineTo(tx + 14, ty + TILE - 4);
-          ctx.lineTo(tx + 8, ty + 4);
-          ctx.lineTo(tx, ty + 4);
+          ctx.moveTo(tx + 6, ty + TILE - 5);
+          ctx.lineTo(tx + 14, ty + TILE - 5);
+          ctx.lineTo(tx + 8, ty + 5);
+          ctx.lineTo(tx, ty + 5);
           ctx.closePath();
           ctx.fill();
           ctx.beginPath();
-          ctx.moveTo(tx + 20, ty + TILE - 4);
-          ctx.lineTo(tx + 28, ty + TILE - 4);
-          ctx.lineTo(tx + 22, ty + 4);
-          ctx.lineTo(tx + 14, ty + 4);
+          ctx.moveTo(tx + 20, ty + TILE - 5);
+          ctx.lineTo(tx + 28, ty + TILE - 5);
+          ctx.lineTo(tx + 22, ty + 5);
+          ctx.lineTo(tx + 14, ty + 5);
           ctx.closePath();
           ctx.fill();
-          // Runway Rivets
-          ctx.fillStyle = '#adb5bd';
-          ctx.fillRect(tx + 3, ty + 3, 2, 2);
-          ctx.fillRect(tx + TILE - 5, ty + 3, 2, 2);
+
+          // Glossy rounded runway rivets
+          ctx.fillStyle = '#cbd5e1';
+          ctx.beginPath();
+          ctx.arc(tx + 4, ty + 4, 1.5, 0, TAU);
+          ctx.arc(tx + TILE - 4, ty + 4, 1.5, 0, TAU);
+          ctx.fill();
           continue;
         }
 
-        // Lava Channel (Molten Hazard)
+        // Lava Channel (Volumetric Molten Hazard)
         if (t === 31) {
-          ctx.fillStyle = '#ff3300';
+          const lg = ctx.createLinearGradient(tx, ty, tx, ty + TILE);
+          lg.addColorStop(0, '#ff6d00');
+          lg.addColorStop(0.55, '#ff3300');
+          lg.addColorStop(1, '#9d0208');
+          ctx.fillStyle = lg;
           ctx.fillRect(tx, ty, TILE, TILE);
-          ctx.fillStyle = '#ffbe0b';
+
+          const pulse = Math.sin((this.time || 0) * 5 + c) * 1.2;
+          ctx.fillStyle = '#ffd166';
           ctx.beginPath();
-          ctx.arc(tx + TILE * 0.35, ty + TILE * 0.4, 4, 0, TAU);
-          ctx.arc(tx + TILE * 0.7, ty + TILE * 0.65, 5, 0, TAU);
+          ctx.arc(tx + TILE * 0.35, ty + TILE * 0.4, Math.max(2, 3.8 + pulse), 0, TAU);
+          ctx.arc(tx + TILE * 0.72, ty + TILE * 0.65, Math.max(2.5, 4.6 - pulse * 0.7), 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(tx + TILE * 0.32, ty + TILE * 0.37, 1.3, 0, TAU);
+          ctx.arc(tx + TILE * 0.69, ty + TILE * 0.62, 1.5, 0, TAU);
           ctx.fill();
           continue;
         }
 
-        // Heavy Boulder Hazard
+        // Heavy Boulder Hazard (3D Toy Sphere Stone)
         if (t === 32) {
           ctx.fillStyle = darkCol;
           ctx.fillRect(tx, ty, TILE, TILE);
-          // 3D vector stone boulder
-          ctx.fillStyle = '#495057';
-          ctx.strokeStyle = '#212529';
-          ctx.lineWidth = 2.5;
+          drawToySphere(ctx, tx + TILE / 2, ty + TILE / 2, TILE * 0.42, '#64748b', {
+            rimColor: toyRim('#64748b', 0.58),
+            lineWidth: 1.4,
+            shine: 0.6,
+          });
+          // Subtle rock crease line
+          ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.lineWidth = 1.4;
+          ctx.lineCap = 'round';
           ctx.beginPath();
-          ctx.arc(tx + TILE / 2, ty + TILE / 2, TILE * 0.44, 0, TAU);
-          ctx.fill();
+          ctx.moveTo(tx + TILE * 0.42, ty + TILE * 0.52);
+          ctx.lineTo(tx + TILE * 0.62, ty + TILE * 0.66);
           ctx.stroke();
-          // Specular boulder shine
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.beginPath();
-          ctx.arc(tx + TILE * 0.38, ty + TILE * 0.35, 3.5, 0, TAU);
-          ctx.fill();
           continue;
         }
 
-        // Gas Pocket
+        // Gas Pocket (Glowing Toxic Bubble)
         if (t === 30) {
           ctx.fillStyle = darkCol;
           ctx.fillRect(tx, ty, TILE, TILE);
-          ctx.fillStyle = '#38b000';
-          ctx.beginPath();
-          ctx.arc(tx + TILE / 2, ty + TILE / 2, TILE * 0.38, 0, TAU);
-          ctx.fill();
-          ctx.fillStyle = '#ccff33';
-          ctx.beginPath();
-          ctx.arc(tx + TILE * 0.4, ty + TILE * 0.4, 4, 0, TAU);
-          ctx.fill();
+          const pulseR = TILE * (0.37 + Math.sin((this.time || 0) * 4 + c + r) * 0.03);
+          drawToySphere(ctx, tx + TILE / 2, ty + TILE / 2, pulseR, '#4ade80', {
+            rimColor: toyRim('#16a34a', 0.58),
+            lineWidth: 1.3,
+            shine: 0.78,
+          });
           continue;
         }
 
-        // Standard Soil Tile (Beveled vector block)
-        ctx.fillStyle = soilCol;
+        // Standard Soil Tile (Tactile 3D Beveled Toy Block)
+        ctx.fillStyle = darkCol;
         ctx.fillRect(tx, ty, TILE, TILE);
 
-        // Highlight & Shadow edges
-        ctx.fillStyle = litCol;
-        ctx.fillRect(tx, ty, TILE, 3);
-        ctx.fillRect(tx, ty, 3, TILE);
-        ctx.fillStyle = darkCol;
-        ctx.fillRect(tx, ty + TILE - 3, TILE, 3);
-        ctx.fillRect(tx + TILE - 3, ty, 3, TILE);
+        ctx.fillStyle = soilGrad;
+        traceRoundRect(ctx, tx + 0.75, ty + 0.75, TILE - 1.5, TILE - 1.5, 5);
+        ctx.fill();
+
+        // Top gloss rim & soft lower edge
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+        ctx.fillRect(tx + 3, ty + 1.5, TILE - 6, 2.5);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+        ctx.fillRect(tx + 3, ty + TILE - 3.5, TILE - 6, 2.5);
+
+        // Deterministic tiny mineral pebble flecks for rich tactile surface
+        if ((c * 17 + r * 31) % 5 === 0) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+          ctx.beginPath();
+          ctx.arc(tx + 8 + ((c * 7) % 14), ty + 9 + ((r * 11) % 14), 1.8, 0, TAU);
+          ctx.fill();
+        }
 
         // Minerals (ID: 10..19)
         if (t >= 10 && t <= 19) {
@@ -1112,6 +1191,7 @@ export class Motherload extends Game {
           const pct = this.pod.drilling.progress / this.pod.drilling.max;
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2.5;
+          ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(tx + 6, ty + 6);
           ctx.lineTo(tx + TILE / 2, ty + TILE / 2);
@@ -1130,32 +1210,51 @@ export class Motherload extends Game {
     ctx.save();
     ctx.translate(x, y);
 
-    // Glowing outer halo
-    ctx.fillStyle = m.glow;
-    ctx.globalAlpha = 0.3;
+    // Soft glowing outer halo
+    const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 14);
+    halo.addColorStop(0, m.glow);
+    halo.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.globalAlpha = 0.36;
+    ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, TAU);
+    ctx.arc(0, 0, 14, 0, TAU);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Faceted Gem Shape
-    ctx.fillStyle = m.col;
-    ctx.strokeStyle = '#070714';
-    ctx.lineWidth = 2;
+    // Volumetric 3D Crystal Faceted Gem
+    const gg = ctx.createLinearGradient(-8, -9, 8, 9);
+    gg.addColorStop(0, shadeColor(m.col, 0.55));
+    gg.addColorStop(0.45, m.col);
+    gg.addColorStop(1, shadeColor(m.col, -0.34));
+
+    ctx.fillStyle = gg;
+    ctx.strokeStyle = toyRim(m.col, 0.56);
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(0, -9);
-    ctx.lineTo(8, -3);
-    ctx.lineTo(5, 8);
-    ctx.lineTo(-5, 8);
-    ctx.lineTo(-8, -3);
+    ctx.moveTo(0, -9.5);
+    ctx.lineTo(8.5, -3);
+    ctx.lineTo(5.5, 8.5);
+    ctx.lineTo(-5.5, 8.5);
+    ctx.lineTo(-8.5, -3);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
+    // Inner bright crystal facet highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(5, -2.5);
+    ctx.lineTo(0, 1.5);
+    ctx.lineTo(-5.5, -2.5);
+    ctx.closePath();
+    ctx.fill();
+
     // Specular Star Sparkle
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(-2, -4, 2.5, 0, TAU);
+    ctx.arc(-2.5, -4, 2.2, 0, TAU);
     ctx.fill();
 
     ctx.restore();
@@ -1170,7 +1269,7 @@ export class Motherload extends Game {
       title: 'MINERALS',
       sub: 'SELL ORE',
       col: '#06d6a0',
-      roofCol: '#0a3a2d',
+      roofCol: '#0f4c3a',
       icon: '💎',
     });
 
@@ -1179,7 +1278,7 @@ export class Motherload extends Game {
       title: 'FUEL DEPOT',
       sub: 'REFUEL',
       col: '#ffd166',
-      roofCol: '#3a2d0a',
+      roofCol: '#59420e',
       icon: '⛽',
     });
 
@@ -1188,7 +1287,7 @@ export class Motherload extends Game {
       title: 'REPAIR BAY',
       sub: 'FIX & GEAR',
       col: '#4cc9f0',
-      roofCol: '#0d2b38',
+      roofCol: '#133c4f',
       icon: '🔧',
     });
 
@@ -1197,13 +1296,16 @@ export class Motherload extends Game {
       title: 'AUTOBUY 2000',
       sub: 'UPGRADES',
       col: '#f72585',
-      roofCol: '#420a24',
+      roofCol: '#5c1235',
       icon: '🛠️',
     });
 
-    // Ground landing strip line
-    ctx.fillStyle = '#220b12';
-    ctx.fillRect(0, sy, COLS * TILE, 4);
+    // 3D Metallic Landing Strip Line
+    const stripG = ctx.createLinearGradient(0, sy, 0, sy + 5);
+    stripG.addColorStop(0, '#475569');
+    stripG.addColorStop(1, '#1e293b');
+    ctx.fillStyle = stripG;
+    ctx.fillRect(0, sy, COLS * TILE, 5);
 
     // Docking Prompt Pill if landed at a station
     if (this.stationPrompt && !this.modal) {
@@ -1212,17 +1314,21 @@ export class Motherload extends Game {
       const py = sy - 85;
 
       ctx.save();
-      ctx.fillStyle = 'rgba(10, 14, 28, 0.92)';
-      ctx.strokeStyle = sp.col;
-      ctx.lineWidth = 2.5;
-      this.rr(px - 90, py, 180, 36, 18);
-      ctx.fill();
-      ctx.stroke();
+      drawToyPill(ctx, px - 96, py, 192, 36, '#0f172a', {
+        rimColor: sp.col,
+        lineWidth: 2.2,
+        gloss: false,
+      });
 
-      ctx.fillStyle = sp.col;
-      ctx.font = '900 12px Outfit, sans-serif';
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(`${sp.icon} ${sp.name} [E]`, px, py + 22);
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      const label = `${sp.icon} ${sp.name} [E]`;
+      ctx.strokeText(label, px, py + 22);
+      ctx.fillStyle = sp.col;
+      ctx.fillText(label, px, py + 22);
       ctx.restore();
     }
   }
@@ -1230,31 +1336,55 @@ export class Motherload extends Game {
   drawStationBuilding(ctx, x, sy, w, h, spec) {
     const y = sy - h;
 
-    // Building Main Structure
-    ctx.fillStyle = spec.roofCol;
-    ctx.strokeStyle = '#0c0714';
-    ctx.lineWidth = 3;
-    this.rr(x + 4, y + 18, w - 8, h - 18, 8);
-    ctx.fill();
+    // Grounding shadow under station diorama building
+    drawToyShadow(ctx, x + w * 0.5, sy + 1, w * 0.48, 6, 0.3);
+
+    // Antenna / Beacon Dome on Roof
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.5, y);
+    ctx.lineTo(x + w * 0.5, y - 10);
     ctx.stroke();
+    drawToySphere(ctx, x + w * 0.5, y - 12, 4.5, spec.col, {
+      rimColor: toyRim(spec.col, 0.55),
+      lineWidth: 1.2,
+    });
+
+    // 3D Toy Building Main Structure
+    drawToyBevelRect(ctx, x + 4, y + 18, w - 8, h - 18, 10, spec.roofCol, {
+      depth: 3,
+      rimColor: toyRim(spec.roofCol, 0.6),
+      lineWidth: 1.8,
+    });
+
+    // Industrial Bay Doors with subtle inner bevel
+    drawToyBevelRect(ctx, x + w / 2 - 24, sy - 28, 48, 28, 6, '#0f172a', {
+      depth: 0,
+      rimColor: mixColor(spec.col, '#0f172a', 0.55),
+      lineWidth: 1.4,
+      gloss: false,
+    });
 
     // Glowing Neon Marquee Sign
-    ctx.fillStyle = '#12081f';
-    ctx.strokeStyle = spec.col;
-    ctx.lineWidth = 2.5;
-    this.rr(x + 10, y, w - 20, 24, 6);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, x + 8, y, w - 16, 24, 8, '#1e1b4b', {
+      depth: 2.5,
+      rimColor: spec.col,
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
-    ctx.fillStyle = spec.col;
-    ctx.font = '900 11px Outfit, sans-serif';
+    ctx.save();
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.fillText(`${spec.icon} ${spec.title}`, x + w / 2, y + 16);
-
-    // Industrial Bay Doors
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    this.rr(x + w / 2 - 24, sy - 28, 48, 28, 4);
-    ctx.fill();
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.8;
+    const titleTxt = `${spec.icon} ${spec.title}`;
+    ctx.strokeText(titleTxt, x + w / 2, y + 16);
+    ctx.fillStyle = spec.col;
+    ctx.fillText(titleTxt, x + w / 2, y + 16);
+    ctx.restore();
   }
 
   /* ------------------------------------------------ Player Mining Pod & Captain Bean */
@@ -1262,6 +1392,11 @@ export class Motherload extends Game {
     const p = this.pod;
     ctx.save();
     ctx.translate(p.x, p.y);
+
+    // Grounding shadow when standing on soil/runway
+    if (p.grounded) {
+      drawToyShadow(ctx, 0, p.h * 0.52, p.w * 0.58, 5, 0.32);
+    }
 
     // Headlight Beam into the dark subterranean rock
     if (p.y > SURFACE_ROW * TILE + 20) {
@@ -1298,30 +1433,42 @@ export class Motherload extends Game {
       ctx.fill();
     }
 
-    // Heavy Industrial Yellow Chassis
-    ctx.fillStyle = '#ffd166';
-    ctx.strokeStyle = '#140c24';
-    ctx.lineWidth = 3;
-    this.rr(-p.w / 2, -p.h / 2 + 4, p.w, p.h - 4, 7);
-    ctx.fill();
-    ctx.stroke();
+    // 3D Vinyl Heavy Industrial Yellow Chassis
+    drawToyBevelRect(ctx, -p.w / 2, -p.h / 2 + 4, p.w, p.h - 4, 8, '#ffd166', {
+      depth: 3,
+      rimColor: toyRim('#ffd166', 0.58),
+      lineWidth: 1.6,
+    });
 
-    // Tread Tracks (Rubber Belts)
-    ctx.fillStyle = '#2b2d42';
-    ctx.fillRect(-p.w / 2 - 2, p.h * 0.15, 5, p.h * 0.35);
-    ctx.fillRect(p.w / 2 - 3, p.h * 0.15, 5, p.h * 0.35);
+    // 3D Rounded Tread Tracks (Rubber Belts)
+    drawToyBevelRect(ctx, -p.w / 2 - 3, p.h * 0.14, 6, p.h * 0.38, 3, '#334155', {
+      depth: 1.5,
+      rimColor: '#0f172a',
+      lineWidth: 1.1,
+      gloss: false,
+    });
+    drawToyBevelRect(ctx, p.w / 2 - 3, p.h * 0.14, 6, p.h * 0.38, 3, '#334155', {
+      depth: 1.5,
+      rimColor: '#0f172a',
+      lineWidth: 1.1,
+      gloss: false,
+    });
 
     // Glass Bubble Canopy Cockpit
-    ctx.fillStyle = 'rgba(76, 201, 240, 0.65)';
-    ctx.strokeStyle = '#140c24';
-    ctx.lineWidth = 2.5;
+    const cg = ctx.createRadialGradient(-p.w * 0.12, -7, 2, 0, -3, p.w * 0.38);
+    cg.addColorStop(0, 'rgba(186, 230, 253, 0.75)');
+    cg.addColorStop(0.6, 'rgba(56, 189, 248, 0.55)');
+    cg.addColorStop(1, 'rgba(2, 132, 199, 0.75)');
+    ctx.fillStyle = cg;
+    ctx.strokeStyle = toyRim('#0284c7', 0.58);
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.arc(0, -3, p.w * 0.36, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
     // Captain Bean Pilot inside Cockpit
-    const beanEyes = p.drilling ? 'squish' : (p.fuel < 3 ? 'dizzy' : 'happy');
+    const beanEyes = p.drilling ? 'squish' : (p.fuel < 3 ? 'alert' : 'happy');
     drawBean(ctx, 0, -2, 17, {
       color: '#ff758f',
       bellyColor: '#ff9770',
@@ -1329,15 +1476,20 @@ export class Motherload extends Game {
     });
 
     // Glass Specular Curve
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.62)';
     ctx.beginPath();
     ctx.ellipse(-p.w * 0.14, -7, 5, 2, -0.4, 0, TAU);
     ctx.fill();
 
-    // Animated Heavy Steel Drill Bit
-    ctx.fillStyle = '#adb5bd';
-    ctx.strokeStyle = '#212529';
-    ctx.lineWidth = 2;
+    // Animated Heavy Steel 3D Drill Bit
+    const drillG = ctx.createLinearGradient(-8, 0, 8, 12);
+    drillG.addColorStop(0, '#f1f5f9');
+    drillG.addColorStop(0.5, '#94a3b8');
+    drillG.addColorStop(1, '#475569');
+    ctx.fillStyle = drillG;
+    ctx.strokeStyle = toyRim('#64748b', 0.6);
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
 
     if (p.drilling && p.drilling.dir === 'down') {
       // Drilling downward: spinning auger bit extending into rock below
@@ -1355,9 +1507,9 @@ export class Motherload extends Game {
       const drillX = drillDir * (p.w / 2);
       const augerExtend = p.drilling ? Math.sin(this.time * 40) * 3 : 0;
       ctx.beginPath();
-      ctx.moveTo(drillX, -3);
-      ctx.lineTo(drillX + drillDir * (10 + augerExtend), 0);
-      ctx.lineTo(drillX, 3);
+      ctx.moveTo(drillX, -4);
+      ctx.lineTo(drillX + drillDir * (11 + augerExtend), 0);
+      ctx.lineTo(drillX, 4);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -1375,30 +1527,38 @@ export class Motherload extends Game {
     const depthFt = Math.max(0, Math.round((p.y - SURFACE_ROW * TILE) * 3.33));
 
     ctx.save();
+    ctx.lineJoin = 'round';
 
-    // 1. TOP-LEFT: Compact Cash & Depth Badge (lowered cleanly below reel timer text)
+    // 1. TOP-LEFT: Compact Cash & Depth Toy Bevel Card
     const cardW = 126;
     const cardH = 44;
     const lx = 14;
     const ly = 116;
 
-    ctx.fillStyle = 'rgba(10, 14, 28, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-    ctx.lineWidth = 1.5;
-    this.rr(lx, ly, cardW, cardH, 10);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, lx, ly, cardW, cardH, 12, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#38bdf8',
+      lineWidth: 1.8,
+      gloss: false,
+    });
+
+    ctx.textAlign = 'left';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.6;
 
     // Cash Display
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    const cashTxt = `💵 $${this.cash.toLocaleString()}`;
+    ctx.strokeText(cashTxt, lx + 10, ly + 18);
     ctx.fillStyle = '#ffd166';
-    ctx.font = '900 13px Outfit, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`💵 $${this.cash.toLocaleString()}`, lx + 10, ly + 18);
+    ctx.fillText(cashTxt, lx + 10, ly + 18);
 
     // Depth Display
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+    const depthTxt = `⬇ ${depthFt.toLocaleString()} FT`;
+    ctx.strokeText(depthTxt, lx + 10, ly + 36);
     ctx.fillStyle = depthFt > 4000 ? '#ff0054' : '#4cc9f0';
-    ctx.font = '800 11px Outfit, sans-serif';
-    ctx.fillText(`⬇ ${depthFt.toLocaleString()} FT`, lx + 10, ly + 36);
+    ctx.fillText(depthTxt, lx + 10, ly + 36);
 
     // 2. TOP-RIGHT: Streamlined Mini Fuel, Hull & Cargo Gauges
     const rx = W - 156 - 14;
@@ -1406,79 +1566,98 @@ export class Motherload extends Game {
     const rW = 156;
     const rH = 46;
 
-    ctx.fillStyle = 'rgba(10, 14, 28, 0.88)';
-    ctx.strokeStyle = p.fuel < maxFuel * 0.22 ? '#ff0054' : 'rgba(255, 255, 255, 0.16)';
-    ctx.lineWidth = 1.5;
-    this.rr(rx, ry, rW, rH, 10);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, rx, ry, rW, rH, 12, '#0f172a', {
+      depth: 2.5,
+      rimColor: p.fuel < maxFuel * 0.22 ? '#ff0054' : '#334155',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
-    // Row 1: Fuel
+    // Helper for crisp mini gauge bar
+    const drawMiniGauge = (rowY, icon, iconCol, pct, barCol, valText, valCol = '#ffffff') => {
+      ctx.font = "700 9px 'Fredoka', 'Outfit', sans-serif";
+      ctx.textAlign = 'left';
+      ctx.fillStyle = iconCol;
+      ctx.fillText(icon, rx + 7, rowY + 6);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      traceRoundRect(ctx, rx + 22, rowY, 76, 6, 3);
+      ctx.fill();
+
+      if (pct > 0) {
+        const fillW = Math.max(4, 76 * pct);
+        const fg = ctx.createLinearGradient(rx + 22, rowY, rx + 22 + fillW, rowY);
+        fg.addColorStop(0, shadeColor(barCol, 0.25));
+        fg.addColorStop(1, barCol);
+        ctx.fillStyle = fg;
+        traceRoundRect(ctx, rx + 22, rowY, fillW, 6, 3);
+        ctx.fill();
+      }
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = valCol;
+      ctx.fillText(valText, rx + rW - 7, rowY + 6);
+    };
+
     const fuelPct = clamp(p.fuel / maxFuel, 0, 1);
-    ctx.font = '900 9px Outfit, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = fuelPct > 0.22 ? '#ffd166' : '#ff0054';
-    ctx.fillText('⛽', rx + 7, ry + 12);
+    drawMiniGauge(
+      ry + 6,
+      '⛽',
+      fuelPct > 0.22 ? '#ffd166' : '#ff0054',
+      fuelPct,
+      fuelPct > 0.4 ? '#06d6a0' : fuelPct > 0.2 ? '#ffd166' : '#ff0054',
+      `${p.fuel.toFixed(1)}L`,
+    );
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    this.rr(rx + 22, ry + 6, 76, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = fuelPct > 0.4 ? '#06d6a0' : fuelPct > 0.2 ? '#ffd166' : '#ff0054';
-    this.rr(rx + 22, ry + 6, 76 * fuelPct, 6, 3);
-    ctx.fill();
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${p.fuel.toFixed(1)}L`, rx + rW - 7, ry + 12);
-
-    // Row 2: Hull
     const hullPct = clamp(p.hull / maxHull, 0, 1);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#4cc9f0';
-    ctx.fillText('🛡️', rx + 7, ry + 25);
+    drawMiniGauge(
+      ry + 19,
+      '🛡️',
+      '#4cc9f0',
+      hullPct,
+      hullPct > 0.35 ? '#4cc9f0' : '#ff0054',
+      `${Math.round(p.hull)}HP`,
+    );
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    this.rr(rx + 22, ry + 19, 76, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = hullPct > 0.35 ? '#4cc9f0' : '#ff0054';
-    this.rr(rx + 22, ry + 19, 76 * hullPct, 6, 3);
-    ctx.fill();
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${Math.round(p.hull)}HP`, rx + rW - 7, ry + 25);
-
-    // Row 3: Cargo
     const cargoPct = clamp(this.cargoWeight / cargoCap, 0, 1);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = cargoPct >= 1 ? '#ff0054' : '#06d6a0';
-    ctx.fillText('📦', rx + 7, ry + 39);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    this.rr(rx + 22, ry + 33, 76, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = cargoPct >= 1 ? '#ff0054' : '#06d6a0';
-    this.rr(rx + 22, ry + 33, 76 * cargoPct, 6, 3);
-    ctx.fill();
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = cargoPct >= 1 ? '#ff0054' : '#ffffff';
-    ctx.fillText(`${this.cargoWeight.toFixed(1)}/${cargoCap}c`, rx + rW - 7, ry + 39);
+    drawMiniGauge(
+      ry + 33,
+      '📦',
+      cargoPct >= 1 ? '#ff0054' : '#06d6a0',
+      cargoPct,
+      cargoPct >= 1 ? '#ff0054' : '#06d6a0',
+      `${this.cargoWeight.toFixed(1)}/${cargoCap}c`,
+      cargoPct >= 1 ? '#ff0054' : '#ffffff',
+    );
 
     // 3. LOW FUEL / FULL CARGO URGENT ALERTS
     if (p.fuel < maxFuel * 0.2 && p.fuel > 0) {
-      ctx.fillStyle = '#ff0054';
-      ctx.font = '900 13px Outfit, sans-serif';
+      drawToyPill(ctx, W / 2 - 135, 168, 270, 24, '#f43f5e', {
+        rimColor: toyRim('#f43f5e', 0.6),
+        lineWidth: 1.5,
+      });
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('⚠️ LOW FUEL - RETURN TO SURFACE!', W / 2, 162);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.8;
+      ctx.strokeText('⚠️ LOW FUEL - RETURN TO SURFACE!', W / 2, 184);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('⚠️ LOW FUEL - RETURN TO SURFACE!', W / 2, 184);
     } else if (cargoPct >= 1) {
-      ctx.fillStyle = '#ffd166';
-      ctx.font = '900 13px Outfit, sans-serif';
+      drawToyPill(ctx, W / 2 - 140, 168, 280, 24, '#d97706', {
+        rimColor: toyRim('#d97706', 0.6),
+        lineWidth: 1.5,
+      });
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('📦 CARGO FULL - SELL AT MINERAL DEPOT!', W / 2, 162);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.8;
+      ctx.strokeText('📦 CARGO FULL - SELL AT MINERAL DEPOT!', W / 2, 184);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('📦 CARGO FULL - SELL AT MINERAL DEPOT!', W / 2, 184);
     }
 
-    // 4. BOTTOM QUICK-ITEMS HOTBAR
+    // 4. BOTTOM QUICK-ITEMS HOTBAR (preserves exact hitbox bounds: barY = H - 128, barW = 340, h = 36)
     const barY = H - 128;
     const barW = 344;
     const barX = W / 2 - barW / 2;
@@ -1496,21 +1675,21 @@ export class Motherload extends Game {
       const sw = slotW - 4;
       const hasItem = s.count > 0;
 
-      ctx.fillStyle = hasItem ? 'rgba(18, 24, 46, 0.95)' : 'rgba(10, 14, 28, 0.85)';
-      ctx.strokeStyle = hasItem ? s.col : 'rgba(255, 255, 255, 0.12)';
-      ctx.lineWidth = hasItem ? 2 : 1;
-      this.rr(sx, barY, sw, 36, 8);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, sx, barY, sw, 36, 9, hasItem ? '#1e293b' : '#0f172a', {
+        depth: hasItem ? 2.5 : 1,
+        rimColor: hasItem ? s.col : '#334155',
+        lineWidth: hasItem ? 1.8 : 1.1,
+        gloss: false,
+      });
 
-      ctx.font = '900 10px Outfit, sans-serif';
+      ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillStyle = hasItem ? s.col : 'rgba(255, 255, 255, 0.4)';
-      ctx.fillText(`[${s.key}] ${s.ico} ${s.name}`, sx + sw / 2, barY + 16);
+      ctx.fillStyle = hasItem ? s.col : 'rgba(255, 255, 255, 0.45)';
+      ctx.fillText(`[${s.key}] ${s.ico} ${s.name}`, sx + sw / 2, barY + 15);
 
-      ctx.font = '800 11px Outfit, sans-serif';
-      ctx.fillStyle = hasItem ? '#ffffff' : 'rgba(255, 255, 255, 0.3)';
-      ctx.fillText(`x${s.count}`, sx + sw / 2, barY + 30);
+      ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+      ctx.fillStyle = hasItem ? '#ffffff' : 'rgba(255, 255, 255, 0.35)';
+      ctx.fillText(`x${s.count}`, sx + sw / 2, barY + 29);
     });
 
     ctx.restore();
@@ -1524,48 +1703,54 @@ export class Motherload extends Game {
     const my = H / 2 - mh / 2 + 15;
 
     ctx.save();
+    ctx.lineJoin = 'round';
 
     // Dimmed Backdrop
-    ctx.fillStyle = 'rgba(5, 5, 15, 0.85)';
+    ctx.fillStyle = 'rgba(7, 10, 22, 0.85)';
     ctx.fillRect(0, 0, W, H);
 
-    // Modal Card
-    ctx.fillStyle = '#0f1322';
-    ctx.strokeStyle = '#3a86ff';
-    ctx.lineWidth = 3;
-    this.rr(mx, my, mw, mh, 16);
-    ctx.fill();
-    ctx.stroke();
+    // 3D Toy Modal Card
+    drawToyBevelRect(ctx, mx, my, mw, mh, 18, '#0f172a', {
+      depth: 5,
+      rimColor: '#3a86ff',
+      lineWidth: 2.4,
+      gloss: false,
+    });
 
-    // Close [X] Button
-    ctx.fillStyle = '#ff0054';
-    this.rr(mx + mw - 45, my + 14, 32, 32, 8);
-    ctx.fill();
+    // Close [X] Button (exact bounds: mx + mw - 45, my + 14, 32, 32)
+    drawToyBevelRect(ctx, mx + mw - 45, my + 14, 32, 32, 9, '#f43f5e', {
+      depth: 2.5,
+      rimColor: toyRim('#f43f5e', 0.6),
+      lineWidth: 1.5,
+    });
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 14px Outfit, sans-serif';
+    ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.fillText('✕', mx + mw - 29, my + 35);
 
     // 1. MINERAL PROCESSING MODAL
     if (this.modal === 'mineral') {
       ctx.fillStyle = '#06d6a0';
-      ctx.font = '900 18px Outfit, sans-serif';
+      ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'left';
       ctx.fillText('💎 MINERAL PROCESSING DEPOT', mx + 20, my + 36);
 
       ctx.fillStyle = '#ffd166';
-      ctx.font = '800 13px Outfit, sans-serif';
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`CASH BALANCE: $${this.cash.toLocaleString()}`, mx + 20, my + 62);
 
       // Receipt Box
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      this.rr(mx + 16, my + 80, mw - 32, 230, 10);
-      ctx.fill();
+      drawToyBevelRect(ctx, mx + 16, my + 80, mw - 32, 230, 12, '#090d1a', {
+        depth: 0,
+        rimColor: '#1e293b',
+        lineWidth: 1.5,
+        gloss: false,
+      });
 
       let totalVal = 0;
       if (this.cargo.length === 0) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.font = '700 13px Outfit, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('CARGO HOLD IS EMPTY', W / 2, my + 180);
         ctx.fillText('Drill minerals underground and return here to sell!', W / 2, my + 205);
@@ -1579,7 +1764,7 @@ export class Motherload extends Game {
         }
 
         let lineY = my + 105;
-        ctx.font = '800 12px Outfit, sans-serif';
+        ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
         Object.entries(counts).forEach(([name, data]) => {
           ctx.fillStyle = data.col;
           ctx.textAlign = 'left';
@@ -1590,7 +1775,7 @@ export class Motherload extends Game {
         });
 
         ctx.fillStyle = '#ffd166';
-        ctx.font = '900 14px Outfit, sans-serif';
+        ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
         ctx.textAlign = 'left';
         ctx.fillText('TOTAL CARGO VALUE:', mx + 30, my + 290);
         ctx.textAlign = 'right';
@@ -1599,12 +1784,14 @@ export class Motherload extends Game {
 
       // Action Button: SELL ALL
       const canSell = this.cargo.length > 0;
-      ctx.fillStyle = canSell ? '#06d6a0' : '#495057';
-      this.rr(mx + 20, my + 330, mw - 40, 50, 12);
-      ctx.fill();
+      drawToyBevelRect(ctx, mx + 20, my + 330, mw - 40, 50, 12, canSell ? '#06d6a0' : '#475569', {
+        depth: canSell ? 3 : 1.5,
+        rimColor: toyRim(canSell ? '#06d6a0' : '#475569', 0.55),
+        lineWidth: 1.6,
+      });
 
-      ctx.fillStyle = canSell ? '#0a291f' : '#8d99ae';
-      ctx.font = '900 16px Outfit, sans-serif';
+      ctx.fillStyle = canSell ? '#062c21' : '#cbd5e1';
+      ctx.font = "700 16px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText(canSell ? `SELL ALL MINERALS (+$${totalVal.toLocaleString()})` : 'NO MINERALS TO SELL', W / 2, my + 361);
     }
@@ -1616,41 +1803,49 @@ export class Motherload extends Game {
       const fullCost = Math.round(needed * 2);
 
       ctx.fillStyle = '#ffd166';
-      ctx.font = '900 18px Outfit, sans-serif';
+      ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'left';
       ctx.fillText('⛽ MARTIAN FUEL DEPOT', mx + 20, my + 36);
 
       ctx.fillStyle = '#ffd166';
-      ctx.font = '800 13px Outfit, sans-serif';
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`CASH: $${this.cash.toLocaleString()}`, mx + 20, my + 62);
 
       // Fuel Tank Status Card
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      this.rr(mx + 16, my + 80, mw - 32, 100, 10);
-      ctx.fill();
+      drawToyBevelRect(ctx, mx + 16, my + 80, mw - 32, 100, 12, '#090d1a', {
+        depth: 0,
+        rimColor: '#1e293b',
+        lineWidth: 1.5,
+        gloss: false,
+      });
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '800 13px Outfit, sans-serif';
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`TANK CAPACITY: ${this.pod.fuel.toFixed(1)} / ${maxFuel} LITERS`, mx + 30, my + 115);
       ctx.fillText(`RATE: $2.00 / Liter`, mx + 30, my + 140);
 
       // Fill Tank Button
-      ctx.fillStyle = needed > 0.1 ? '#06d6a0' : '#495057';
-      this.rr(mx + 20, my + 205, mw - 40, 50, 12);
-      ctx.fill();
+      const canFill = needed > 0.1;
+      drawToyBevelRect(ctx, mx + 20, my + 205, mw - 40, 50, 12, canFill ? '#06d6a0' : '#475569', {
+        depth: canFill ? 3 : 1.5,
+        rimColor: toyRim(canFill ? '#06d6a0' : '#475569', 0.55),
+        lineWidth: 1.6,
+      });
 
-      ctx.fillStyle = needed > 0.1 ? '#0a291f' : '#8d99ae';
-      ctx.font = '900 15px Outfit, sans-serif';
+      ctx.fillStyle = canFill ? '#062c21' : '#cbd5e1';
+      ctx.font = "700 15px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(needed > 0.1 ? `FILL TANK TO MAX ($${fullCost})` : 'TANK ALREADY FULL', W / 2, my + 236);
+      ctx.fillText(canFill ? `FILL TANK TO MAX ($${fullCost})` : 'TANK ALREADY FULL', W / 2, my + 236);
 
       // Top Up +5L Button
-      ctx.fillStyle = needed > 0.1 ? '#3a86ff' : '#495057';
-      this.rr(mx + 20, my + 270, mw - 40, 46, 12);
-      ctx.fill();
+      drawToyBevelRect(ctx, mx + 20, my + 270, mw - 40, 46, 12, canFill ? '#3a86ff' : '#475569', {
+        depth: canFill ? 3 : 1.5,
+        rimColor: toyRim(canFill ? '#3a86ff' : '#475569', 0.55),
+        lineWidth: 1.6,
+      });
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 14px Outfit, sans-serif';
+      ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText('TOP UP +5 LITERS ($10)', W / 2, my + 299);
     }
 
@@ -1661,23 +1856,26 @@ export class Motherload extends Game {
       const fullCost = Math.round(neededHp * 8);
 
       ctx.fillStyle = '#4cc9f0';
-      ctx.font = '900 18px Outfit, sans-serif';
+      ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'left';
       ctx.fillText('🔧 REPAIR BAY & EMERGENCY GEAR', mx + 20, my + 36);
 
       ctx.fillStyle = '#ffd166';
-      ctx.font = '800 13px Outfit, sans-serif';
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`CASH: $${this.cash.toLocaleString()}`, mx + 20, my + 60);
 
       // Hull Repair Button
-      ctx.fillStyle = neededHp > 0.5 ? '#06d6a0' : '#495057';
-      this.rr(mx + 16, my + 78, mw - 32, 48, 10);
-      ctx.fill();
+      const needsFix = neededHp > 0.5;
+      drawToyBevelRect(ctx, mx + 16, my + 78, mw - 32, 48, 12, needsFix ? '#06d6a0' : '#475569', {
+        depth: needsFix ? 3 : 1.5,
+        rimColor: toyRim(needsFix ? '#06d6a0' : '#475569', 0.55),
+        lineWidth: 1.6,
+      });
 
-      ctx.fillStyle = neededHp > 0.5 ? '#0a291f' : '#8d99ae';
-      ctx.font = '900 14px Outfit, sans-serif';
+      ctx.fillStyle = needsFix ? '#062c21' : '#cbd5e1';
+      ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(neededHp > 0.5 ? `REPAIR FULL HULL (-$${fullCost}) [${Math.round(this.pod.hull)}/${maxHull} HP]` : `HULL IN MINT CONDITION (${maxHull} HP)`, W / 2, my + 107);
+      ctx.fillText(needsFix ? `REPAIR FULL HULL (-$${fullCost}) [${Math.round(this.pod.hull)}/${maxHull} HP]` : `HULL IN MINT CONDITION (${maxHull} HP)`, W / 2, my + 107);
 
       // Emergency Consumable Items List
       const itemKeys = ['reserveFuel', 'nanobots', 'dynamite', 'teleporter'];
@@ -1685,27 +1883,32 @@ export class Motherload extends Game {
         const item = ITEMS[k];
         const rowY = my + 140 + idx * 48;
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-        this.rr(mx + 16, rowY, mw - 32, 42, 8);
-        ctx.fill();
+        drawToyBevelRect(ctx, mx + 16, rowY, mw - 32, 42, 10, '#162038', {
+          depth: 0,
+          rimColor: '#334155',
+          lineWidth: 1.2,
+          gloss: false,
+        });
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = '900 12px Outfit, sans-serif';
+        ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
         ctx.textAlign = 'left';
         ctx.fillText(`[${item.key}] ${item.name}`, mx + 26, rowY + 18);
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.font = '700 10px Outfit, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+        ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
         ctx.fillText(`${item.desc} (Have: ${this.inventory[k]})`, mx + 26, rowY + 33);
 
         // Buy Item Button
         const canAfford = this.cash >= item.price;
-        ctx.fillStyle = canAfford ? '#4cc9f0' : '#495057';
-        this.rr(mx + mw - 105, rowY + 6, 88, 30, 6);
-        ctx.fill();
+        drawToyBevelRect(ctx, mx + mw - 105, rowY + 6, 88, 30, 8, canAfford ? '#4cc9f0' : '#475569', {
+          depth: canAfford ? 2 : 1,
+          rimColor: toyRim(canAfford ? '#4cc9f0' : '#475569', 0.55),
+          lineWidth: 1.3,
+        });
 
-        ctx.fillStyle = canAfford ? '#07202c' : '#adb5bd';
-        ctx.font = '900 11px Outfit, sans-serif';
+        ctx.fillStyle = canAfford ? '#07202c' : '#cbd5e1';
+        ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText(`BUY $${item.price.toLocaleString()}`, mx + mw - 61, rowY + 25);
       });
@@ -1714,12 +1917,12 @@ export class Motherload extends Game {
     // 4. JUNK YARD (AUTOBUY 2000) UPGRADES MODAL
     else if (this.modal === 'junk') {
       ctx.fillStyle = '#f72585';
-      ctx.font = '900 18px Outfit, sans-serif';
+      ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'left';
       ctx.fillText('🛠️ AUTOBUY 2000 UPGRADES', mx + 20, my + 36);
 
       ctx.fillStyle = '#ffd166';
-      ctx.font = '800 13px Outfit, sans-serif';
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`CASH: $${this.cash.toLocaleString()}`, mx + 20, my + 60);
 
       // List 6 categories
@@ -1732,32 +1935,37 @@ export class Motherload extends Game {
         const cur = list[curTier];
         const rowY = my + 76 + idx * 52;
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-        this.rr(mx + 16, rowY, mw - 32, 46, 8);
-        ctx.fill();
+        drawToyBevelRect(ctx, mx + 16, rowY, mw - 32, 46, 10, '#162038', {
+          depth: 0,
+          rimColor: '#334155',
+          lineWidth: 1.2,
+          gloss: false,
+        });
 
         ctx.fillStyle = '#ffd166';
-        ctx.font = '900 12px Outfit, sans-serif';
+        ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
         ctx.textAlign = 'left';
         ctx.fillText(`${cat.toUpperCase()}: ${cur.name}`, mx + 26, rowY + 18);
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-        ctx.font = '700 10px Outfit, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
         ctx.fillText(cur.desc, mx + 26, rowY + 34);
 
         if (!isMax) {
           const canAfford = this.cash >= next.price;
-          ctx.fillStyle = canAfford ? '#06d6a0' : '#495057';
-          this.rr(mx + mw - 110, rowY + 8, 92, 30, 6);
-          ctx.fill();
+          drawToyBevelRect(ctx, mx + mw - 110, rowY + 8, 92, 30, 8, canAfford ? '#06d6a0' : '#475569', {
+            depth: canAfford ? 2 : 1,
+            rimColor: toyRim(canAfford ? '#06d6a0' : '#475569', 0.55),
+            lineWidth: 1.3,
+          });
 
-          ctx.fillStyle = canAfford ? '#0a291f' : '#adb5bd';
-          ctx.font = '900 10px Outfit, sans-serif';
+          ctx.fillStyle = canAfford ? '#062c21' : '#cbd5e1';
+          ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
           ctx.textAlign = 'center';
           ctx.fillText(`BUY $${next.price.toLocaleString()}`, mx + mw - 64, rowY + 27);
         } else {
           ctx.fillStyle = '#ffd166';
-          ctx.font = '900 11px Outfit, sans-serif';
+          ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
           ctx.textAlign = 'right';
           ctx.fillText('MAX TIER', mx + mw - 26, rowY + 28);
         }
@@ -1768,13 +1976,6 @@ export class Motherload extends Game {
   }
 
   rr(x, y, w, h, r) {
-    const ctx = this.ctx;
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    traceRoundRect(this.ctx, x, y, w, h, r);
   }
 }

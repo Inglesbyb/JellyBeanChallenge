@@ -19,6 +19,15 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -52,18 +61,26 @@ export class BeanHelix extends Game {
     hint: 'DRAG left/right to rotate tower · DROP through gaps · SMASH with multi-floor combos!',
     baseLikes: 8940,
     isPrestige: true,
+    parScore60s: 1500,
     roundLen: 60,
+    cue: 'DROP THROUGH THE GAPS!',
+    prestigeCue: 'TALLER TOWER · MORE HAZARDS!',
+    scaling: {
+      totalFloors:  { base: 15,   rate: 0.20, cap: 26,   mode: 'up', round: true, label: 'Tower Floors' },
+      gravity:      { base: 980,  rate: 0.15, cap: 1240, mode: 'up', round: true, label: 'Drop Speed' },
+      hazardChance: { base: 0.18, rate: 0.20, cap: 0.42, mode: 'up', label: 'Hazard Slices' },
+    },
   };
 
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
 
-    // Prestige difficulty scalers
+    // SSOT Prestige difficulty scalers
     this.pLevel = Math.max(1, this.prestige || 1);
-    this.totalFloors = Math.min(28, Math.round(this.scaleStat(15, 0.25))); // 15 -> 19 -> 23 floors
-    this.gravity = this.scaleStat(980, 0.08);
-    this.hazardChance = clamp(0.18 + 0.07 * (this.pLevel - 1), 0.18, 0.44);
+    this.totalFloors = this.diff.totalFloors ?? 15;
+    this.gravity = this.diff.gravity ?? 980;
+    this.hazardChance = this.diff.hazardChance ?? 0.18;
 
     // Tower State
     this.towerAngle = 0;
@@ -466,18 +483,34 @@ export class BeanHelix extends Game {
       }
     }
 
-    // 5. Shattered Debris Shards
+    // 5. Shattered 3D Vinyl Debris Shards
     for (const sh of this.shards) {
       ctx.save();
       ctx.globalAlpha = sh.alpha;
       ctx.translate(sh.x, sh.y);
       ctx.rotate(sh.rot);
-      ctx.fillStyle = sh.color;
+      const sg = ctx.createLinearGradient(-sh.size * 0.5, -sh.size * 0.5, sh.size * 0.5, sh.size * 0.6);
+      sg.addColorStop(0, shadeColor(sh.color, 0.34));
+      sg.addColorStop(0.55, sh.color);
+      sg.addColorStop(1, shadeColor(sh.color, -0.28));
+      ctx.fillStyle = sg;
+      ctx.strokeStyle = toyRim(sh.color, 0.55);
+      ctx.lineWidth = toyLineW(sh.size, 0.08, 0.9, 1.8);
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-sh.size * 0.5, -sh.size * 0.5);
       ctx.lineTo(sh.size * 0.6, -sh.size * 0.2);
       ctx.lineTo(sh.size * 0.3, sh.size * 0.6);
       ctx.lineTo(-sh.size * 0.4, sh.size * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.beginPath();
+      ctx.moveTo(-sh.size * 0.35, -sh.size * 0.35);
+      ctx.lineTo(sh.size * 0.4, -sh.size * 0.15);
+      ctx.lineTo(0, 0);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
@@ -487,7 +520,7 @@ export class BeanHelix extends Game {
     const ballScreenY = this.ball.worldY - this.camY;
     this.renderBouncingBall(ctx, centerX, ballScreenY);
 
-    // 7. Frosted Glass Progress HUD
+    // 7. Toy Bevel Progress HUD
     this.renderProgressHUD(ctx, W, currentFloor);
 
     this.fx.render(ctx, 1);
@@ -496,21 +529,25 @@ export class BeanHelix extends Game {
 
   /* ----------------------------------------------------------- STUDIO BACKDROP */
   renderStudioBackdrop(ctx, W, H) {
-    // Rich, premium radial spotlight studio backdrop
-    const grad = ctx.createRadialGradient(W / 2, H * 0.45, 40, W / 2, H * 0.45, W * 0.95);
-    grad.addColorStop(0, '#1a1936');
-    grad.addColorStop(0.55, '#100e24');
-    grad.addColorStop(1, '#080712');
+    // Rich, soft studio spotlight diorama backdrop
+    const grad = ctx.createRadialGradient(W / 2, H * 0.42, 36, W / 2, H * 0.45, W * 0.95);
+    grad.addColorStop(0, '#27234f');
+    grad.addColorStop(0.55, '#14112e');
+    grad.addColorStop(1, '#090818');
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // Floating Ambient Bokeh Motes
+    // Floating Ambient Bokeh Motes with crisp centers
     for (const m of this.ambientMotes) {
       const alpha = m.alpha * (0.7 + 0.3 * Math.sin(m.pulse));
-      ctx.fillStyle = `rgba(165, 142, 251, ${alpha})`;
+      ctx.fillStyle = `rgba(196, 181, 253, ${alpha * 0.55})`;
       ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r, 0, TAU);
+      ctx.arc(m.x, m.y, m.r * 1.6, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r * 0.7, 0, TAU);
       ctx.fill();
     }
   }
@@ -518,8 +555,9 @@ export class BeanHelix extends Game {
   /* ----------------------------------------------------------- WIND LINES */
   renderWindLines(ctx) {
     ctx.save();
+    ctx.lineCap = 'round';
     for (const wl of this.windLines) {
-      ctx.strokeStyle = `rgba(255, 255, 255, ${wl.alpha})`;
+      ctx.strokeStyle = `rgba(186, 230, 253, ${wl.alpha})`;
       ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.moveTo(wl.x, wl.y);
@@ -536,26 +574,25 @@ export class BeanHelix extends Game {
     const w = R_POLE * 2;
     const leftX = cx - R_POLE;
 
-    // Metallic Obsidian Cylinder Gradient
+    // Glossy 3D Vinyl/Titanium Cylinder Gradient
     const poleGrad = ctx.createLinearGradient(leftX, 0, leftX + w, 0);
-    poleGrad.addColorStop(0.0, '#1e1f29');
-    poleGrad.addColorStop(0.25, '#2d3042');
-    poleGrad.addColorStop(0.48, '#4f5573'); // Specular light streak
-    poleGrad.addColorStop(0.65, '#2b2d3d');
-    poleGrad.addColorStop(1.0, '#15161f');
+    poleGrad.addColorStop(0.0, '#1e2235');
+    poleGrad.addColorStop(0.22, '#3b4266');
+    poleGrad.addColorStop(0.42, '#737da8'); // Primary studio highlight
+    poleGrad.addColorStop(0.66, '#2d324d');
+    poleGrad.addColorStop(0.88, '#3d456b'); // Rim bounce highlight
+    poleGrad.addColorStop(1.0, '#171928');
 
     ctx.fillStyle = poleGrad;
     ctx.fillRect(leftX, topY, w, botY - topY);
 
-    // Subtle edge bevel lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(leftX + w * 0.48, topY);
-    ctx.lineTo(leftX + w * 0.48, botY);
-    ctx.stroke();
+    // Specular plastic sheen stripe
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.fillRect(leftX + w * 0.36, topY, w * 0.1, botY - topY);
 
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    // Crisp tinted obsidian rim edges
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(leftX, topY);
     ctx.lineTo(leftX, botY);
@@ -615,17 +652,22 @@ export class BeanHelix extends Game {
       this.renderSliceTop(ctx, s, sector, isGoal, a1, a2, cx, cy);
     }
 
-    // D. Render Signature Paint Splatters on this platform
+    // D. Render Glossy 3D Vinyl Paint Splatters on this platform
     for (const spl of fl.splats) {
       const splAngle = spl.angle + this.towerAngle;
       const splRadius = (R_PLAT + R_POLE) * 0.52;
       const sx = cx + Math.cos(splAngle) * splRadius;
       const sy = cy + Math.sin(splAngle) * (splRadius * TILT_Y);
 
-      // Main organic ink splatter
       ctx.save();
       ctx.translate(sx, sy);
       ctx.scale(1, TILT_Y);
+
+      // Subtle rim/bevel under paint blob
+      ctx.fillStyle = spl.darkColor;
+      ctx.beginPath();
+      ctx.arc(0, 2, spl.mainR + 1, 0, TAU);
+      ctx.fill();
 
       ctx.fillStyle = spl.color;
       ctx.beginPath();
@@ -634,10 +676,17 @@ export class BeanHelix extends Game {
 
       // Droplet splashes radiating out
       for (const d of spl.droplets) {
+        ctx.fillStyle = spl.color;
         ctx.beginPath();
         ctx.arc(d.dx, d.dy, d.r, 0, TAU);
         ctx.fill();
       }
+
+      // Glossy specular paint sheen
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(-spl.mainR * 0.28, -spl.mainR * 0.28, spl.mainR * 0.35, spl.mainR * 0.16, -0.4, 0, TAU);
+      ctx.fill();
 
       ctx.restore();
     }
@@ -650,8 +699,8 @@ export class BeanHelix extends Game {
         const ry = cy + (ballWorldR * TILT_Y);
 
         ctx.save();
-        ctx.strokeStyle = `rgba(255, 71, 126, ${rip.alpha})`;
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = `rgba(255, 117, 143, ${rip.alpha})`;
+        ctx.lineWidth = 2.6;
         ctx.beginPath();
         ctx.ellipse(rx, ry, rip.r, rip.r * TILT_Y, 0, 0, TAU);
         ctx.stroke();
@@ -661,23 +710,27 @@ export class BeanHelix extends Game {
   }
 
   renderSliceRim(ctx, s, sector, isGoal, a1, a2, cx, cy) {
-    let rimGrad;
+    let baseRim;
     if (isGoal) {
-      rimGrad = '#e58e26';
+      baseRim = '#f59e0b';
     } else if (sector.type === SECTOR_HAZARD) {
-      rimGrad = '#b33939';
+      baseRim = '#dc2626';
     } else {
-      rimGrad = s % 2 === 0 ? '#341f97' : '#27187e';
+      baseRim = s % 2 === 0 ? '#4f46e5' : '#4338ca';
     }
-
-    ctx.fillStyle = rimGrad;
-    ctx.beginPath();
 
     const x1 = cx + Math.cos(a1) * R_PLAT;
     const y1 = cy + Math.sin(a1) * (R_PLAT * TILT_Y);
     const x2 = cx + Math.cos(a2) * R_PLAT;
     const y2 = cy + Math.sin(a2) * (R_PLAT * TILT_Y);
 
+    const rimGrad = ctx.createLinearGradient(x1, y1, x2, y2 + RIM_H);
+    rimGrad.addColorStop(0, shadeColor(baseRim, 0.08));
+    rimGrad.addColorStop(0.5, shadeColor(baseRim, -0.18));
+    rimGrad.addColorStop(1, shadeColor(baseRim, -0.4));
+
+    ctx.fillStyle = rimGrad;
+    ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.lineTo(x2, y2 + RIM_H);
@@ -685,9 +738,9 @@ export class BeanHelix extends Game {
     ctx.closePath();
     ctx.fill();
 
-    // Subtle dark crease at bottom of rim
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.lineWidth = 1.2;
+    // Tinted rim crease at bottom lip
+    ctx.strokeStyle = toyRim(baseRim, 0.65);
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(x1, y1 + RIM_H);
     ctx.lineTo(x2, y2 + RIM_H);
@@ -699,13 +752,13 @@ export class BeanHelix extends Game {
     const normal = isStart ? Math.cos(ang - Math.PI / 2) : Math.cos(ang + Math.PI / 2);
     if (normal < -0.1) return;
 
-    let wallCol;
+    let wallBase;
     if (isGoal) {
-      wallCol = '#d35400';
+      wallBase = '#d97706';
     } else if (sector.type === SECTOR_HAZARD) {
-      wallCol = '#7f1d1d';
+      wallBase = '#991b1b';
     } else {
-      wallCol = '#1e144f';
+      wallBase = '#312e81';
     }
 
     const inX = cx + Math.cos(ang) * R_POLE;
@@ -713,7 +766,13 @@ export class BeanHelix extends Game {
     const outX = cx + Math.cos(ang) * R_PLAT;
     const outY = cy + Math.sin(ang) * (R_PLAT * TILT_Y);
 
-    ctx.fillStyle = wallCol;
+    const wg = ctx.createLinearGradient(inX, inY, outX, outY + RIM_H);
+    wg.addColorStop(0, shadeColor(wallBase, -0.12));
+    wg.addColorStop(1, shadeColor(wallBase, -0.38));
+
+    ctx.fillStyle = wg;
+    ctx.strokeStyle = toyRim(wallBase, 0.6);
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(inX, inY);
     ctx.lineTo(outX, outY);
@@ -721,24 +780,32 @@ export class BeanHelix extends Game {
     ctx.lineTo(inX, inY + RIM_H);
     ctx.closePath();
     ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 1;
     ctx.stroke();
   }
 
   renderSliceTop(ctx, s, sector, isGoal, a1, a2, cx, cy) {
-    let topCol;
+    let topBase;
     if (isGoal) {
-      topCol = '#f1c40f';
+      topBase = '#ffd166';
     } else if (sector.type === SECTOR_HAZARD) {
-      topCol = '#ff4757';
+      topBase = '#f43f5e';
     } else {
-      topCol = s % 2 === 0 ? '#5f27cd' : '#6c5ce7';
+      topBase = s % 2 === 0 ? '#6366f1' : '#7c3aed';
     }
 
+    const midA = (a1 + a2) / 2;
+    const gStartX = cx + Math.cos(midA) * R_POLE;
+    const gStartY = cy + Math.sin(midA) * (R_POLE * TILT_Y);
+    const gEndX = cx + Math.cos(midA) * R_PLAT;
+    const gEndY = cy + Math.sin(midA) * (R_PLAT * TILT_Y);
+
+    const topGrad = ctx.createLinearGradient(gStartX, gStartY - 20, gEndX, gEndY + 12);
+    topGrad.addColorStop(0, shadeColor(topBase, 0.3));
+    topGrad.addColorStop(0.55, topBase);
+    topGrad.addColorStop(1, shadeColor(topBase, -0.16));
+
     // Top Polygon
-    ctx.fillStyle = topCol;
+    ctx.fillStyle = topGrad;
     ctx.beginPath();
 
     // Outer arc
@@ -759,9 +826,14 @@ export class BeanHelix extends Game {
     ctx.closePath();
     ctx.fill();
 
-    // Subtle bevel specular highlight on outer rim
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 1.2;
+    // Subtle tinted slice seam
+    ctx.strokeStyle = toyRim(topBase, 0.42);
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+
+    // Specular toy bevel highlight on outer rim
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     for (let step = 0; step <= 6; step++) {
       const ang = a1 + (a2 - a1) * (step / 6);
@@ -772,16 +844,20 @@ export class BeanHelix extends Game {
     }
     ctx.stroke();
 
-    // Hazard visual warning dots
+    // Tactile 3D Vinyl Hazard Stud
     if (sector.type === SECTOR_HAZARD) {
-      const midA = (a1 + a2) / 2;
       const hx = cx + Math.cos(midA) * ((R_PLAT + R_POLE) * 0.52);
       const hy = cy + Math.sin(midA) * ((R_PLAT + R_POLE) * 0.52 * TILT_Y);
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-      ctx.beginPath();
-      ctx.ellipse(hx, hy, 4, 4 * TILT_Y, 0, 0, TAU);
-      ctx.fill();
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.scale(1, TILT_Y + 0.18);
+      drawToySphere(ctx, 0, 0, 6.2, '#fb7185', {
+        rimColor: '#881337',
+        lineWidth: 1.2,
+        shine: 0.72,
+      });
+      ctx.restore();
     }
   }
 
@@ -791,23 +867,23 @@ export class BeanHelix extends Game {
     const bx = cx;
     const by = ballScreenY;
 
-    // 1. Soft Dynamic Drop Shadow on platform below
+    // 1. Soft Grounding Shadow on platform below
     const nextFloorIdx = clamp(Math.floor(b.worldY / FLOOR_GAP), 0, this.totalFloors - 1);
     const platScreenY = (nextFloorIdx * FLOOR_GAP) - this.camY;
     const distToPlat = Math.max(0, platScreenY - by);
     const shadowScale = clamp(1 - distToPlat / 190, 0.2, 1.0);
-
-    const shadowGrad = ctx.createRadialGradient(bx, platScreenY, 2, bx, platScreenY, 22 * shadowScale);
-    shadowGrad.addColorStop(0, `rgba(0, 0, 0, ${0.55 * shadowScale})`);
-    shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-    ctx.fillStyle = shadowGrad;
-    ctx.beginPath();
-    ctx.ellipse(bx, platScreenY, 22 * shadowScale, 9 * shadowScale, 0, 0, TAU);
-    ctx.fill();
+    drawToyShadow(ctx, bx, platScreenY, 21 * shadowScale, 8.5 * shadowScale, 0.42 * shadowScale);
 
     // 2. Fire Comet Aura when in combo streak
     if (b.isFire) {
+      const auraG = ctx.createRadialGradient(bx, by, b.radius * 0.5, bx, by, b.radius * 2.8);
+      auraG.addColorStop(0, 'rgba(255, 209, 102, 0.72)');
+      auraG.addColorStop(0.55, 'rgba(255, 71, 126, 0.4)');
+      auraG.addColorStop(1, 'rgba(255, 71, 126, 0)');
+      ctx.fillStyle = auraG;
+      ctx.beginPath();
+      ctx.arc(bx, by, b.radius * 2.8, 0, TAU);
+      ctx.fill();
       this.fx.burst(bx + rand(-6, 6), by + 8, ['#ffd166', '#ff477e', '#ff9233', '#ffffff'], 2, 80, 0.25, 4);
     }
 
@@ -819,9 +895,11 @@ export class BeanHelix extends Game {
     drawBean(ctx, 0, 0, b.radius * 2.3, {
       color: b.isFire ? '#ffd166' : b.color,
       bellyColor: b.isFire ? '#ff4757' : b.bellyColor,
-      eyes: this.dead ? 'cross' : b.isFire ? 'wink' : 'happy',
+      walkT: this.time * 1.4,
+      eyes: this.dead ? 'squish' : b.isFire ? 'wink' : 'happy',
       hat: this.pLevel > 1 ? 'crown' : null,
       squash: 1, // Handled via canvas transform scale
+      dead: !!this.dead,
     });
     ctx.restore();
   }
@@ -831,56 +909,64 @@ export class BeanHelix extends Game {
     const hudY = Game.SAFE_TOP + 18;
     const progress = clamp(currentFloor / (this.totalFloors - 1), 0, 1);
 
-    // Current Floor Large Indicator
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 24px Outfit, system-ui, sans-serif';
+    // Current Floor Large Indicator with crisp dark ink outline
+    ctx.font = "700 24px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4;
+    ctx.strokeText(`${Math.max(0, currentFloor)}`, W / 2, hudY - 4);
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(`${Math.max(0, currentFloor)}`, W / 2, hudY - 4);
-    ctx.shadowBlur = 0;
 
-    // Frosted Glass Progress Capsule
+    // Toy Bevel Progress Capsule
     const barW = 210;
-    const barH = 8;
+    const barH = 10;
     const barX = (W - barW) / 2;
 
-    // Track background
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.beginPath();
-    ctx.roundRect(barX, hudY + 4, barW, barH, 4);
-    ctx.fill();
+    drawToyBevelRect(ctx, barX - 2, hudY + 3, barW + 4, barH + 4, (barH + 4) / 2, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#475569',
+      lineWidth: 1.5,
+      gloss: false,
+    });
 
-    // Animated Neon Fill
+    // Animated Glossy Fill
     if (progress > 0) {
-      const fillGrad = ctx.createLinearGradient(barX, 0, barX + barW * progress, 0);
-      fillGrad.addColorStop(0, '#5f27cd');
-      fillGrad.addColorStop(0.6, '#ff477e');
+      const fillW = Math.max(barH, barW * progress);
+      const fillGrad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
+      fillGrad.addColorStop(0, '#6366f1');
+      fillGrad.addColorStop(0.55, '#f43f5e');
       fillGrad.addColorStop(1, '#ffd166');
 
       ctx.fillStyle = fillGrad;
-      ctx.beginPath();
-      ctx.roundRect(barX, hudY + 4, barW * progress, barH, 4);
+      traceRoundRect(ctx, barX, hudY + 5, fillW, barH, barH / 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.36)';
+      traceRoundRect(ctx, barX + 2, hudY + 6, Math.max(2, fillW - 4), 3, 1.5);
       ctx.fill();
     }
 
     // Start Capsule Badge (Floor 1)
-    ctx.fillStyle = '#48dbfb';
-    ctx.beginPath();
-    ctx.arc(barX, hudY + 8, 12, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#0a192f';
-    ctx.font = '900 11px Outfit, system-ui, sans-serif';
-    ctx.fillText('1', barX, hudY + 12);
+    drawToySphere(ctx, barX, hudY + 10, 13, '#48dbfb', {
+      rimColor: '#0369a1',
+      lineWidth: 1.6,
+      shine: 0.72,
+    });
+    ctx.fillStyle = '#0f172a';
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+    ctx.textBaseline = 'middle';
+    ctx.fillText('1', barX, hudY + 10.5);
 
     // Goal Capsule Badge (Crown)
-    ctx.fillStyle = '#ffd166';
-    ctx.beginPath();
-    ctx.arc(barX + barW, hudY + 8, 12, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#1e144f';
-    ctx.font = '900 11px Outfit, system-ui, sans-serif';
-    ctx.fillText('👑', barX + barW, hudY + 12);
+    drawToySphere(ctx, barX + barW, hudY + 10, 13, '#ffd166', {
+      rimColor: '#92400e',
+      lineWidth: 1.6,
+      shine: 0.72,
+    });
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillText('👑', barX + barW, hudY + 10.5);
+    ctx.textBaseline = 'alphabetic';
   }
 
   /* ----------------------------------------------------------- SERIALIZE */

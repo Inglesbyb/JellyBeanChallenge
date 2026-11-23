@@ -1,6 +1,16 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 
@@ -93,9 +103,17 @@ export class ColorClash extends Game {
     id: 'color-clash',
     title: 'Color Clash',
     icon: '🎨',
-    hint: 'DRAG & DROP Cards · PAINT the arena & dominate territory before the 60s timer expires!',
+    hint: 'DRAG & DROP Cards · PAINT the arena & dominate territory before the timer expires!',
     baseLikes: 7420,
+    isPrestige: false,
+    parScore60s: 4200,
     roundLen: 60,
+    cue: 'PAINT THE ARENA!',
+    prestigeCue: 'FASTER AI INK & PLAYS!',
+    scaling: {
+      aiInkMult:       { base: 1.0, rate: 0.16, cap: 1.38, mode: 'up',   label: 'AI Ink Rate' },
+      aiDecisionScale: { base: 1.0, rate: 0.16, floor: 0.55, mode: 'down', label: 'AI Tempo' },
+    },
   };
 
   init(saved, score = 0) {
@@ -212,9 +230,9 @@ export class ColorClash extends Game {
       this.fx.burst(this.W / 2, ARENA_Y + 60, '#ef233c', 16, 120, 0.5, 3.5);
     }
 
-    // 2. Ink Regeneration
+    // 2. Ink Regeneration (AI scales with Prestige)
     this.playerInk = Math.min(10.0, this.playerInk + dt * this.inkRate);
-    this.aiInk = Math.min(10.0, this.aiInk + dt * this.inkRate);
+    this.aiInk = Math.min(10.0, this.aiInk + dt * this.inkRate * (this.diff.aiInkMult ?? 1));
 
     // 3. User Input Handling
     this.handleInput();
@@ -767,7 +785,8 @@ export class ColorClash extends Game {
   updateAI(dt) {
     this.aiDecisionTimer -= dt;
     if (this.aiDecisionTimer > 0) return;
-    this.aiDecisionTimer = this.isOvertime ? 0.22 + Math.random() * 0.22 : 0.38 + Math.random() * 0.30;
+    const aiTempo = this.diff.aiDecisionScale ?? 1;
+    this.aiDecisionTimer = (this.isOvertime ? 0.22 + Math.random() * 0.22 : 0.38 + Math.random() * 0.30) * aiTempo;
 
     const lanes = this.getLaneStats();
 
@@ -1061,22 +1080,19 @@ export class ColorClash extends Game {
   renderGrid(ctx) {
     ctx.save();
 
-    // 1. Outer Stadium Border Casing (Bold black cartoon rim with inner white accent)
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 7;
-    ctx.fillStyle = '#1e293b';
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.roundRect(ARENA_X - 4, ARENA_Y - 4, GRID_W + 8, GRID_H + 8, 14);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    // 1. 3D Beveled Tabletop Toy Stadium Casing
+    drawToyBevelRect(ctx, ARENA_X - 6, ARENA_Y - 6, GRID_W + 12, GRID_H + 12, 14, '#1e293b', {
+      depth: 5,
+      rimColor: '#0f172a',
+      lineWidth: 2.2,
+      gloss: false,
+    });
 
-    // Inner crisp white rim
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    // Inner crisp specular bevel rim
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(ARENA_X - 1, ARENA_Y - 1, GRID_W + 2, GRID_H + 2);
+    traceRoundRect(ctx, ARENA_X - 1.5, ARENA_Y - 1.5, GRID_W + 3, GRID_H + 3, 10);
+    ctx.stroke();
 
     // Overtime Gold Neon Border Pulse
     if (this.isOvertime) {
@@ -1085,13 +1101,15 @@ export class ColorClash extends Game {
       ctx.lineWidth = 3.5 + pulse * 2;
       ctx.shadowColor = '#ffd166';
       ctx.shadowBlur = 12 * pulse;
-      ctx.beginPath();
-      ctx.roundRect(ARENA_X - 7, ARENA_Y - 7, GRID_W + 14, GRID_H + 14, 16);
+      traceRoundRect(ctx, ARENA_X - 8, ARENA_Y - 8, GRID_W + 16, GRID_H + 16, 16);
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
-    // 2. Individual Grid Cells
+    // 2. Individual Tactile 3D Vinyl Paint Tiles
+    const blueTop = shadeColor('#00b4d8', 0.28);
+    const redTop = shadeColor('#ef233c', 0.28);
+
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
         const val = this.grid[r * GRID_COLS + c];
@@ -1099,45 +1117,50 @@ export class ColorClash extends Game {
         const y = ARENA_Y + r * CELL_SIZE;
 
         if (val === 1) {
-          // Blue Paint Tile (Wet cartoon jelly slime)
+          // Blue Paint Cushion
           ctx.fillStyle = '#0077b6';
-          ctx.beginPath();
-          ctx.roundRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1, 3);
+          traceRoundRect(ctx, x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1, 3.5);
           ctx.fill();
 
           ctx.fillStyle = '#00b4d8';
-          ctx.beginPath();
-          ctx.roundRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2, 2.5);
+          traceRoundRect(ctx, x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2.6, 3);
+          ctx.fill();
+
+          ctx.fillStyle = blueTop;
+          traceRoundRect(ctx, x + 2, y + 1.5, CELL_SIZE - 4, 3, 1.5);
           ctx.fill();
 
           // Wet glossy specular glint
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
           ctx.beginPath();
-          ctx.ellipse(x + 4, y + 4, 3, 1.8, -0.4, 0, TAU);
+          ctx.ellipse(x + 4.2, y + 4.2, 2.8, 1.6, -0.4, 0, TAU);
           ctx.fill();
         } else if (val === 2) {
-          // Red Paint Tile (Wet cartoon jelly slime)
-          ctx.fillStyle = '#d90429';
-          ctx.beginPath();
-          ctx.roundRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1, 3);
+          // Red Paint Cushion
+          ctx.fillStyle = '#b91c1c';
+          traceRoundRect(ctx, x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1, 3.5);
           ctx.fill();
 
           ctx.fillStyle = '#ef233c';
-          ctx.beginPath();
-          ctx.roundRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2, 2.5);
+          traceRoundRect(ctx, x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2.6, 3);
+          ctx.fill();
+
+          ctx.fillStyle = redTop;
+          traceRoundRect(ctx, x + 2, y + 1.5, CELL_SIZE - 4, 3, 1.5);
           ctx.fill();
 
           // Wet glossy specular glint
           ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
           ctx.beginPath();
-          ctx.ellipse(x + 4, y + 4, 3, 1.8, -0.4, 0, TAU);
+          ctx.ellipse(x + 4.2, y + 4.2, 2.8, 1.6, -0.4, 0, TAU);
           ctx.fill();
         } else {
-          // Neutral Grid Floor with dot matrix mesh
+          // Recessed Neutral Toy Grid Tile
           ctx.fillStyle = '#1e293b';
           ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
-          ctx.fillStyle = '#334155';
-          ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+          ctx.fillStyle = '#2b394e';
+          traceRoundRect(ctx, x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2, 2);
+          ctx.fill();
           ctx.fillStyle = '#475569';
           ctx.fillRect(x + CELL_SIZE / 2 - 1, y + CELL_SIZE / 2 - 1, 2, 2);
         }
@@ -1146,7 +1169,7 @@ export class ColorClash extends Game {
 
     // 3. Center Halfway Dashed Boundary Line
     const midY = ARENA_Y + 14 * CELL_SIZE;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 8]);
     ctx.beginPath();
@@ -1165,206 +1188,216 @@ export class ColorClash extends Game {
 
       const color = u.team === 1 ? '#00b4d8' : '#ef233c';
       const darkColor = u.team === 1 ? '#0077b6' : '#d90429';
+      const rimCol = toyRim(color, 0.6);
+      const darkRim = toyRim(darkColor, 0.62);
 
-      // Drop Shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.beginPath();
-      ctx.ellipse(0, 8, 14, 6, 0, 0, TAU);
-      ctx.fill();
+      // Soft Grounding Shadow
+      drawToyShadow(ctx, 0, u.cardId === 'striker' ? 16 : 9, u.cardId === 'striker' ? 12 : 14, 6, u.cardId === 'striker' ? 0.22 : 0.34);
 
       if (u.cardId === 'roller') {
-        // High-Speed Paint Roller Unit
         ctx.rotate(u.angle);
 
-        // Vehicle Chassis with thick black cartoon outline
-        ctx.fillStyle = darkColor;
-        ctx.beginPath();
-        ctx.roundRect(-10, -14, 20, 28, 6);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3.5;
-        ctx.stroke();
+        // 3D Vinyl Vehicle Chassis
+        drawToyBevelRect(ctx, -10, -14, 20, 28, 6, darkColor, {
+          depth: 2,
+          rimColor: darkRim,
+          lineWidth: 1.7,
+          gloss: true,
+        });
 
         // Glowing Ink Tank
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.roundRect(-8, -6, 16, 14, 4);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        drawToyBevelRect(ctx, -8, -6, 16, 14, 4, color, {
+          depth: 1.5,
+          rimColor: rimCol,
+          lineWidth: 1.3,
+          gloss: true,
+        });
 
         // Front Paint Roller Drum
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.roundRect(-14, 10, 28, 8, 3);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Roller Ink Texture
-        ctx.fillStyle = color;
-        ctx.fillRect(-12, 12, 24, 4);
+        drawToyPill(ctx, -14, 10, 28, 8.5, '#f8fafc', {
+          rimColor: '#475569',
+          lineWidth: 1.5,
+          gloss: false,
+        });
+        drawToyPill(ctx, -11.5, 11.5, 23, 5.5, color, {
+          rimColor: rimCol,
+          lineWidth: 0.9,
+          gloss: true,
+        });
       } else if (u.cardId === 'cannon') {
-        // Stationary Defense Turret
-        // Octagonal Base
-        ctx.fillStyle = '#334155';
-        ctx.beginPath();
-        ctx.arc(0, 0, 16, 0, TAU);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 4;
-        ctx.stroke();
+        // Volumetric Toy Turret Base
+        drawToySphere(ctx, 0, 0, 16, '#475569', {
+          rimColor: '#0f172a',
+          lineWidth: 1.8,
+          shine: 0.36,
+        });
 
         // Swiveling Gun Turret
         ctx.rotate(u.angle);
-        ctx.fillStyle = darkColor;
-        ctx.fillRect(4, -5, 16, 10);
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(4, -5, 16, 10);
+        drawToyBevelRect(ctx, 4, -5, 16, 10, 3, darkColor, {
+          depth: 1.5,
+          rimColor: darkRim,
+          lineWidth: 1.5,
+          gloss: true,
+        });
 
         // Core Turret Dome
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(0, 0, 9, 0, TAU);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+        drawToySphere(ctx, 0, 0, 9.5, color, {
+          rimColor: rimCol,
+          lineWidth: 1.5,
+          shine: 0.78,
+        });
       } else if (u.cardId === 'blaster') {
-        // Triple Blaster Tank
         ctx.rotate(u.angle);
 
-        // Heavy Armor Hull
-        ctx.fillStyle = darkColor;
-        ctx.beginPath();
-        ctx.roundRect(-14, -12, 28, 24, 6);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 4;
-        ctx.stroke();
+        // Heavy 3D Armored Hull
+        drawToyBevelRect(ctx, -14, -12, 28, 24, 6, darkColor, {
+          depth: 2.5,
+          rimColor: darkRim,
+          lineWidth: 1.8,
+          gloss: true,
+        });
 
         // 3 Forward Laser Barrels
-        ctx.fillStyle = color;
-        ctx.fillRect(8, -10, 14, 5);
-        ctx.fillRect(10, -2.5, 14, 5);
-        ctx.fillRect(8, 5, 14, 5);
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(8, -10, 14, 5);
-        ctx.strokeRect(10, -2.5, 14, 5);
-        ctx.strokeRect(8, 5, 14, 5);
+        drawToyBevelRect(ctx, 8, -10, 14, 5, 2, color, { depth: 1, rimColor: rimCol, lineWidth: 1.1, gloss: true });
+        drawToyBevelRect(ctx, 10, -2.5, 14, 5, 2, color, { depth: 1, rimColor: rimCol, lineWidth: 1.1, gloss: true });
+        drawToyBevelRect(ctx, 8, 5, 14, 5, 2, color, { depth: 1, rimColor: rimCol, lineWidth: 1.1, gloss: true });
 
         // Driver Visor
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(-4, -6, 6, 12);
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(-4, -6, 6, 12);
+        drawToyBevelRect(ctx, -4.5, -6, 7, 12, 2.5, '#ffd166', {
+          depth: 1,
+          rimColor: toyRim('#d97706', 0.6),
+          lineWidth: 1.2,
+          gloss: true,
+        });
       } else if (u.cardId === 'spinner') {
-        // Whirlwind Saw Spinner
         ctx.rotate(u.angle);
 
-        // Outer Double Saw Blades
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(0, 0, 20, 0, TAU);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3.5;
-        ctx.stroke();
-
         // Razor Teeth
-        ctx.fillStyle = '#ffffff';
+        const toothRim = toyRim('#94a3b8', 0.55);
         for (let t = 0; t < 6; t++) {
           const a = (TAU / 6) * t;
+          const tg = ctx.createLinearGradient(
+            Math.cos(a) * 16,
+            Math.sin(a) * 16,
+            Math.cos(a + 0.3) * 25,
+            Math.sin(a + 0.3) * 25
+          );
+          tg.addColorStop(0, '#cbd5e1');
+          tg.addColorStop(1, '#ffffff');
+          ctx.fillStyle = tg;
+          ctx.strokeStyle = toothRim;
+          ctx.lineWidth = 1.2;
+          ctx.lineJoin = 'round';
           ctx.beginPath();
           ctx.moveTo(Math.cos(a) * 16, Math.sin(a) * 16);
           ctx.lineTo(Math.cos(a + 0.3) * 25, Math.sin(a + 0.3) * 25);
           ctx.lineTo(Math.cos(a + 0.5) * 16, Math.sin(a + 0.5) * 16);
           ctx.closePath();
           ctx.fill();
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
 
-        // Inner Core
-        ctx.fillStyle = darkColor;
-        ctx.beginPath();
-        ctx.arc(0, 0, 9, 0, TAU);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+        // Outer Saw Disc
+        drawToySphere(ctx, 0, 0, 19.5, color, {
+          rimColor: rimCol,
+          lineWidth: 1.8,
+          shine: 0.7,
+        });
+
+        // Inner Core Hub
+        drawToySphere(ctx, 0, 0, 9.5, darkColor, {
+          rimColor: darkRim,
+          lineWidth: 1.4,
+          shine: 0.72,
+        });
       } else if (u.cardId === 'striker') {
-        // High-Speed Aerial Jet Bean
         ctx.rotate(u.angle);
 
-        // Sleek Arrow Delta Wings
-        ctx.fillStyle = darkColor;
+        // Sleek 3D Shaded Arrow Delta Wings
+        const wg = ctx.createLinearGradient(16, -14, -12, 14);
+        wg.addColorStop(0, shadeColor(darkColor, 0.25));
+        wg.addColorStop(1, shadeColor(darkColor, -0.22));
+        ctx.fillStyle = wg;
+        ctx.strokeStyle = darkRim;
+        ctx.lineWidth = toyLineW(28, 0.055, 1.3, 1.9);
+        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(16, 0); // Nose tip forward along +X
-        ctx.lineTo(-10, -14); // Left wingtip
+        ctx.moveTo(16, 0);
+        ctx.lineTo(-10, -14);
         ctx.lineTo(-6, -6);
-        ctx.lineTo(-12, 0); // Tail
+        ctx.lineTo(-12, 0);
         ctx.lineTo(-6, 6);
-        ctx.lineTo(-10, 14); // Right wingtip
+        ctx.lineTo(-10, 14);
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3.5;
         ctx.stroke();
 
-        // Fuselage Body
-        ctx.fillStyle = color;
+        // Volumetric 3D Fuselage Body
+        const fg = ctx.createRadialGradient(4, -2, 1, 2, 0, 13);
+        fg.addColorStop(0, shadeColor(color, 0.52));
+        fg.addColorStop(0.45, color);
+        fg.addColorStop(1, shadeColor(color, -0.26));
+        ctx.fillStyle = fg;
+        ctx.strokeStyle = rimCol;
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
         ctx.ellipse(2, 0, 12, 6, 0, 0, TAU);
         ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Cockpit Visor
+        // Glossy Golden Cockpit Visor
         ctx.fillStyle = '#ffd166';
+        ctx.strokeStyle = toyRim('#d97706', 0.58);
+        ctx.lineWidth = 1.0;
         ctx.beginPath();
         ctx.ellipse(6, 0, 5, 3, 0, 0, TAU);
         ctx.fill();
+        ctx.stroke();
 
-        // Glowing Thruster Exhaust Flames (pointing backward along -X)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+        ctx.beginPath();
+        ctx.ellipse(5.5, -1, 2.4, 1.0, 0, 0, TAU);
+        ctx.fill();
+
+        // Glowing Thruster Exhaust Flames
         const flameLen = 6 + Math.sin(u.animPhase) * 4;
         ctx.fillStyle = '#ff9e00';
         ctx.beginPath();
         ctx.moveTo(-12, -4);
         ctx.lineTo(-12 - flameLen, -2);
         ctx.lineTo(-12, 0);
+        ctx.lineTo(-12 - flameLen, 2);
+        ctx.lineTo(-12, 4);
         ctx.closePath();
         ctx.fill();
 
+        ctx.fillStyle = '#fef08a';
         ctx.beginPath();
-        ctx.moveTo(-12, 0);
-        ctx.lineTo(-12 - flameLen, 2);
-        ctx.lineTo(-12, 4);
+        ctx.moveTo(-12, -2);
+        ctx.lineTo(-12 - flameLen * 0.55, 0);
+        ctx.lineTo(-12, 2);
         ctx.closePath();
         ctx.fill();
       }
 
       ctx.restore();
 
-      // Health Bar above damaged units
+      // Rounded Toy Health Bar above damaged units
       if (u.hp < u.maxHp) {
         const bw = 26;
-        const bh = 4;
+        const bh = 5;
         const bx = u.x - bw / 2;
-        const by = u.y - 24;
+        const by = u.y - 25;
         const hpPct = Math.max(0, u.hp / u.maxHp);
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.fillStyle = u.team === 1 ? '#00b4d8' : '#ef233c';
-        ctx.fillRect(bx, by, bw * hpPct, bh);
+        drawToyPill(ctx, bx, by, bw, bh, '#0f172a', { rimColor: '#334155', lineWidth: 0.9, gloss: false });
+        if (hpPct > 0) {
+          drawToyPill(ctx, bx + 0.8, by + 0.8, Math.max(3, (bw - 1.6) * hpPct), bh - 1.6, color, {
+            lineWidth: 0,
+            gloss: true,
+          });
+        }
       }
     }
   }
@@ -1379,34 +1412,34 @@ export class ColorClash extends Game {
       if (p.type === 'mortar') {
         // Shadow on ground below shell
         const shadowScale = 0.5 + p.progress * 0.5;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-        ctx.beginPath();
-        ctx.ellipse(p.targetX - p.x, (p.startY + (p.targetY - p.startY) * p.progress) - p.y, 14 * shadowScale, 6 * shadowScale, 0, 0, TAU);
-        ctx.fill();
+        drawToyShadow(
+          ctx,
+          p.targetX - p.x,
+          (p.startY + (p.targetY - p.startY) * p.progress) - p.y,
+          14 * shadowScale,
+          6 * shadowScale,
+          0.26
+        );
 
-        // Mortar Shell
-        ctx.fillStyle = color;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, 8, 0, TAU);
-        ctx.fill();
-        ctx.stroke();
+        drawToySphere(ctx, 0, 0, 8.5, color, {
+          rimColor: '#ffffff',
+          lineWidth: 1.6,
+          shine: 0.85,
+        });
 
-        // Trailing sparks
-        ctx.fillStyle = '#ffd166';
-        ctx.beginPath();
-        ctx.arc(-4, -4, 3, 0, TAU);
-        ctx.fill();
+        drawToySphere(ctx, -4, -4, 3, '#ffd166', {
+          rimColor: '#f59e0b',
+          lineWidth: 0.6,
+          shine: 0.9,
+          bottomBounce: false,
+        });
       } else {
-        // High-velocity Ink Pellet
-        ctx.fillStyle = color;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(0, 0, p.radius, 0, TAU);
-        ctx.fill();
-        ctx.stroke();
+        drawToySphere(ctx, 0, 0, p.radius, color, {
+          rimColor: 'rgba(255, 255, 255, 0.85)',
+          lineWidth: 1.2,
+          shine: 0.85,
+          bottomBounce: false,
+        });
       }
 
       ctx.restore();
@@ -1423,27 +1456,23 @@ export class ColorClash extends Game {
     const valid = this.isValidPlacement(1, mx, my, card.isSpell);
 
     ctx.save();
-    // Holographic placement footprint
     ctx.fillStyle = valid ? 'rgba(0, 180, 216, 0.25)' : 'rgba(239, 35, 60, 0.35)';
-    ctx.strokeStyle = valid ? '#00b4d8' : '#ef233c';
+    ctx.strokeStyle = valid ? '#38bdf8' : '#ef233c';
     ctx.lineWidth = 2.5;
 
     if (card.isSpell) {
-      // Circle radius footprint
       ctx.beginPath();
       ctx.arc(mx, my, card.radius, 0, TAU);
       ctx.fill();
       ctx.stroke();
     } else {
-      // Unit grid placement box
-      ctx.beginPath();
-      ctx.roundRect(mx - 18, my - 18, 36, 36, 8);
+      traceRoundRect(ctx, mx - 18, my - 18, 36, 36, 9);
       ctx.fill();
       ctx.stroke();
     }
 
     // Ghost icon preview
-    ctx.font = '26px sans-serif';
+    ctx.font = "700 26px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(card.icon, mx, my);
@@ -1454,70 +1483,84 @@ export class ColorClash extends Game {
   renderHeaderHUD(ctx, W) {
     ctx.save();
 
-    // 1. Dual Territory Progress Bar (y: 94, height: 38)
+    // 1. Dual Territory Progress Bar (y: 94, height: 34)
     const barX = 14;
     const barY = 94;
     const barW = W - 28;
     const barH = 34;
 
-    // Background pill container
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, 17);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, barX, barY, barW, barH, 17, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#334155',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
     // Left Blue Segment (% Blue)
-    const blueW = Math.round((this.bluePercent / 100) * (barW - 140));
+    const innerW = barW - 140;
+    const blueW = Math.round((this.bluePercent / 100) * innerW);
     const splitX = barX + 70 + blueW;
 
-    // Blue Fill
-    ctx.fillStyle = '#00b4d8';
+    const bgBlue = ctx.createLinearGradient(0, barY + 5, 0, barY + barH - 5);
+    bgBlue.addColorStop(0, '#38bdf8');
+    bgBlue.addColorStop(1, '#0284c7');
+    ctx.fillStyle = bgBlue;
     ctx.beginPath();
     ctx.roundRect(barX + 68, barY + 5, blueW, barH - 10, [8, 0, 0, 8]);
     ctx.fill();
 
     // Red Fill
-    const redW = (barW - 140) - blueW;
-    ctx.fillStyle = '#ef233c';
+    const redW = innerW - blueW;
+    const bgRed = ctx.createLinearGradient(0, barY + 5, 0, barY + barH - 5);
+    bgRed.addColorStop(0, '#ff4d6d');
+    bgRed.addColorStop(1, '#d90429');
+    ctx.fillStyle = bgRed;
     ctx.beginPath();
     ctx.roundRect(splitX, barY + 5, redW, barH - 10, [0, 8, 8, 0]);
     ctx.fill();
 
-    // Left Avatar: You 🔵
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 12px system-ui, sans-serif';
-    ctx.textAlign = 'left';
+    // Glossy highlight strip across territory bar
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    traceRoundRect(ctx, barX + 70, barY + 6, innerW - 2, 5, 2.5);
+    ctx.fill();
+
+    // Team Labels
+    ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = '#0f172a';
+
+    ctx.textAlign = 'left';
+    ctx.strokeText(`YOU 🔵 ${this.bluePercent}%`, barX + 12, barY + barH / 2);
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(`YOU 🔵 ${this.bluePercent}%`, barX + 12, barY + barH / 2);
 
-    // Right Avatar: Trainer 🔴
     ctx.textAlign = 'right';
+    ctx.strokeText(`${this.redPercent}% 🔴 TRAINER`, barX + barW - 12, barY + barH / 2);
     ctx.fillText(`${this.redPercent}% 🔴 TRAINER`, barX + barW - 12, barY + barH / 2);
 
-    // Center Timer Pill: ⏱️ 0:45
+    // Center Timer Pill: 0:45
     const secs = Math.ceil(this.matchTimer);
     const timeStr = `0:${String(secs).padStart(2, '0')}`;
     const isUrgent = secs <= 10;
+    const timerBg = isUrgent ? '#ef233c' : this.isOvertime ? '#5c1922' : '#1e293b';
 
-    ctx.fillStyle = isUrgent ? '#ef233c' : this.isOvertime ? '#5c1922' : '#1e293b';
-    ctx.strokeStyle = this.isOvertime ? '#ffd166' : '#ffd166';
-    ctx.lineWidth = this.isOvertime ? 2.5 : 2;
-    ctx.beginPath();
-    ctx.roundRect(W / 2 - 36, barY + 3, 72, barH - 6, 14);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, W / 2 - 36, barY + 3, 72, barH - 6, 14, timerBg, {
+      depth: 1.5,
+      rimColor: '#ffd166',
+      lineWidth: this.isOvertime ? 2.4 : 1.8,
+      gloss: true,
+    });
 
     ctx.fillStyle = isUrgent ? '#ffffff' : '#ffd166';
-    ctx.font = 'bold 13px system-ui, monospace';
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.fillText(timeStr, W / 2, barY + barH / 2 - (this.isOvertime ? 5 : 0));
 
     if (this.isOvertime) {
       ctx.fillStyle = '#ff9e00';
-      ctx.font = 'bold 8px system-ui, sans-serif';
+      ctx.font = "700 8px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText('⚡ 2X INK', W / 2, barY + barH / 2 + 7);
     }
 
@@ -1527,40 +1570,39 @@ export class ColorClash extends Game {
   renderBottomDock(ctx, W) {
     ctx.save();
 
-    // 1. Ink / Elixir Meter with 3D drop shadow
+    // 1. Ink / Elixir Meter with 3D bevel track
     const inkX = ARENA_X;
     const inkY = 614;
     const inkW = GRID_W;
     const inkH = 14;
 
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.roundRect(inkX, inkY + 2.5, inkW, inkH, 7);
-    ctx.fill();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(inkX, inkY, inkW, inkH, 7);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, inkX, inkY, inkW, inkH, 7, '#0f172a', {
+      depth: 2,
+      rimColor: '#334155',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
     // Liquid Ink Fill
     const fillW = (this.playerInk / 10.0) * inkW;
-    const inkGrad = ctx.createLinearGradient(inkX, 0, inkX + fillW, 0);
-    if (this.isOvertime) {
-      inkGrad.addColorStop(0, '#f72585');
-      inkGrad.addColorStop(0.5, '#7209b7');
-      inkGrad.addColorStop(1, '#00b4d8');
-    } else {
-      inkGrad.addColorStop(0, '#3a86ff');
-      inkGrad.addColorStop(1, '#00b4d8');
+    if (fillW > 2) {
+      const inkGrad = ctx.createLinearGradient(inkX, 0, inkX + fillW, 0);
+      if (this.isOvertime) {
+        inkGrad.addColorStop(0, '#f72585');
+        inkGrad.addColorStop(0.5, '#7209b7');
+        inkGrad.addColorStop(1, '#00b4d8');
+      } else {
+        inkGrad.addColorStop(0, '#3a86ff');
+        inkGrad.addColorStop(1, '#00b4d8');
+      }
+      ctx.fillStyle = inkGrad;
+      traceRoundRect(ctx, inkX + 1, inkY + 1, Math.max(4, fillW - 2), inkH - 2, 6);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      traceRoundRect(ctx, inkX + 3, inkY + 2, Math.max(2, fillW - 6), 3.5, 2);
+      ctx.fill();
     }
-    ctx.fillStyle = inkGrad;
-    ctx.beginPath();
-    ctx.roundRect(inkX, inkY, fillW, inkH, 7);
-    ctx.fill();
 
     // 10 Pip divider marks
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
@@ -1568,46 +1610,42 @@ export class ColorClash extends Game {
     for (let p = 1; p < 10; p++) {
       const px = inkX + (p / 10) * inkW;
       ctx.beginPath();
-      ctx.moveTo(px, inkY);
-      ctx.lineTo(px, inkY + inkH);
+      ctx.moveTo(px, inkY + 1);
+      ctx.lineTo(px, inkY + inkH - 1);
       ctx.stroke();
     }
 
     // Ink Text
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = '#0f172a';
     const inkLabel = this.isOvertime ? `⚡ 2X SPEED · 💧 ${Math.floor(this.playerInk)} / 10 INK` : `💧 ${Math.floor(this.playerInk)} / 10 INK`;
+    ctx.strokeText(inkLabel, inkX + 8, inkY + inkH / 2);
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(inkLabel, inkX + 8, inkY + inkH / 2);
 
     // 2. Bottom Card Tray (y: 636 -> 706)
-    // Next Card Preview (on left: x: 16 -> 62)
     const nextCard = CARDS.find((c) => c.id === this.playerNextCard);
-    
-    // 3D Cartoon Shadow
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.roundRect(16, 639.5, 48, 68, 12);
-    ctx.fill();
 
-    ctx.fillStyle = '#1e293b';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(16, 636, 48, 68, 12);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, 16, 636, 48, 68, 12, '#1e293b', {
+      depth: 3,
+      rimColor: '#334155',
+      lineWidth: 1.8,
+      gloss: true,
+    });
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.font = "700 9px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.fillText('NEXT', 40, 648);
     if (nextCard) {
-      ctx.font = '20px sans-serif';
+      ctx.font = "700 20px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(nextCard.icon, 40, 672);
       ctx.fillStyle = '#ffd166';
-      ctx.font = 'bold 10px system-ui, sans-serif';
+      ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`💧${nextCard.cost}`, 40, 694);
     }
 
@@ -1625,53 +1663,36 @@ export class ColorClash extends Game {
 
       const canAfford = this.playerInk >= card.cost;
       const isSelected = this.selectedCardIndex === i;
+      const cardColor = isSelected ? '#0077b6' : canAfford ? '#334155' : '#1e293b';
 
-      // 3D Cartoon Drop Shadow
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(cx, cy + 4, cardW, cardH, 12);
-      ctx.fill();
-
-      // Card Background Face
-      ctx.fillStyle = isSelected ? '#0077b6' : canAfford ? '#334155' : '#1e293b';
-      ctx.strokeStyle = isSelected ? '#ffd166' : '#000000';
-      ctx.lineWidth = isSelected ? 3 : 2.5;
-
-      ctx.beginPath();
-      ctx.roundRect(cx, cy, cardW, cardH, 12);
-      ctx.fill();
-      ctx.stroke();
-
-      // Top Specular Highlight
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.beginPath();
-      ctx.roundRect(cx + 2, cy + 2, cardW - 4, (cardH - 4) * 0.4, [10, 10, 0, 0]);
-      ctx.fill();
+      drawToyBevelRect(ctx, cx, cy, cardW, cardH, 12, cardColor, {
+        depth: 3.5,
+        rimColor: isSelected ? '#ffd166' : '#0f172a',
+        lineWidth: isSelected ? 2.4 : 1.8,
+        gloss: true,
+      });
 
       // Card Icon
-      ctx.font = '24px sans-serif';
+      ctx.font = "700 24px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(card.icon, cx + cardW / 2, cy + 28);
+      ctx.fillText(card.icon, cx + cardW / 2, cy + 27);
 
       // Card Name
       ctx.fillStyle = canAfford ? '#ffffff' : '#64748b';
-      ctx.font = 'bold 9px system-ui, sans-serif';
-      ctx.fillText(card.name, cx + cardW / 2, cy + 46);
+      ctx.font = "700 9px 'Fredoka', 'Outfit', sans-serif";
+      ctx.fillText(card.name, cx + cardW / 2, cy + 45);
 
-      // Ink Cost Drop Badge with mini shadow
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(cx + cardW / 2 - 20, cy + 50.5, 40, 14, 7);
-      ctx.fill();
+      // Ink Cost Drop Pill
+      const costColor = canAfford ? '#ffd166' : '#ef233c';
+      drawToyPill(ctx, cx + cardW / 2 - 20, cy + 49, 40, 14, costColor, {
+        rimColor: toyRim(costColor, 0.56),
+        lineWidth: 1.1,
+        gloss: true,
+      });
 
-      ctx.fillStyle = canAfford ? '#ffd166' : '#ef233c';
-      ctx.beginPath();
-      ctx.roundRect(cx + cardW / 2 - 20, cy + 49, 40, 14, 7);
-      ctx.fill();
-
-      ctx.fillStyle = canAfford ? '#000000' : '#ffffff';
-      ctx.font = 'bold 9.5px system-ui, sans-serif';
-      ctx.fillText(`💧${card.cost}`, cx + cardW / 2, cy + 59.5);
+      ctx.fillStyle = canAfford ? '#0f172a' : '#ffffff';
+      ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
+      ctx.fillText(`💧${card.cost}`, cx + cardW / 2, cy + 56.5);
     }
 
     ctx.restore();

@@ -24,6 +24,7 @@ export function renderSharePoster(canvas, opts = {}) {
     cycle = store.meta.cycle || stats.maxCycle || 1,
     dailyMedal = null,
     games = [], // array of { icon, title, state }
+    unlockedCount = store.getUnlockedGameIds?.().length || 20,
   } = opts;
 
   // 1. Deep Cybernetic Background
@@ -204,7 +205,7 @@ export function renderSharePoster(canvas, opts = {}) {
     ctx.fillText(medalObj ? `${medalObj.icon} ${medalObj.name.toUpperCase()} AWARDED · STREAK 🔥 ${daily.streak || 1} DAYS` : 'CHALLENGER COMPLETED', W / 2, scoreCardY + 112);
   } else {
     ctx.fillStyle = '#25e6ff';
-    ctx.fillText(`🔁 CYCLE ${cycle} SURVIVED · 20 MINI-GAMES ROTATION`, W / 2, scoreCardY + 112);
+    ctx.fillText(`🔁 CYCLE ${cycle} SURVIVED · ${unlockedCount} MINI-GAMES ROTATION`, W / 2, scoreCardY + 112);
   }
 
   // 9. 3-Stat Metrics Row

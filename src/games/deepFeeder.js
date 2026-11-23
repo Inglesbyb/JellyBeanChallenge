@@ -1,6 +1,16 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  mixColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyEyes,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 export const WORLD_W = 40000;
@@ -153,8 +163,18 @@ export class DeepFeeder extends Game {
     id: 'deep-feeder',
     title: 'Jelly Reef',
     icon: '🍬',
-    hint: 'DRAG to swim · eat Swedish fish & gummy sharks · depth determines danger & giants',
+    hint: 'DRAG to swim · eat Swedish fish & gummy sharks · dodge giants!',
     baseLikes: 3420,
+    isPrestige: true,
+    parScore60s: 850,
+    cue: 'FEED THE FISH!',
+    prestigeCue: 'MORE BIGGER FISH!',
+    scaling: {
+      predatorBonus:    { base: 0.0, rate: 0.22, cap: 0.26, mode: 'up', deltaFormat: 'abs', unit: '%', label: 'Big Fish' },
+      predatorSizeMult: { base: 1.0, rate: 0.16, cap: 1.32, mode: 'up', label: 'Predator Size' },
+      fishSpeedMult:    { base: 1.0, rate: 0.16, cap: 1.48, mode: 'up', label: 'Fish Speed' },
+      maxFishCount:     { base: 32,  rate: 0.18, cap: 54,   mode: 'up', round: true, label: 'Ocean Density' },
+    },
   };
 
   init(saved, score = 0) {
@@ -391,17 +411,18 @@ export class DeepFeeder extends Game {
       sizeMin = 210; sizeMax = 440; predatorChance = 0.92;
     }
 
-    // Determine target size
+    // Determine target size (Prestige increases predator ratio & size via SSOT scaling)
     let finalSize;
-    const isPredator = Math.random() < Math.min(0.97, predatorChance + 0.07 * (this.pLevel - 1));
+    const isPredator = Math.random() < Math.min(0.94, predatorChance + (this.diff.predatorBonus || 0));
     if (isPredator) {
-      finalSize = Math.max(sizeMin, Math.min(sizeMax, p.size * rand(1.18, 1.85)));
-      if (y >= 35000) finalSize = Math.max(finalSize, rand(160, 340));
+      const sizeScale = this.diff.predatorSizeMult ?? 1;
+      finalSize = Math.max(sizeMin, Math.min(sizeMax * sizeScale, p.size * rand(1.18, 1.85) * sizeScale));
+      if (y >= 35000) finalSize = Math.max(finalSize, rand(160, 340) * sizeScale);
     } else {
       finalSize = Math.max(8, Math.min(sizeMax * 0.75, p.size * rand(0.4, 0.88)));
     }
 
-    const baseSpd = rand(spec.baseSpd[0], spec.baseSpd[1]) * (1 + 0.08 * (this.pLevel - 1));
+    const baseSpd = rand(spec.baseSpd[0], spec.baseSpd[1]) * (this.diff.fishSpeedMult ?? 1);
     const gummyFlavors = ['#e63946', '#2ec4b6', '#ffd166', '#7209b7', '#f72585', '#ff70a6'];
     const flavor = gummyFlavors[Math.floor(Math.random() * gummyFlavors.length)];
 
@@ -614,6 +635,8 @@ export class DeepFeeder extends Game {
     const halfH = (this.H / 2 + 140) / this.zoom;
 
     /* ------------------------------------------------ Enhanced Predator AI & Movement Loop */
+    p.bumpSquash = Math.max(0, (p.bumpSquash || 0) - dt * 4.8);
+
     for (let i = this.fish.length - 1; i >= 0; i--) {
       const f = this.fish[i];
 
@@ -623,23 +646,30 @@ export class DeepFeeder extends Game {
         continue;
       }
 
+      f.bumpCooldown = Math.max(0, (f.bumpCooldown || 0) - dt);
+      f.stunT = Math.max(0, (f.stunT || 0) - dt);
+      f.bumpSquash = Math.max(0, (f.bumpSquash || 0) - dt * 4.8);
+
       const dx = p.x - f.x;
       const dy = p.y - f.y;
       const d = Math.hypot(dx, dy);
       const ratio = f.size / p.size;
       const isDeadly = !this.isMaxSize() && ratio > 1.08 && p.sugarRush <= 0;
-      const isEdible = this.isMaxSize() || ratio < 0.95 || p.sugarRush > 0;
-      const isShark = f.species === 'hariboshark' || f.species === 'strawberryshark' || f.species === 'peppermint' || f.species === 'sourmegalodon';
+      const isEdible = this.isMaxSize() || ratio <= 0.96 || p.sugarRush > 0;
+      const isRival = !isDeadly && !isEdible;
 
       let lungeBoost = 1.0;
 
-      if (isDeadly) {
+      if (f.stunT > 0) {
+        f.isHunting = false;
+        f.isFleeing = false;
+        f.snapT = 0;
+        lungeBoost = 0.22;
+      } else if (isDeadly) {
         // Aggro detection range scales with predator size
         const aggroRadius = clamp(f.size * 3.0 + 130, 200, 520);
 
         if (d < aggroRadius) {
-          // "Bigger fish a bit more aggressive, not too aggressive mind":
-          // 1. Notice player and turn smoothly towards them
           const desiredDir = dx > 0 ? 1 : -1;
           if (f.dir !== desiredDir) {
             f.turnTimer = (f.turnTimer || 0) + dt * 3.2;
@@ -651,16 +681,13 @@ export class DeepFeeder extends Game {
             f.turnTimer = 0;
           }
 
-          // 2. Vertical stalking: match player depth gently
           const targetVy = clamp(dy * 1.6, -105, 105);
           f.vy += (targetVy - f.vy) * Math.min(1, dt * 2.6);
 
-          // 3. Controlled pursuit speed (+20% to +38% boost)
           const proximity = 1.0 - d / aggroRadius;
           lungeBoost = 1.15 + proximity * 0.25;
           f.isHunting = true;
 
-          // 4. Jaws snap when close & facing player
           const inFront = (dx * f.dir > 0);
           if (inFront && d < (p.size + f.size) * 1.2) {
             f.snapT = Math.min(1.0, f.snapT + dt * 4.5);
@@ -668,7 +695,6 @@ export class DeepFeeder extends Game {
             f.snapT = Math.max(0, f.snapT - dt * 2.0);
           }
 
-          // Close call adrenaline reward
           if (d < (p.size + f.size) * 0.92 && !f.nearMissed) {
             f.nearMissed = true;
             this.score += 75;
@@ -686,7 +712,6 @@ export class DeepFeeder extends Game {
       } else if (isEdible) {
         f.isHunting = false;
         f.snapT = 0;
-        // Prey or scared predator flees from player
         const fleeRadius = clamp(p.size * 2.4 + 75, 140, 320);
         if (d < fleeRadius) {
           f.isFleeing = true;
@@ -698,6 +723,7 @@ export class DeepFeeder extends Game {
           f.isFleeing = false;
         }
       } else {
+        // Equal-size rival alertness
         f.isHunting = false;
         f.isFleeing = false;
         f.snapT = 0;
@@ -713,31 +739,73 @@ export class DeepFeeder extends Game {
       f.vx = f.dir * f.spd * lungeBoost;
       const naturalBob = Math.sin(f.wob) * f.bobAmp;
 
-      f.x += f.vx * dt;
-      f.baseY = clamp(f.baseY + f.vy * dt, MINY + 15, MAXY - 15);
+      // Apply smooth knockback impulses directly onto x and baseY so bounced fish glide cleanly
+      const kDecay = Math.pow(0.04, dt);
+      const knockX = (f.knockVx || 0) * dt;
+      const knockY = (f.knockVy || 0) * dt;
+      f.knockVx = (f.knockVx || 0) * kDecay;
+      f.knockVy = (f.knockVy || 0) * kDecay;
+
+      f.x += f.vx * dt + knockX;
+      f.baseY = clamp(f.baseY + f.vy * dt + knockY, MINY + 15, MAXY - 15);
       f.y = clamp(f.baseY + naturalBob, MINY + 15, MAXY - 15);
 
       // Collision checks
       const reach = (p.size + f.size) * 0.56;
       if (d < reach) {
-        if (this.isMaxSize() || p.sugarRush > 0) {
-          this.eat(i, f, true);
-        } else if (ratio < 0.95) {
-          this.eat(i, f, false);
+        if (isEdible) {
+          this.eat(i, f, this.isMaxSize() || p.sugarRush > 0);
         } else if (isDeadly) {
           if (this.die(`Swallowed by ${f.name}`)) {
             const kk = 1 / this.zoom;
             this.fx.burst(p.x, p.y, '#ff4b5c', 28, 240 * kk, 0.85, 5);
             this.fx.shake(12, 0.45);
           }
-        } else {
-          const nx = dx / (d || 1);
-          const ny = dy / (d || 1);
-          const push = (reach - d) * 0.5;
-          p.x += nx * push;
-          p.y += ny * push;
-          f.x -= nx * push;
-          f.y -= ny * push;
+        } else if (isRival && f.bumpCooldown <= 0) {
+          // Rubbery 3D Jelly Bounce + Dash Crack-Nibble!
+          const nx = d > 0.01 ? dx / d : (p.x >= f.x ? 1 : -1);
+          const ny = d > 0.01 ? dy / d : 0;
+          const sep = Math.max(4, (reach - d) * 0.55 + 3);
+          p.x = clamp(p.x + nx * sep, -WORLD_W / 2 + 50, WORLD_W / 2 - 50);
+          p.y = clamp(p.y + ny * sep, MINY, MAXY);
+          f.x -= nx * sep;
+          f.baseY = clamp(f.baseY - ny * sep, MINY + 15, MAXY - 15);
+          f.y = clamp(f.baseY + naturalBob, MINY + 15, MAXY - 15);
+
+          f.bumpCooldown = 0.28;
+          p.bumpSquash = 1.0;
+          f.bumpSquash = 1.0;
+
+          const dashSurge = p.dash > 0.08 || p.sugarRush > 0 || Math.hypot(p.vx, p.vy) > (this.pSpeed / this.zoom) * 1.18;
+          const bouncePow = (dashSurge ? 260 : 195) / Math.max(0.22, this.zoom);
+          p.vx += nx * bouncePow * 0.52;
+          p.vy += ny * bouncePow * 0.52;
+          f.knockVx = -nx * (dashSurge ? 320 : 230) / Math.max(0.35, Math.sqrt(this.zoom));
+          f.knockVy = -ny * (dashSurge ? 240 : 175) / Math.max(0.35, Math.sqrt(this.zoom));
+          if (Math.abs(nx) > 0.35) f.dir = nx > 0 ? -1 : 1;
+
+          const kk = 1 / this.zoom;
+          const midX = (p.x + f.x) * 0.5;
+          const midY = (p.y + f.y) * 0.5;
+
+          if (dashSurge) {
+            // Headbutt Cracks & Shrinks Rival -> Next chomp swallows it whole!
+            f.stunT = 1.45;
+            f.size = Math.max(8, f.size * 0.80);
+            this.score += 25;
+            this.fx.ring(midX, midY, '#ffd166', reach * 1.55, 0.36, 5);
+            this.fx.burst(midX, midY, f.flavor || '#ffd166', 12, 160 * kk, 0.5, 3.5);
+            this.fx.text(f.x, f.y - f.size * 0.9, '💫 CRACKED! +25', '#ffd166', 19, 0.75);
+            this.sounds.hit();
+            this.haptics.medium();
+          } else {
+            // Playful Elastic Boing Rebound!
+            this.fx.ring(midX, midY, '#9bf6ff', reach * 1.25, 0.3, 3.5);
+            this.fx.burst(midX, midY, '#ffffff', 7, 110 * kk, 0.38, 2.5);
+            this.fx.text(midX, midY - 14 * kk, 'BOING!', '#9bf6ff', 14, 0.42);
+            this.sounds.bubble(0.65);
+            this.haptics.light();
+          }
         }
       }
     }
@@ -745,7 +813,7 @@ export class DeepFeeder extends Game {
     this.fish = this.fish.filter(Boolean);
 
     this.spawnT -= dt;
-    if (this.spawnT <= 0 && this.fish.length < 32 + 4 * (this.pLevel - 1)) {
+    if (this.spawnT <= 0 && this.fish.length < (this.diff.maxFishCount ?? 32)) {
       this.spawnT = 0.14;
       this.spawnFish(false);
     }
@@ -940,7 +1008,7 @@ export class DeepFeeder extends Game {
     // Collectible Gold Foil Chocolate Doubloons
     this.drawCoins(ctx);
 
-    // Render Simplified Bold Cartoon Confectionery Fish
+    // Render 3D Translucent Gummy & Vinyl Confectionery Fish
     const sorted = [...this.fish].sort((a, b) => a.size - b.size);
     for (const f of sorted) {
       if (
@@ -950,8 +1018,10 @@ export class DeepFeeder extends Game {
         continue;
       }
       const ratio = f.size / p.size;
-      const isDeadly = ratio > 1.08 && p.sugarRush <= 0;
-      this.drawConfectioneryFish(ctx, f, ratio, isDeadly);
+      const isDeadly = !this.isMaxSize() && ratio > 1.08 && p.sugarRush <= 0;
+      const isRival = !isDeadly && !this.isMaxSize() && p.sugarRush <= 0 && ratio > 0.96;
+      const nearPlayer = Math.hypot(f.x - p.x, f.y - p.y) < (p.size + f.size) * 2.6;
+      this.drawConfectioneryFish(ctx, f, ratio, isDeadly, isRival && nearPlayer);
     }
 
     // Scuba-Bean Player Mascot with Sugar Rush Rainbow Aura
@@ -960,17 +1030,16 @@ export class DeepFeeder extends Game {
       const pulse = 1.0 + Math.sin(this.time * 12) * 0.15;
       const sr = p.size * 1.85 * pulse;
       const sg = ctx.createRadialGradient(p.x, p.y, sr * 0.3, p.x, p.y, sr);
-      sg.addColorStop(0, 'rgba(255, 214, 10, 0.75)');
-      sg.addColorStop(0.5, 'rgba(247, 37, 133, 0.55)');
+      sg.addColorStop(0, 'rgba(255, 214, 10, 0.72)');
+      sg.addColorStop(0.5, 'rgba(247, 37, 133, 0.48)');
       sg.addColorStop(1, 'rgba(76, 201, 240, 0)');
       ctx.fillStyle = sg;
       ctx.beginPath();
       ctx.arc(p.x, p.y, sr, 0, TAU);
       ctx.fill();
 
-      // Spinning sugar shield ring
       ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 3.5 / sc;
+      ctx.lineWidth = 3 / sc;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
       ctx.arc(p.x, p.y, sr * 0.85, this.time * 4, this.time * 4 + TAU);
@@ -979,12 +1048,15 @@ export class DeepFeeder extends Game {
       ctx.restore();
     }
 
+    const sq = 1 + (p.bumpSquash || 0) * 0.22;
     drawBean(ctx, p.x, p.y, p.size * 1.5, {
       hat: 'scuba',
       color: p.sugarRush > 0 ? '#ffbe0b' : '#25e6ff',
       bellyColor: '#ff758f',
       dir: p.dir,
       walkT: this.time * 2.5,
+      squash: sq,
+      eyes: p.bumpSquash > 0.2 ? 'alert' : 'happy',
     });
 
     this.fx.render(ctx, sc);
@@ -997,19 +1069,24 @@ export class DeepFeeder extends Game {
     this.drawDeepHUD(ctx, W, H, p);
   }
 
-  /* ------------------------------------------------ Scenery & Landmarks */
+  /* ------------------------------------------------ Scenery & Landmarks (3D Toy Vinyl Style) */
   drawCorals(ctx, p, halfW) {
     for (const c of this.corals) {
       if (Math.abs(c.x - p.x) > halfW + 120) continue;
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.scale(c.scale, c.scale);
+      const rim = toyRim(c.color, 0.55);
 
       if (c.type === 0) {
-        // Rock Candy Crystal Cluster with Bold Cartoon Outlines
-        ctx.fillStyle = c.color;
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3.5;
+        const g = ctx.createLinearGradient(-14, -58, 18, 0);
+        g.addColorStop(0, shadeColor(c.color, 0.45));
+        g.addColorStop(0.55, c.color);
+        g.addColorStop(1, shadeColor(c.color, -0.25));
+        ctx.fillStyle = g;
+        ctx.strokeStyle = rim;
+        ctx.lineWidth = 1.8;
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(-14, -42);
@@ -1020,42 +1097,34 @@ export class DeepFeeder extends Game {
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(-4, -58);
-        ctx.lineTo(8, -48);
+        ctx.moveTo(-2, -10);
+        ctx.lineTo(-4, -55);
+        ctx.lineTo(6, -46);
         ctx.closePath();
         ctx.fill();
       } else if (c.type === 1) {
-        // Candy Cane Coral Branch
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 14;
         ctx.lineCap = 'round';
+        ctx.strokeStyle = '#991b1b';
+        ctx.lineWidth = 12;
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.quadraticCurveTo(15, -30, -10, -65);
         ctx.stroke();
 
-        ctx.strokeStyle = '#ff4b5c';
+        ctx.strokeStyle = '#ff5a6e';
         ctx.lineWidth = 9;
         ctx.stroke();
 
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+        ctx.lineWidth = 3;
         ctx.stroke();
       } else {
-        // Gumdrop Sea Anemone
-        ctx.fillStyle = c.color;
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 22, 14, 0, 0, TAU);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.strokeStyle = c.color;
-        ctx.lineWidth = 4;
+        drawToySphere(ctx, 0, -2, 18, c.color, { lineWidth: 1.6 });
+        ctx.strokeStyle = shadeColor(c.color, 0.25);
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
         for (let t = -3; t <= 3; t++) {
           const tx = t * 6;
           const sw = Math.sin(this.time * 2 + t) * 6;
@@ -1077,16 +1146,19 @@ export class DeepFeeder extends Game {
       ctx.save();
       ctx.translate(g.x, g.y);
 
-      // Name plaque for the pirate wreck
-      ctx.fillStyle = '#ffd166';
-      ctx.font = '800 13px Outfit, sans-serif';
+      ctx.fillStyle = '#fde047';
+      ctx.font = "700 13px 'Fredoka', Outfit, sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText(`🏴‍☠️ ${g.name.toUpperCase()}`, 0, -180);
 
-      // Chocolate Timber Ship Hull with Bold Cartoon Outlines
-      ctx.fillStyle = '#3c2415';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5;
+      const woodRim = '#2b160a';
+      const hg = ctx.createLinearGradient(0, -45, 0, 75);
+      hg.addColorStop(0, '#78462a');
+      hg.addColorStop(0.5, '#54301a');
+      hg.addColorStop(1, '#361d0e');
+      ctx.fillStyle = hg;
+      ctx.strokeStyle = woodRim;
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
       ctx.moveTo(-180, -40);
       ctx.quadraticCurveTo(-140, 60, 0, 75);
@@ -1098,27 +1170,20 @@ export class DeepFeeder extends Game {
       ctx.fill();
       ctx.stroke();
 
-      // Hull plank lines
-      ctx.strokeStyle = 'rgba(20, 9, 36, 0.45)';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(255, 224, 178, 0.14)';
+      ctx.lineWidth = 2;
       for (let y = -20; y < 60; y += 18) {
         ctx.beginPath();
-        ctx.moveTo(-160, y);
-        ctx.lineTo(180, y);
+        ctx.moveTo(-155, y);
+        ctx.lineTo(175, y);
         ctx.stroke();
       }
 
-      // Broken Wooden Main Mast
-      ctx.fillStyle = '#2c190d';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      ctx.fillRect(-15, -160, 16, 125);
-      ctx.strokeRect(-15, -160, 16, 125);
+      drawToyBevelRect(ctx, -15, -160, 16, 125, 6, '#5c3317', { depth: 0, lineWidth: 2, rimColor: woodRim });
 
-      // Tattered Mint Canvas Sail
-      ctx.fillStyle = 'rgba(78, 205, 196, 0.5)';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
+      ctx.fillStyle = 'rgba(103, 232, 249, 0.55)';
+      ctx.strokeStyle = '#0e7490';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.moveTo(-10, -150);
       ctx.quadraticCurveTo(50, -110, 60, -70);
@@ -1127,45 +1192,33 @@ export class DeepFeeder extends Game {
       ctx.fill();
       ctx.stroke();
 
-      // Jolly Roger Pirate Flag (Smiling Jellybean Skull!)
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(-60, -155, 45, 28);
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(-38, -143, 6, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#000000';
-      ctx.beginPath(); ctx.arc(-40, -144, 1.5, 0, TAU); ctx.arc(-36, -144, 1.5, 0, TAU); ctx.fill();
+      drawToyBevelRect(ctx, -60, -155, 45, 28, 6, '#1e293b', { depth: 2, lineWidth: 1.6, rimColor: '#0f172a' });
+      drawToySphere(ctx, -38, -142, 6, '#f8fafc', { lineWidth: 0.8 });
 
-      // Golden Candy Portholes
       for (let px = -110; px <= 130; px += 55) {
-        ctx.fillStyle = '#ffd166';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.arc(px, 15, 9, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#000000';
-        ctx.beginPath(); ctx.arc(px, 15, 5, 0, TAU); ctx.fill();
+        drawToySphere(ctx, px, 15, 9, '#ffd166', { lineWidth: 1.4, rimColor: '#92400e' });
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath(); ctx.arc(px, 15, 4.5, 0, TAU); ctx.fill();
       }
 
-      // Chocolate wafer cannon jutting out
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(80, -10, 40, 12);
-
+      drawToyBevelRect(ctx, 80, -10, 40, 12, 5, '#334155', { depth: 2, lineWidth: 1.5, rimColor: '#0f172a' });
       ctx.restore();
     }
   }
 
-  // Crushed Chocolate Cookie Seabed & Hydrothermal Bubble Vents
   drawSeabed(ctx, p, halfW, halfH) {
     if (p.y < MAXY - 1400) return;
 
     ctx.save();
     const seaY = MAXY - 20;
 
-    // Dark Cookie Crumble Sand Base
-    ctx.fillStyle = '#1a0e08';
+    ctx.fillStyle = '#29170d';
     ctx.fillRect(p.x - halfW - 50, seaY, halfW * 2 + 100, 200);
 
-    // Cookie crumb border
-    ctx.fillStyle = '#3a2012';
+    const cg = ctx.createLinearGradient(0, seaY - 10, 0, seaY + 80);
+    cg.addColorStop(0, '#54321d');
+    cg.addColorStop(1, '#29170d');
+    ctx.fillStyle = cg;
     ctx.beginPath();
     ctx.moveTo(p.x - halfW - 50, seaY);
     for (let x = p.x - halfW - 50; x <= p.x + halfW + 50; x += 40) {
@@ -1177,12 +1230,11 @@ export class DeepFeeder extends Game {
     ctx.closePath();
     ctx.fill();
 
-    // Hydrothermal Rock Candy Vents
     for (const v of this.deepVents) {
       if (Math.abs(v.x - p.x) > halfW + 100) continue;
-      ctx.fillStyle = '#2b1005';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
+      ctx.fillStyle = '#3b1c0e';
+      ctx.strokeStyle = '#1b0b04';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(v.x - v.w * 0.5, v.y + v.h);
       ctx.lineTo(v.x - v.w * 0.3, v.y);
@@ -1192,13 +1244,11 @@ export class DeepFeeder extends Game {
       ctx.fill();
       ctx.stroke();
 
-      // Glowing hydrothermal throat
       ctx.fillStyle = v.glow;
       ctx.beginPath();
       ctx.ellipse(v.x, v.y, v.w * 0.28, 8, 0, 0, TAU);
       ctx.fill();
 
-      // Vent effervescent bubble stream
       ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
       for (let i = 0; i < 4; i++) {
         const by = v.y - ((this.time * 65 + i * 25) % 120);
@@ -1217,40 +1267,31 @@ export class DeepFeeder extends Game {
       ctx.save();
       ctx.translate(c.x, c.y);
 
-      // Chocolate Wafer Chest Body
-      ctx.fillStyle = '#4a2810';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      ctx.fillRect(-22, -10, 44, 26);
-      ctx.strokeRect(-22, -10, 44, 26);
+      drawToyShadow(ctx, 0, 18, 24, 7, 0.28);
+      drawToyBevelRect(ctx, -22, -10, 44, 26, 6, '#6b3a19', { depth: 3, lineWidth: 1.8, rimColor: '#361907' });
 
-      // Gold foil bands
       ctx.fillStyle = '#ffd166';
       ctx.fillRect(-17, -10, 6, 26);
       ctx.fillRect(11, -10, 6, 26);
 
-      // Foil-wrapped chocolate coin lock
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, 3, 5, 0, TAU); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#000000';
-      ctx.beginPath(); ctx.arc(0, 2, 2, 0, TAU); ctx.fill();
+      drawToySphere(ctx, 0, 3, 5.5, '#ffd166', { lineWidth: 1.2, rimColor: '#92400e' });
 
-      // Wafer Lid
       if (c.opened) {
         ctx.fillStyle = '#ffbe0b';
         ctx.beginPath();
         ctx.arc(0, -12, 14, 0, Math.PI);
         ctx.fill();
 
-        ctx.fillStyle = '#fff';
-        const sparkle = Math.sin(this.time * 6) * 3;
+        const sparkle = Math.sin(this.time * 6) * 2.5;
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath(); ctx.arc(0, -15, 4 + sparkle, 0, TAU); ctx.fill();
       } else {
-        ctx.fillStyle = '#5c3315';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3.5;
+        const lg = ctx.createLinearGradient(0, -32, 0, -10);
+        lg.addColorStop(0, '#8d5127');
+        lg.addColorStop(1, '#5c3315');
+        ctx.fillStyle = lg;
+        ctx.strokeStyle = '#361907';
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
         ctx.arc(0, -10, 22, Math.PI, 0);
         ctx.closePath();
@@ -1258,7 +1299,7 @@ export class DeepFeeder extends Game {
         ctx.stroke();
 
         ctx.fillStyle = '#ffd166';
-        const sp = Math.sin(this.time * 4) * 2;
+        const sp = Math.sin(this.time * 4) * 1.5;
         ctx.beginPath();
         ctx.arc(0, -18, 4 + sp, 0, TAU);
         ctx.fill();
@@ -1272,23 +1313,13 @@ export class DeepFeeder extends Game {
     for (const c of this.coins) {
       ctx.save();
       ctx.translate(c.x, c.y);
-      const spin = Math.sin(c.t);
+      const spin = Math.max(0.22, Math.abs(Math.sin(c.t)));
       ctx.scale(spin, 1);
-
-      // Gold Foil Chocolate Coin
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 10, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#b7791f';
+      drawToySphere(ctx, 0, 0, 10, '#ffd166', { lineWidth: 1.4, rimColor: '#92400e' });
+      ctx.fillStyle = '#d97706';
       ctx.beginPath();
       ctx.arc(0, 0, 4, 0, TAU);
       ctx.fill();
-
       ctx.restore();
     }
   }
@@ -1297,92 +1328,88 @@ export class DeepFeeder extends Game {
     for (const k of this.licoriceLaces) {
       if (Math.abs(k.x - p.x) > halfW + 100) continue;
       const sway = Math.sin(this.time * 1.6 + k.wobPhase) * 28;
+      const rim = toyRim(k.color, 0.55);
 
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 18;
       ctx.lineCap = 'round';
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 14;
       ctx.beginPath();
       ctx.moveTo(k.x, k.y);
       ctx.quadraticCurveTo(k.x + sway * 0.5, k.y - k.height * 0.5, k.x + sway, k.y - k.height);
       ctx.stroke();
 
       ctx.strokeStyle = k.color;
-      ctx.lineWidth = 12;
+      ctx.lineWidth = 10.5;
       ctx.stroke();
 
-      // Candy twists
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
       ctx.lineWidth = 3;
       ctx.stroke();
     }
   }
 
-  /* ------------------------------------------------ CARTOON EYE HELPER */
+  /* ------------------------------------------------ SOFT 3D TOY EYE HELPER */
   drawCartoonEye(ctx, ex, ey, er, lookX = 0.35, angry = false) {
-    // White eyeball disc
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(ex, ey, er, 0, TAU);
-    ctx.fill();
-
-    // Dark cartoon border
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = Math.max(2.2, er * 0.32);
-    ctx.stroke();
-
-    // Glossy black pupil
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(ex + lookX * er * 0.35, ey, er * 0.52, 0, TAU);
-    ctx.fill();
-
-    // White specular highlight dots
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(ex + lookX * er * 0.35 - er * 0.16, ey - er * 0.18, er * 0.22, 0, TAU);
-    ctx.arc(ex + lookX * er * 0.35 + er * 0.14, ey + er * 0.14, er * 0.11, 0, TAU);
-    ctx.fill();
-
-    // Determined/predator cartoon brow
-    if (angry) {
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = Math.max(2.5, er * 0.35);
-      ctx.beginPath();
-      ctx.moveTo(ex - er * 1.0, ey - er * 0.7);
-      ctx.lineTo(ex + er * 0.8, ey - er * 0.25);
-      ctx.stroke();
-    }
+    drawToyEyes(ctx, ex, ey, er * 0.72, {
+      spacing: 0,
+      style: angry ? 'angry' : 'bright',
+      lookX,
+    });
   }
 
-  /* ------------------------------------------------ SIMPLIFIED CARTOON JELLY WORLD CREATURES */
-  drawConfectioneryFish(ctx, f, ratio, isDeadly) {
+  /* ------------------------------------------------ 3D TRANSLUCENT GUMMY & VINYL FISH */
+  drawConfectioneryFish(ctx, f, ratio, isDeadly, showRivalHint = false) {
     ctx.save();
     ctx.translate(f.x, f.y);
 
     const s = f.size;
 
-    // Predator Aggro & Hunting indicator: menacing warning pulse
-    if (f.isHunting) {
-      const alertPulse = 1.0 + Math.sin(this.time * 12) * 0.16;
-      ctx.fillStyle = 'rgba(255, 0, 84, 0.22)';
+    // Predator Aggro / Rival Clash / Fleeing clarity cues
+    if (f.stunT > 0) {
+      // Orbiting golden dizzy stars on Dash-Cracked fish!
+      for (let i = 0; i < 3; i++) {
+        const a = this.time * 6.5 + (i / 3) * TAU;
+        const sx = Math.cos(a) * s * 0.52;
+        const sy = -s * 0.72 + Math.sin(a) * s * 0.16;
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.arc(sx, sy, Math.max(2.2, s * 0.09), 0, TAU);
+        ctx.fill();
+      }
+    } else if (f.isHunting) {
+      const alertPulse = 1.0 + Math.sin(this.time * 12) * 0.14;
+      ctx.fillStyle = 'rgba(255, 0, 84, 0.20)';
       ctx.beginPath();
-      ctx.arc(0, 0, s * 1.35 * alertPulse, 0, TAU);
+      ctx.arc(0, 0, s * 1.32 * alertPulse, 0, TAU);
       ctx.fill();
 
       ctx.fillStyle = '#ff0054';
-      ctx.font = `900 ${Math.max(13, Math.round(s * 0.32))}px Outfit, sans-serif`;
+      ctx.font = `900 ${Math.max(13, Math.round(s * 0.3))}px Outfit, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText('⚠️', 0, -s * 0.72);
-    } else if (f.isFleeing) {
-      // Scared panic sweat drop
-      ctx.fillStyle = '#4cc9f0';
+      ctx.fillText('⚠️', 0, -s * 0.74);
+    } else if (showRivalHint) {
+      // Clear amber rival rim when within clash range so player knows "Dash to Crack!"
+      const pRing = 1 + Math.sin(this.time * 8) * 0.08;
+      ctx.strokeStyle = 'rgba(255, 209, 102, 0.72)';
+      ctx.lineWidth = toyLineW(s, 0.055, 1.4, 3);
       ctx.beginPath();
-      ctx.arc(0, -s * 0.65, Math.max(3, s * 0.12), 0, TAU);
+      ctx.ellipse(0, 0, s * 1.05 * pRing, s * 0.62 * pRing, 0, 0, TAU);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fde047';
+      ctx.font = `800 ${Math.max(11, Math.round(s * 0.28))}px 'Fredoka', Outfit, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('⚡', 0, -s * 0.72);
+    } else if (f.isFleeing) {
+      ctx.fillStyle = '#67e8f9';
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.65, Math.max(2.6, s * 0.11), 0, TAU);
       ctx.fill();
     }
 
-    ctx.scale(f.dir, 1);
-    ctx.rotate(Math.atan2(f.vy, Math.abs(f.vx) + 25) * 0.45);
+    const sq = f.bumpSquash || 0;
+    ctx.scale(f.dir * (1 - sq * 0.16), 1 + sq * 0.22);
+    ctx.rotate(Math.atan2(f.vy, Math.abs(f.vx) + 25) * 0.42);
 
     const swing = Math.sin(f.wob * 2.8) * s * 0.22;
 
@@ -1429,287 +1456,247 @@ export class DeepFeeder extends Game {
         break;
     }
 
-    // High-Gloss Gummy Specular Shine Crescent (Bloons TD 6 / Fall Guys Look!)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    // Soft Studio Top Gloss Crescent on every confectionery creature
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
     ctx.beginPath();
-    ctx.ellipse(-s * 0.1, -s * 0.24, s * 0.42, s * 0.1, 0, 0, TAU);
+    ctx.ellipse(-s * 0.1, -s * 0.24, s * 0.38, s * 0.085, 0, 0, TAU);
     ctx.fill();
 
     ctx.restore();
   }
 
-  // 1. 🍬 Swedish Gummy Fish (Simplified, bold cartoon contour with dark outlines!)
+  // 1. 🍬 Swedish Gummy Fish (Volumetric 3D translucent gummy body + tinted rim)
   renderSwedishFish(ctx, s, swing, flavor = '#e63946') {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.2, s * 0.09);
+    const rim = toyRim(flavor, 0.56);
+    const lw = toyLineW(s, 0.042, 0.85, 2.2);
 
-    // Chunky Cartoon Tail Fin
-    ctx.fillStyle = flavor;
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
     ctx.lineJoin = 'round';
+    ctx.fillStyle = shadeColor(flavor, -0.14);
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
-    ctx.moveTo(-s * 0.65, 0);
-    ctx.lineTo(-s * 1.35, -s * 0.45 + swing);
-    ctx.lineTo(-s * 1.15, swing * 0.5);
-    ctx.lineTo(-s * 1.35, s * 0.45 + swing);
+    ctx.moveTo(-s * 0.62, 0);
+    ctx.quadraticCurveTo(-s * 1.05, -s * 0.35 + swing * 0.4, -s * 1.32, -s * 0.42 + swing);
+    ctx.quadraticCurveTo(-s * 1.1, swing * 0.5, -s * 1.32, s * 0.42 + swing);
+    ctx.quadraticCurveTo(-s * 1.05, s * 0.35 + swing * 0.4, -s * 0.62, 0);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Chunky Cartoon Bean-Fish Body
-    ctx.fillStyle = flavor;
+    const bg = ctx.createRadialGradient(-s * 0.18, -s * 0.18, s * 0.06, 0, 0, s * 0.95);
+    bg.addColorStop(0, shadeColor(flavor, 0.48));
+    bg.addColorStop(0.45, flavor);
+    bg.addColorStop(1, shadeColor(flavor, -0.28));
+    ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.ellipse(0, 0, s * 0.92, s * 0.48, 0, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // 2 Bold, Simplified Cartoon Scale Arcs
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = Math.max(2.2, s * 0.06);
-    [-0.15, 0.15].forEach((ox) => {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = Math.max(1.2, s * 0.04);
+    [-0.14, 0.16].forEach((ox) => {
       ctx.beginPath();
-      ctx.arc(ox * s, 0, s * 0.25, -0.6, 0.6);
+      ctx.arc(ox * s, 0, s * 0.24, -0.55, 0.55);
       ctx.stroke();
     });
 
-    // Pectoral Fin
-    ctx.fillStyle = flavor;
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW * 0.8;
+    ctx.fillStyle = shadeColor(flavor, 0.15);
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw * 0.85;
     ctx.beginPath();
-    ctx.ellipse(-s * 0.05, s * 0.22, s * 0.22, s * 0.12, 0.4, 0, TAU);
+    ctx.ellipse(-s * 0.05, s * 0.24, s * 0.22, s * 0.12, 0.4, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Big Cartoon Googly Eye
     this.drawCartoonEye(ctx, s * 0.48, -s * 0.12, s * 0.14, 0.4);
   }
 
-  // 2. 🍊 Candy Corn Fish (3 Clean cartoon color blocks with bold dark outline!)
+  // 2. 🍊 Candy Corn Fish (Smooth glazed 3D bands without heavy ink seams)
   renderCandyCornFish(ctx, s, swing) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.2, s * 0.09);
+    const rim = '#92400e';
+    const lw = toyLineW(s, 0.042, 0.85, 2.2);
 
-    // Chunky Yellow Tail
-    ctx.fillStyle = '#ffd166';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.fillStyle = '#fbbf24';
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-s * 0.6, 0);
-    ctx.lineTo(-s * 1.3, -s * 0.45 + swing);
-    ctx.lineTo(-s * 1.3, s * 0.45 + swing);
+    ctx.lineTo(-s * 1.28, -s * 0.42 + swing);
+    ctx.lineTo(-s * 1.28, s * 0.42 + swing);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // 1. Yellow Base Tier
-    ctx.fillStyle = '#ffd166';
+    const bg = ctx.createLinearGradient(-s * 0.85, -s * 0.45, s * 0.85, s * 0.45);
+    bg.addColorStop(0, '#ffd166');
+    bg.addColorStop(0.42, '#f97316');
+    bg.addColorStop(0.75, '#fff7ed');
+    bg.addColorStop(1, '#ffffff');
+    ctx.fillStyle = bg;
     ctx.beginPath();
-    ctx.ellipse(-s * 0.25, 0, s * 0.45, s * 0.5, 0, 0, TAU);
+    ctx.ellipse(0, 0, s * 0.86, s * 0.48, 0, 0, TAU);
     ctx.fill();
-
-    // 2. Orange Mid Tier
-    ctx.fillStyle = '#f77f00';
-    ctx.beginPath();
-    ctx.ellipse(s * 0.1, 0, s * 0.4, s * 0.46, 0, 0, TAU);
-    ctx.fill();
-
-    // 3. Marshmallow White Tip
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.ellipse(s * 0.45, 0, s * 0.28, s * 0.35, 0, 0, TAU);
-    ctx.fill();
-
-    // Bold Outer Contour Stroke
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, s * 0.85, s * 0.48, 0, 0, TAU);
     ctx.stroke();
 
-    // Clean Cartoon Separation Ribs
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = Math.max(2, s * 0.05);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
     ctx.beginPath();
-    ctx.moveTo(-s * 0.1, -s * 0.45);
-    ctx.lineTo(-s * 0.1, s * 0.45);
-    ctx.moveTo(s * 0.28, -s * 0.38);
-    ctx.lineTo(s * 0.28, s * 0.38);
-    ctx.stroke();
+    ctx.ellipse(0, s * 0.24, s * 0.56, s * 0.12, 0, 0, TAU);
+    ctx.fill();
 
-    // Big Cartoon Googly Eye
-    this.drawCartoonEye(ctx, s * 0.48, -s * 0.12, s * 0.13, 0.4);
+    this.drawCartoonEye(ctx, s * 0.46, -s * 0.12, s * 0.14, 0.4);
   }
 
-  // 3. 🍑 Sour Peach Ring Jelly (Bold cartoon donut ring with dark outline!)
+  // 3. 🍑 Sour Peach Ring Jelly (Glossy translucent gummy donut ring)
   renderSourPeachRing(ctx, s, swing) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.2, s * 0.09);
+    const rim = '#9d174d';
+    const lw = toyLineW(s, 0.042, 0.85, 2.2);
 
-    // Two-tone peach gel ring
-    const g = ctx.createLinearGradient(-s * 0.7, 0, s * 0.7, 0);
-    g.addColorStop(0, '#ffd166'); // lemon
-    g.addColorStop(1, '#ff70a6'); // peach pink
+    ctx.strokeStyle = '#be185d';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = lw * 1.4;
+    for (let t = -1; t <= 1; t++) {
+      const ty = t * (s * 0.18);
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.58, ty);
+      ctx.quadraticCurveTo(-s * 1.0, ty + swing, -s * 1.32, ty - swing);
+      ctx.stroke();
+    }
+
+    const g = ctx.createLinearGradient(-s * 0.7, -s * 0.5, s * 0.7, s * 0.5);
+    g.addColorStop(0, '#fde047');
+    g.addColorStop(0.55, '#fb7185');
+    g.addColorStop(1, '#f43f5e');
     ctx.fillStyle = g;
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.arc(0, 0, s * 0.65, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Donut hole with dark outline
-    ctx.fillStyle = '#0a3a60';
+    ctx.fillStyle = '#0c4a6e';
     ctx.beginPath();
-    ctx.arc(0, 0, s * 0.28, 0, TAU);
+    ctx.arc(0, 0, s * 0.27, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Sour sugar crystal dots
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * TAU;
-      const r = s * 0.48;
+      const r = s * 0.46;
       ctx.beginPath();
-      ctx.arc(Math.cos(a) * r, Math.sin(a) * r, s * 0.045, 0, TAU);
+      ctx.arc(Math.cos(a) * r, Math.sin(a) * r, s * 0.04, 0, TAU);
       ctx.fill();
     }
 
-    // Trailing Cartoon Strawberry Laces
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
-    for (let t = -1; t <= 1; t++) {
-      const ty = t * (s * 0.18);
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.6, ty);
-      ctx.quadraticCurveTo(-s * 1.0, ty + swing, -s * 1.35, ty - swing);
-      ctx.stroke();
-    }
-
-    // Happy Cartoon Googly Eyes on Top Arch
-    this.drawCartoonEye(ctx, s * 0.15, -s * 0.38, s * 0.12, 0.3);
+    this.drawCartoonEye(ctx, s * 0.16, -s * 0.38, s * 0.13, 0.3);
   }
 
-  // 4. 🍫 Marshmallow Puffer (Bold squishy marshmallow with chunky candy corn spikes!)
+  // 4. 🍫 Marshmallow Puffer (Fluffy 3D pillow sphere + glossy candy spikes)
   renderMarshmallowPuffer(ctx, s, swing, puffed, isDeadly) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.2, s * 0.09);
-    const puffScale = 1.0 + puffed * 0.45;
+    const puffScale = 1.0 + puffed * 0.42;
     const pr = s * 0.62 * puffScale;
+    const lw = toyLineW(pr * 2, 0.038, 0.85, 2.0);
 
-    // Chunky Cartoon Candy-Corn Spikes when puffed!
     if (puffed > 0.05) {
       const numSpikes = 10;
       for (let i = 0; i < numSpikes; i++) {
         const a = (i / numSpikes) * TAU;
-        const spLen = pr + puffed * s * 0.36;
-        ctx.fillStyle = '#ffd166';
-        ctx.strokeStyle = darkInk;
-        ctx.lineWidth = lineW * 0.7;
+        const spLen = pr + puffed * s * 0.34;
+        ctx.fillStyle = '#fbbf24';
+        ctx.strokeStyle = '#92400e';
+        ctx.lineWidth = lw;
+        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(Math.cos(a - 0.2) * pr, Math.sin(a - 0.2) * pr);
+        ctx.moveTo(Math.cos(a - 0.18) * pr * 0.92, Math.sin(a - 0.18) * pr * 0.92);
         ctx.lineTo(Math.cos(a) * spLen, Math.sin(a) * spLen);
-        ctx.lineTo(Math.cos(a + 0.2) * pr, Math.sin(a + 0.2) * pr);
+        ctx.lineTo(Math.cos(a + 0.18) * pr * 0.92, Math.sin(a + 0.18) * pr * 0.92);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       }
     }
 
-    // Squishy Marshmallow Body
-    ctx.fillStyle = '#fefae0';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    drawToySphere(ctx, 0, 0, pr, '#fffbeb', { rimColor: '#b45309', lineWidth: lw });
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = lw * 0.9;
     ctx.beginPath();
-    ctx.arc(0, 0, pr, 0, TAU);
+    ctx.ellipse(-pr * 0.72, swing * 0.4, pr * 0.28, pr * 0.16, 0, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Cute Little Fin
-    ctx.fillStyle = '#dda15e';
-    ctx.beginPath();
-    ctx.ellipse(-pr * 0.75, swing * 0.4, pr * 0.3, pr * 0.18, 0, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-
-    // Expressive Cartoon Eyes (Panicked if puffed!)
-    const er = pr * 0.32;
-    this.drawCartoonEye(ctx, pr * 0.35, -pr * 0.2, er, 0.3, isDeadly);
+    this.drawCartoonEye(ctx, pr * 0.35, -pr * 0.2, pr * 0.3, 0.3, isDeadly);
   }
 
-  // 5. 🐛 Trolli Gummy Worm (Segmented cartoon worm with thick dark outlines!)
+  // 5. 🐛 Trolli Gummy Worm (Beaded glossy 3D gummy spheres)
   renderGummyWorm(ctx, s, wob) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.0, s * 0.08);
     const segments = 5;
-
+    const lw = toyLineW(s, 0.04, 0.75, 1.9);
     for (let i = segments; i >= 0; i--) {
       const segX = -i * (s * 0.28);
-      const segY = Math.sin(wob * 2.8 + i * 0.6) * (s * 0.25);
+      const segY = Math.sin(wob * 2.8 + i * 0.6) * (s * 0.24);
       const segR = s * (0.36 - i * 0.02);
-
-      // Alternating Neon Cyan and Electric Pink
-      ctx.fillStyle = i % 2 === 0 ? '#00f5d4' : '#f72585';
-      ctx.strokeStyle = darkInk;
-      ctx.lineWidth = lineW;
-      ctx.beginPath();
-      ctx.arc(segX, segY, segR, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      const col = i % 2 === 0 ? '#2dd4bf' : '#f43f5e';
+      drawToySphere(ctx, segX, segY, segR, col, { lineWidth: lw });
     }
-
-    // Cute Cartoon Face on Head Segment
-    this.drawCartoonEye(ctx, s * 0.14, -s * 0.08, s * 0.12, 0.4);
+    this.drawCartoonEye(ctx, s * 0.14, -s * 0.08, s * 0.13, 0.4);
   }
 
-  // 6. 🍭 Peppermint Razor Barracuda (Sleek cartoon torpedo with bold red spirals!)
+  // 6. 🍭 Peppermint Razor Barracuda (Sleek 3D candy torpedo)
   renderPeppermintBarracuda(ctx, s, swing, isDeadly) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.5, s * 0.09);
+    const lw = toyLineW(s, 0.04, 0.9, 2.2);
     const L = s * 1.5;
     const Hh = s * 0.4;
+    const rim = '#881337';
 
-    // Peppermint Fan Tail
-    ctx.fillStyle = '#d90429';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.fillStyle = '#e11d48';
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-L * 0.7, 0);
-    ctx.lineTo(-L * 1.35, -Hh * 1.1 + swing);
-    ctx.lineTo(-L * 1.35, Hh * 1.1 + swing);
+    ctx.lineTo(-L * 1.32, -Hh * 1.08 + swing);
+    ctx.lineTo(-L * 1.32, Hh * 1.08 + swing);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Torpedo Body Base
-    ctx.fillStyle = '#ffffff';
+    const bg = ctx.createLinearGradient(0, -Hh, 0, Hh);
+    bg.addColorStop(0, '#ffffff');
+    bg.addColorStop(0.7, '#f8fafc');
+    bg.addColorStop(1, '#cbd5e1');
+    ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.fill();
 
-    // Bold Diagonal Candy-Cane Red Spirals
-    ctx.strokeStyle = '#d90429';
-    ctx.lineWidth = Math.max(4, s * 0.11);
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
+    ctx.clip();
+    ctx.strokeStyle = '#e11d48';
+    ctx.lineWidth = Math.max(3, s * 0.1);
     [-0.5, -0.22, 0.06, 0.32].forEach((sx) => {
       ctx.beginPath();
-      ctx.moveTo(sx * L - Hh, -Hh * 0.85);
-      ctx.lineTo(sx * L + Hh, Hh * 0.85);
+      ctx.moveTo(sx * L - Hh, -Hh * 0.95);
+      ctx.lineTo(sx * L + Hh, Hh * 0.95);
       ctx.stroke();
     });
+    ctx.restore();
 
-    // Dark Cartoon Outer Stroke
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.stroke();
 
-    // Hard Candy Crystal Teeth
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.2;
     for (let i = 0; i < 3; i++) {
       const tx = L * (0.68 + i * 0.09);
       ctx.beginPath();
@@ -1721,208 +1708,211 @@ export class DeepFeeder extends Game {
       ctx.stroke();
     }
 
-    // Sharp Predator Cartoon Eye with Determined Brow
-    this.drawCartoonEye(ctx, L * 0.68, -Hh * 0.22, Hh * 0.38, 0.45, isDeadly);
+    this.drawCartoonEye(ctx, L * 0.68, -Hh * 0.22, Hh * 0.36, 0.45, isDeadly);
   }
 
-  // 7. 🦈 Haribo Two-Tone Shark (Sapphire Blue or Cherry Top + Marshmallow Foam White Belly!)
+  // 7. 🦈 Haribo Two-Tone Shark (3D shaded sapphire/berry top + marshmallow belly!)
   renderHariboShark(ctx, s, swing, isDeadly, isStrawberry = false) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.8, s * 0.09);
     const L = s * 1.45;
     const Hh = s * 0.52;
-    const gelColor = isStrawberry ? '#e63946' : '#0077b6';
+    const gelColor = isStrawberry ? '#f43f5e' : '#0284c7';
+    const rim = toyRim(gelColor, 0.62);
+    const lw = toyLineW(s, 0.04, 0.9, 2.3);
 
-    // Tail Fin
-    ctx.fillStyle = gelColor;
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = shadeColor(gelColor, -0.1);
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.moveTo(-L * 0.7, 0);
-    ctx.lineTo(-L * 1.35, -Hh * 1.25 + swing);
-    ctx.lineTo(-L * 1.05, swing * 0.4);
-    ctx.lineTo(-L * 1.35, Hh * 1.25 + swing);
+    ctx.lineTo(-L * 1.32, -Hh * 1.22 + swing);
+    ctx.lineTo(-L * 1.04, swing * 0.4);
+    ctx.lineTo(-L * 1.32, Hh * 1.22 + swing);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Iconic Molded Dorsal Fin
-    ctx.fillStyle = gelColor;
+    ctx.fillStyle = shadeColor(gelColor, 0.12);
     ctx.beginPath();
     ctx.moveTo(-L * 0.08, -Hh * 0.85);
-    ctx.lineTo(-L * 0.42, -Hh * 1.95);
+    ctx.quadraticCurveTo(-L * 0.24, -Hh * 1.6, -L * 0.42, -Hh * 1.9);
     ctx.lineTo(-L * 0.52, -Hh * 0.85);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // 1. Top Half: Gummy Gel
-    ctx.fillStyle = gelColor;
+    const tg = ctx.createLinearGradient(0, -Hh, 0, 0);
+    tg.addColorStop(0, shadeColor(gelColor, 0.36));
+    tg.addColorStop(1, gelColor);
+    ctx.fillStyle = tg;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, Math.PI, 0);
     ctx.fill();
 
-    // 2. Bottom Half: Soft Opaque Marshmallow Foam Belly!
-    ctx.fillStyle = '#fefae0';
+    const bg = ctx.createLinearGradient(0, 0, 0, Hh);
+    bg.addColorStop(0, '#fffbeb');
+    bg.addColorStop(1, '#e2e8f0');
+    ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, Math.PI);
     ctx.fill();
 
-    // Dark Cartoon Outer Stroke
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.stroke();
 
-    // Seam dividing gel top and foam belly
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = Math.max(2.2, lineW * 0.65);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = lw * 0.8;
     ctx.beginPath();
-    ctx.moveTo(-L * 0.95, 0);
-    ctx.lineTo(L * 0.95, 0);
+    ctx.moveTo(-L * 0.92, 0);
+    ctx.lineTo(L * 0.92, 0);
     ctx.stroke();
 
-    // Pectoral Fin with White Foam Trim
     ctx.fillStyle = gelColor;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw * 0.85;
     ctx.beginPath();
-    ctx.ellipse(-L * 0.1, Hh * 0.55, L * 0.28, Hh * 0.35, 0.4, 0, TAU);
+    ctx.ellipse(-L * 0.1, Hh * 0.52, L * 0.26, Hh * 0.34, 0.4, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Cartoon Chomp Mouth with Rounded White Marshmallow Teeth
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = 1.0;
     for (let t = 0; t < 3; t++) {
       const tx = L * (0.66 + t * 0.08);
       ctx.beginPath();
-      ctx.arc(tx, Hh * 0.22, s * 0.055, 0, TAU);
+      ctx.arc(tx, Hh * 0.22, s * 0.052, 0, TAU);
       ctx.fill();
       ctx.stroke();
     }
 
-    // Expressive Cartoon Shark Eye
-    this.drawCartoonEye(ctx, L * 0.65, -Hh * 0.28, Hh * 0.34, 0.4, isDeadly);
+    this.drawCartoonEye(ctx, L * 0.65, -Hh * 0.28, Hh * 0.32, 0.4, isDeadly);
   }
 
-  // 8. 🍓 Bioluminescent Gumdrop Jelly (Glowing cartoon bell with bold dark outline!)
+  // 8. 🍓 Bioluminescent Gumdrop Jelly (Glowing translucent jelly dome)
   renderBioluminescentGumdrop(ctx, s, wob) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.0, s * 0.08);
-    const pulse = 1.0 + Math.sin(wob * 2.5) * 0.14;
+    const pulse = 1.0 + Math.sin(wob * 2.5) * 0.12;
     const r = s * 0.72 * pulse;
+    const lw = toyLineW(s, 0.04, 0.85, 2.0);
 
-    // Glowing Gumdrop Dome
-    const g = ctx.createLinearGradient(0, -r, 0, 0);
-    g.addColorStop(0, '#f72585');
-    g.addColorStop(1, '#7209b7');
+    ctx.strokeStyle = '#f472b6';
+    ctx.lineWidth = Math.max(2, s * 0.065);
+    ctx.lineCap = 'round';
+    for (let t = -2; t <= 2; t++) {
+      const tx = t * (s * 0.22);
+      const sw = Math.sin(wob * 2.5 + t) * s * 0.24;
+      ctx.beginPath();
+      ctx.moveTo(tx, 0);
+      ctx.quadraticCurveTo(tx + sw, s * 0.6, tx - sw, s * 1.2);
+      ctx.stroke();
+    }
+
+    const g = ctx.createRadialGradient(-r * 0.25, -r * 0.55, r * 0.1, 0, 0, r);
+    g.addColorStop(0, '#fbcfe8');
+    g.addColorStop(0.45, '#ec4899');
+    g.addColorStop(1, '#7e22ce');
     ctx.fillStyle = g;
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.strokeStyle = '#581c87';
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.arc(0, 0, r, Math.PI, 0);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Trailing Cartoon Strawberry Laces
-    ctx.strokeStyle = '#f72585';
-    ctx.lineWidth = Math.max(2.5, s * 0.07);
-    ctx.lineCap = 'round';
-    for (let t = -2; t <= 2; t++) {
-      const tx = t * (s * 0.22);
-      const sw = Math.sin(wob * 2.5 + t) * s * 0.25;
-      ctx.beginPath();
-      ctx.moveTo(tx, 0);
-      ctx.quadraticCurveTo(tx + sw, s * 0.6, tx - sw, s * 1.25);
-      ctx.stroke();
-    }
-
-    // Cute Googly Eyes
     this.drawCartoonEye(ctx, s * 0.18, -r * 0.35, r * 0.22, 0.3);
   }
 
-  // 9. 🗡️ Rock Candy Marlin (Sleek cartoon marlin with peppermint spear bill!)
+  // 9. 🗡️ Rock Candy Marlin (3D glazed azure marlin + striped candy lance)
   renderRockCandyMarlin(ctx, s, swing, isDeadly) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.5, s * 0.09);
     const L = s * 1.45;
     const Hh = s * 0.46;
+    const rim = '#0c4a6e';
+    const lw = toyLineW(s, 0.04, 0.9, 2.2);
 
-    // Rock Candy Sail Fin
-    ctx.fillStyle = '#4cc9f0';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.fillStyle = '#38bdf8';
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-L * 0.3, -Hh * 0.85);
-    ctx.lineTo(-L * 0.05, -Hh * 2.2);
+    ctx.lineTo(-L * 0.05, -Hh * 2.15);
     ctx.lineTo(L * 0.3, -Hh * 0.85);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Blue Gel Body
-    ctx.fillStyle = '#0077b6';
+    const bg = ctx.createLinearGradient(0, -Hh, 0, Hh);
+    bg.addColorStop(0, '#38bdf8');
+    bg.addColorStop(0.55, '#0284c7');
+    bg.addColorStop(1, '#075985');
+    ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Peppermint Stick Spear Bill!
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = Math.max(4.5, s * 0.12);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#881337';
+    ctx.lineWidth = Math.max(3.5, s * 0.1);
     ctx.beginPath();
     ctx.moveTo(L * 0.85, 0);
-    ctx.lineTo(L * 1.9, 0);
+    ctx.lineTo(L * 1.88, 0);
     ctx.stroke();
 
-    ctx.strokeStyle = '#d90429';
-    ctx.lineWidth = Math.max(3, s * 0.08);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(2.2, s * 0.07);
     ctx.stroke();
 
-    // Big Cartoon Eye
-    this.drawCartoonEye(ctx, L * 0.65, -Hh * 0.2, Hh * 0.35, 0.45, isDeadly);
+    ctx.setLineDash([s * 0.16, s * 0.16]);
+    ctx.strokeStyle = '#f43f5e';
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    this.drawCartoonEye(ctx, L * 0.65, -Hh * 0.2, Hh * 0.34, 0.45, isDeadly);
   }
 
-  // 10. 🐙 Gumdrop Kraken Squid (Bulbous cartoon head with curly tentacles!)
+  // 10. 🐙 Gumdrop Kraken Squid (Bulbous vinyl purple crown + curly arms)
   renderGumdropKraken(ctx, s, wob, isDeadly) {
-    const darkInk = '#000000';
-    const lineW = Math.max(3.5, s * 0.09);
+    const lw = toyLineW(s, 0.04, 0.85, 2.2);
 
-    // Purple Gumdrop Head
-    ctx.fillStyle = '#7209b7';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#ec4899';
+    ctx.lineWidth = Math.max(2.8, s * 0.075);
+    for (let i = -2; i <= 2; i++) {
+      const ty = i * (s * 0.14);
+      const wave = Math.sin(wob * 3 + i) * s * 0.24;
+      ctx.beginPath();
+      ctx.moveTo(s * 0.48, ty);
+      ctx.quadraticCurveTo(s * 1.05, ty + wave, s * 1.55, ty - wave);
+      ctx.stroke();
+    }
+
+    const kg = ctx.createRadialGradient(-s * 0.45, -s * 0.18, s * 0.08, -s * 0.3, 0, s * 0.9);
+    kg.addColorStop(0, '#c084fc');
+    kg.addColorStop(0.5, '#9333ea');
+    kg.addColorStop(1, '#581c87');
+    ctx.fillStyle = kg;
+    ctx.strokeStyle = '#3b0764';
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.ellipse(-s * 0.3, 0, s * 0.85, s * 0.46, 0, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // 6 Curly Gummy Worm Tentacles
-    ctx.strokeStyle = '#f72585';
-    ctx.lineWidth = Math.max(3.5, s * 0.08);
-    for (let i = -2; i <= 2; i++) {
-      const ty = i * (s * 0.14);
-      const wave = Math.sin(wob * 3 + i) * s * 0.25;
-      ctx.beginPath();
-      ctx.moveTo(s * 0.5, ty);
-      ctx.quadraticCurveTo(s * 1.1, ty + wave, s * 1.6, ty - wave);
-      ctx.stroke();
-    }
-
-    // Giant Googly Eyes
-    this.drawCartoonEye(ctx, s * 0.22, -s * 0.16, s * 0.22, 0.4, isDeadly);
+    this.drawCartoonEye(ctx, s * 0.22, -s * 0.16, s * 0.21, 0.4, isDeadly);
   }
 
-  // 11. 🍓 Strawberry Licorice Eel (Undulating red rope with bold dark cartoon borders!)
+  // 11. 🍓 Strawberry Licorice Eel (Smooth glossy red candy ribbon)
   renderLicoriceSerpent(ctx, s, wob) {
-    const darkInk = '#000000';
-    const lineW = Math.max(4.5, s * 0.14);
+    const lineW = Math.max(4, s * 0.13);
 
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW + 4;
     ctx.lineCap = 'round';
+    ctx.strokeStyle = '#881337';
+    ctx.lineWidth = lineW + 2.4;
     ctx.beginPath();
     for (let x = -s * 1.35; x <= s * 0.85; x += s * 0.2) {
       const y = Math.sin(wob * 3 + x * 0.08) * s * 0.32;
@@ -1931,73 +1921,67 @@ export class DeepFeeder extends Game {
     }
     ctx.stroke();
 
-    ctx.strokeStyle = '#d90429';
+    ctx.strokeStyle = '#f43f5e';
     ctx.lineWidth = lineW;
     ctx.stroke();
 
-    // Gloss Stripe
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = Math.max(1.5, s * 0.05);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = Math.max(1.2, s * 0.045);
     ctx.stroke();
 
-    // Cartoon Eye
     this.drawCartoonEye(ctx, s * 0.72, -s * 0.08, s * 0.12, 0.4);
   }
 
-  // 12. 👑 Sour Crystal Megalodon (Colossal cartoon titan with thick bold outlines!)
+  // 12. 👑 Sour Crystal Megalodon (Colossal glazed blue-berry-lemon apex titan)
   renderSourMegalodon(ctx, s, swing, isDeadly) {
-    const darkInk = '#000000';
-    const lineW = Math.max(5.5, s * 0.11);
     const L = s * 1.65;
     const Hh = s * 0.62;
+    const rim = '#1e1b4b';
+    const lw = toyLineW(s, 0.036, 1.2, 2.8);
 
-    // Colossal Gummy Tail
-    ctx.fillStyle = '#4361ee';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = lineW;
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#4f46e5';
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.moveTo(-L * 0.7, 0);
-    ctx.lineTo(-L * 1.35, -Hh * 1.3 + swing);
+    ctx.lineTo(-L * 1.35, -Hh * 1.28 + swing);
     ctx.lineTo(-L * 1.05, swing * 0.4);
-    ctx.lineTo(-L * 1.35, Hh * 1.3 + swing);
+    ctx.lineTo(-L * 1.35, Hh * 1.28 + swing);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // High Gummy Dorsal Fin
     ctx.beginPath();
     ctx.moveTo(-L * 0.1, -Hh * 0.85);
-    ctx.lineTo(-L * 0.45, -Hh * 2.05);
+    ctx.lineTo(-L * 0.45, -Hh * 2.0);
     ctx.lineTo(-L * 0.55, -Hh * 0.85);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Two-Tone Sour Blue Raspberry & Lemon Body
     const bg = ctx.createLinearGradient(0, -Hh, 0, Hh);
-    bg.addColorStop(0, '#4361ee');
-    bg.addColorStop(0.65, '#7209b7');
-    bg.addColorStop(1, '#ffbe0b');
+    bg.addColorStop(0, '#60a5fa');
+    bg.addColorStop(0.55, '#7c3aed');
+    bg.addColorStop(1, '#fbbf24');
     ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Sparkling Sour-Sugar Crystal Studs
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     for (let i = 0; i < 16; i++) {
       const sx = ((i % 4) - 1.5) * (L * 0.38);
       const sy = (Math.floor(i / 4) - 1.5) * (Hh * 0.35);
       ctx.beginPath();
-      ctx.arc(sx, sy, Math.max(2, s * 0.035), 0, TAU);
+      ctx.arc(sx, sy, Math.max(1.8, s * 0.032), 0, TAU);
       ctx.fill();
     }
 
-    // Marshmallow-White Razor Teeth
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = darkInk;
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = 1.4;
     for (let t = 0; t < 5; t++) {
       const tx = L * (0.64 + t * 0.07);
       ctx.beginPath();
@@ -2009,8 +1993,7 @@ export class DeepFeeder extends Game {
       ctx.stroke();
     }
 
-    // Giant Fierce Cartoon Predator Eye
-    this.drawCartoonEye(ctx, L * 0.68, -Hh * 0.25, Hh * 0.38, 0.45, true);
+    this.drawCartoonEye(ctx, L * 0.68, -Hh * 0.25, Hh * 0.36, 0.45, true);
   }
 
   /* ------------------------------------------------ Threat Radar (Lane Approaching Only) */
@@ -2047,32 +2030,31 @@ export class DeepFeeder extends Game {
       const edgeY = clamp(oy + Math.sin(ang) * (H / 2 - margin), margin + 40, H - margin - 60);
 
       const proximity = 1.0 - clamp((d - vr * 0.45) / (vr * 1.1), 0, 1);
-      const pulse = 1.0 + Math.sin(this.time * (6 + proximity * 10)) * 0.25;
+      const pulse = 1.0 + Math.sin(this.time * (6 + proximity * 10)) * 0.22;
 
       ctx.save();
       ctx.translate(edgeX, edgeY);
 
-      ctx.fillStyle = `rgba(255, 75, 92, ${0.35 + proximity * 0.45})`;
+      ctx.fillStyle = `rgba(244, 63, 94, ${0.32 + proximity * 0.42})`;
       ctx.beginPath();
-      ctx.arc(0, 0, 18 * pulse, 0, TAU);
+      ctx.arc(0, 0, 17 * pulse, 0, TAU);
       ctx.fill();
 
       ctx.rotate(ang);
-      ctx.fillStyle = '#ff4b5c';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
+      ctx.fillStyle = '#f43f5e';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(-8, -9);
-      ctx.lineTo(-4, 0);
-      ctx.lineTo(-8, 9);
+      ctx.moveTo(11, 0);
+      ctx.lineTo(-7, -8);
+      ctx.lineTo(-3.5, 0);
+      ctx.lineTo(-7, 8);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-
       ctx.restore();
 
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#ffffff';
       ctx.font = '800 11px Outfit, system-ui, sans-serif';
       ctx.textAlign = 'center';
       const distM = Math.max(1, Math.round(d / 18));
@@ -2080,32 +2062,29 @@ export class DeepFeeder extends Game {
     }
   }
 
-  /* ------------------------------------------------ HUD */
+  /* ------------------------------------------------ Crisp Toy HUD */
   drawDeepHUD(ctx, W, H, p) {
     const curStage = STAGES[this.stage];
     const depthM = Math.max(0, Math.round(p.y / 10));
     const zone = this.getDepthZone(p.y);
 
-    // 0. Sonar Scanner & 45km Depth Gauge Widget
     const radarW = 136;
     const radarH = 76;
     const rx = 14;
     const ry = H - 232;
 
-    ctx.fillStyle = 'rgba(20, 9, 36, 0.88)';
-    ctx.strokeStyle = '#25e6ff';
-    ctx.lineWidth = 2.2;
-    this.rr(rx, ry, radarW, radarH, 12);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, rx, ry, radarW, radarH, 12, '#0f172a', {
+      depth: 2,
+      rimColor: '#38bdf8',
+      lineWidth: 2,
+      gloss: false,
+    });
 
-    // Radar Header
-    ctx.fillStyle = '#25e6ff';
+    ctx.fillStyle = '#38bdf8';
     ctx.font = '800 9px Outfit, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('📡 SONAR · 45km OCEAN', rx + 10, ry + 14);
 
-    // 8-Phase Vertical Depth Gauge Column
     const barX = rx + 12;
     const barY = ry + 22;
     const barHeight = 44;
@@ -2119,46 +2098,35 @@ export class DeepFeeder extends Game {
       ctx.fillRect(barX, barY + segY0, barWidth, Math.max(2, segY1 - segY0));
     }
 
-    // Player depth marker on the gauge
     const playerYNorm = clamp(p.y / MAXY, 0, 1);
     const pMarkerY = barY + playerYNorm * barHeight;
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(barX + barWidth / 2, pMarkerY, 4, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
+    drawToySphere(ctx, barX + barWidth / 2, pMarkerY, 4, '#ffffff', { rimColor: '#0f172a', lineWidth: 1.2 });
 
-    // Circular Local Radar Sweep
     const cx = rx + 82;
     const cy = ry + 44;
     const cr = 24;
 
-    ctx.fillStyle = 'rgba(0, 30, 45, 0.8)';
-    ctx.strokeStyle = 'rgba(37, 230, 255, 0.45)';
+    ctx.fillStyle = 'rgba(2, 44, 67, 0.85)';
+    ctx.strokeStyle = 'rgba(56, 243, 255, 0.45)';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(cx, cy, cr, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Sweep line
     const sweepAng = (this.time * 2.8) % TAU;
-    ctx.strokeStyle = 'rgba(37, 230, 255, 0.8)';
+    ctx.strokeStyle = 'rgba(56, 243, 255, 0.8)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + Math.cos(sweepAng) * cr, cy + Math.sin(sweepAng) * cr);
     ctx.stroke();
 
-    // Player green dot
     ctx.fillStyle = '#3dffa2';
     ctx.beginPath();
     ctx.arc(cx, cy, 2.5, 0, TAU);
     ctx.fill();
 
-    // Blips for nearby predatory sharks & chests
     const radarScale = cr / 1800;
     for (const f of this.fish) {
       if (f.size / p.size <= 1.08) continue;
@@ -2183,7 +2151,6 @@ export class DeepFeeder extends Game {
       }
     }
 
-    // Apex Megalodon Victory & Invulnerability Banner
     if (this.isMaxSize()) {
       const vSec = Math.max(0, Math.ceil(this.victoryTimer));
       const badgeW = 280;
@@ -2191,40 +2158,34 @@ export class DeepFeeder extends Game {
       const bx = W / 2 - badgeW / 2;
       const by = 18;
 
-      ctx.save();
-      ctx.fillStyle = 'rgba(255, 214, 10, 0.95)';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      this.rr(bx, by, badgeW, badgeH, 12);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, bx, by, badgeW, badgeH, 12, '#fde047', {
+        depth: 3,
+        rimColor: '#713f12',
+        lineWidth: 2.2,
+      });
 
-      ctx.fillStyle = '#000000';
-      ctx.font = '900 13px Outfit, system-ui, sans-serif';
+      ctx.fillStyle = '#451a03';
+      ctx.font = "700 13px 'Fredoka', Outfit, sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText('👑 APEX MEGALODON (INVULNERABLE)', W / 2, by + 19);
 
       ctx.font = '800 11px Outfit, system-ui, sans-serif';
-      ctx.fillStyle = '#10002b';
       ctx.fillText(vSec > 0 ? `OCEAN DOMINATED · VICTORY IN ${vSec}s` : 'OCEAN DOMINATED · VICTORY!', W / 2, by + 36);
-      ctx.restore();
     }
 
-    // 1. Stage & Depth Information Pill (positioned safely above bottom reel controls)
     const pillY = H - 148;
-    ctx.fillStyle = 'rgba(20, 9, 36, 0.82)';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    this.rr(14, pillY, 242, 54, 14);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, 14, pillY, 242, 54, 14, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#334155',
+      lineWidth: 2,
+      gloss: false,
+    });
 
-    ctx.fillStyle = this.isMaxSize() ? '#ffd166' : '#3dffa2';
-    ctx.font = '800 13px Outfit, system-ui, sans-serif';
+    ctx.fillStyle = this.isMaxSize() ? '#fde047' : '#3dffa2';
+    ctx.font = "700 13px 'Fredoka', Outfit, sans-serif";
     ctx.textAlign = 'left';
     ctx.fillText(this.isMaxSize() ? '👑 APEX MEGALODON (MAX)' : `${curStage.icon} ${curStage.n.toUpperCase()}`, 26, pillY + 20);
 
-    // Depth & Threat Level Badge
     ctx.fillStyle = '#ffffff';
     ctx.font = '700 11px Outfit, system-ui, sans-serif';
     ctx.fillText(`${depthM}m · ${zone.name}`, 26, pillY + 36);
@@ -2233,21 +2194,20 @@ export class DeepFeeder extends Game {
     ctx.font = '800 10px Outfit, system-ui, sans-serif';
     ctx.fillText(`● ${zone.threat}`, 26, pillY + 48);
 
-    // 2. Dash Stamina or Sugar Rush Bar
     const barW = 120;
     const barH = 14;
     const bx = W - barW - 16;
     const by = H - 122;
 
-    ctx.fillStyle = 'rgba(20, 9, 36, 0.82)';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    this.rr(bx - 8, by - 16, barW + 16, 42, 10);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, bx - 8, by - 16, barW + 16, 42, 10, '#0f172a', {
+      depth: 2.5,
+      rimColor: '#334155',
+      lineWidth: 2,
+      gloss: false,
+    });
 
     if (p.sugarRush > 0) {
-      ctx.fillStyle = '#ffbe0b';
+      ctx.fillStyle = '#fde047';
       ctx.font = '800 10px Outfit, system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(`⚡ SUGAR RUSH! ${p.sugarRush.toFixed(1)}s`, bx, by - 4);
@@ -2261,25 +2221,24 @@ export class DeepFeeder extends Game {
       this.rr(bx, by, rushFill, barH, 7);
       ctx.fill();
     } else {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.font = '800 10px Outfit, system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('⚡ BUBBLE DASH', bx, by - 4);
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
       this.rr(bx, by, barW, barH, 7);
       ctx.fill();
 
       const fillW = Math.max(10, barW * p.stamina);
       const sg = ctx.createLinearGradient(bx, 0, bx + fillW, 0);
-      sg.addColorStop(0, '#4cc9f0');
-      sg.addColorStop(1, '#7209b7');
+      sg.addColorStop(0, '#38bdf8');
+      sg.addColorStop(1, '#818cf8');
       ctx.fillStyle = sg;
       this.rr(bx, by, fillW, barH, 7);
       ctx.fill();
     }
 
-    // 3. Depth Zone Transition Alert Banner
     if (this.zoneAlert && this.zoneAlert.timer > 0) {
       ctx.save();
       const alpha = clamp(this.zoneAlert.timer / 0.8, 0, 1) * clamp((3.2 - this.zoneAlert.timer) / 0.5, 0, 1);
@@ -2290,12 +2249,12 @@ export class DeepFeeder extends Game {
       const bbx = W / 2 - bw / 2;
       const bby = 68;
 
-      ctx.fillStyle = 'rgba(20, 9, 36, 0.88)';
-      ctx.strokeStyle = this.zoneAlert.color;
-      ctx.lineWidth = 3;
-      this.rr(bbx, bby, bw, bh, 14);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, bbx, bby, bw, bh, 14, '#0f172a', {
+        depth: 3,
+        rimColor: this.zoneAlert.color,
+        lineWidth: 2.5,
+        gloss: false,
+      });
 
       ctx.fillStyle = this.zoneAlert.color;
       ctx.font = '900 11px Outfit, system-ui, sans-serif';
@@ -2303,7 +2262,7 @@ export class DeepFeeder extends Game {
       ctx.fillText(`ENTERING ZONE · ${this.zoneAlert.threat}`, W / 2, bby + 20);
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '800 14px Outfit, system-ui, sans-serif';
+      ctx.font = "700 14px 'Fredoka', Outfit, sans-serif";
       ctx.fillText(this.zoneAlert.name.toUpperCase(), W / 2, bby + 39);
 
       ctx.restore();

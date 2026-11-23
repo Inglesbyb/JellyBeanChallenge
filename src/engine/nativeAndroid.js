@@ -35,7 +35,28 @@ export async function setupNativeStatusBar() {
 export function handleAndroidBack(reel) {
   const $ = (s) => document.querySelector(s);
 
-  // 1. Share Card Preview Modal
+  // 0. Admin Playtester Modal
+  const adminModal = $('#adminModal');
+  if (adminModal && !adminModal.classList.contains('hidden')) {
+    reel.closeAdminModal();
+    return;
+  }
+
+  // 1. Mystery Pack Reveal Modal
+  const packRevealModal = $('#packRevealModal');
+  if (packRevealModal && !packRevealModal.classList.contains('hidden')) {
+    reel.closePackRevealModal();
+    return;
+  }
+
+  // 2. Game Packs Vault Modal
+  const packsModal = $('#packsModal');
+  if (packsModal && !packsModal.classList.contains('hidden')) {
+    reel.closePacksModal();
+    return;
+  }
+
+  // 3. Share Card Preview Modal
   const shareModal = $('#shareModal');
   if (shareModal && !shareModal.classList.contains('hidden')) {
     reel.closeShareModal();
@@ -67,6 +88,13 @@ export function handleAndroidBack(reel) {
   const settingsModal = $('#settingsModal');
   if (settingsModal && !settingsModal.classList.contains('hidden')) {
     reel.closeSettings();
+    return;
+  }
+
+  // 5b. How To Play Modal
+  const howToModal = $('#howToModal');
+  if (howToModal && !howToModal.classList.contains('hidden')) {
+    reel.closeHowTo();
     return;
   }
 

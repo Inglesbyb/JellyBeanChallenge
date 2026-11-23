@@ -4,63 +4,29 @@ import { store, getRankTier, RANKS, SKINS, HATS, DAILY_MEDALS, getDailyMedal, ge
 import { drawBean } from './bean.js';
 import { renderSharePoster, shareCardFile, downloadCardPNG } from './shareCard.js';
 import { setupNativeAndroidBridge } from './nativeAndroid.js';
+import { PlazaScene, WorldMapScene } from './worldMap.js';
 import { Input } from './input.js';
-import { VoidEater } from '../games/voidEater.js';
-import { DeepFeeder } from '../games/deepFeeder.js';
-import { TowerSlice } from '../games/towerSlice.js';
-import { MultiplierRunner } from '../games/multiplierRunner.js';
-import { FruitMerge } from '../games/fruitMerge.js';
-import { Motherload } from '../games/motherload.js';
-import { DoodleJump } from '../games/doodleJump.js';
-import { PaperIo } from '../games/paperIo.js';
-import { BlockBuster } from '../games/blockBuster.js';
-import { CrossyRoad } from '../games/crossyRoad.js';
-import { ZombieFortress } from '../games/zombieFortress.js';
-import { SubwaySurfers } from '../games/subwaySurfers.js';
-import { SaveTheBean } from '../games/saveTheBean.js';
-import { BeanTD } from '../games/beanTD.js';
-import { ColorClash } from '../games/colorClash.js';
-import { BallBlast } from '../games/ballBlast.js';
-import { SledSurfers } from '../games/sledSurfers.js';
-import { AgeOfBeans } from '../games/ageOfBeans.js';
-import { BeanSurvivors } from '../games/beanSurvivors.js';
-import { BeanHelix } from '../games/beanHelix.js';
+import {
+  GAMES,
+  GAME_BY_ID,
+  STARTER_GAMES,
+  GAME_PACKS,
+  WORLD_1_NODES,
+  WORLD_1_CHESTS,
+  QUEST_POOL,
+  getWorldById,
+  getWorldNodeById,
+  getStarsForScore,
+  isPrestigeGame,
+  getGameParScore,
+  getGameCue,
+  getGamePrestigeCue,
+} from '../games/registry.js';
 
+export { isPrestigeGame };
 export const W = 450;
 export const H = 800;
 
-const GAMES = [VoidEater, DeepFeeder, TowerSlice, MultiplierRunner, FruitMerge, Motherload, DoodleJump, PaperIo, BlockBuster, CrossyRoad, ZombieFortress, SubwaySurfers, SaveTheBean, BeanTD, ColorClash, BallBlast, SledSurfers, AgeOfBeans, BeanSurvivors, BeanHelix];
-
-// Games that can be COMPLETED (growth caps / finite win states). Completing one keeps it in
-// the rotation but restarts it fresh at the next prestige rank with tougher settings.
-// Everything NOT listed here (motherload, crossy-road, subway-surfers, doodle-jump,
-// sled-surfers, zombie-fortress, ...) stays continuous: no completion resets, ever.
-const PRESTIGE_IDS = new Set([
-  'void-eater',
-  'deep-feeder',
-  'fruit-merge',
-  'paper-turf',
-  'multiplier-runner',
-  'age-of-beans',
-  'bean-td',
-  'tower-slice',
-  'bean-survivors',
-  'bean-helix',
-]);
-
-// Any game class defining `static meta = { isPrestige: true, ... }` is automatically
-// recognized by the engine playbook, with backward-compatibility for PRESTIGE_IDS.
-export const isPrestigeGame = (gameClassOrId) => {
-  if (!gameClassOrId) return false;
-  if (typeof gameClassOrId === 'string') {
-    const G = GAMES.find((g) => g.meta?.id === gameClassOrId);
-    return Boolean(G?.meta?.isPrestige || PRESTIGE_IDS.has(gameClassOrId));
-  }
-  return Boolean(gameClassOrId?.meta?.isPrestige || PRESTIGE_IDS.has(gameClassOrId?.meta?.id));
-};
-
-const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-const roman = (n) => ROMAN[n] || String(n);
 const $ = (s) => document.querySelector(s);
 
 export class Reel {
@@ -94,14 +60,22 @@ export class Reel {
     this.lastScoreShown = -1;
     this.hintTimer = null;
     this.welcomeTimer = null;
+    this._pendingWrap = null;
 
-    // Mascot Closet (TICKET-03)
+    // Mascot Closet (TICKET-03) & Toy Courtyard Plaza / World 1 Diorama
     this.closetTab = 'skins';
     this.closetPreviewAnim = null;
     this.closetWalkT = 0;
+    this.homeBeanAnim = null;
+    this.homeBeanT = 0;
+    this.homeBeanBounce = 0;
+    this.homeBeanSparkles = [];
+    this.activeWorldNodeId = store.worlds.selectedNodeId || '1-1';
+    this.plazaScene = new PlazaScene($('#plazaCanvas'));
+    this.worldMapScene = new WorldMapScene($('#worldMapCanvas'));
 
-    // Daily Challenge (TICKET-04)
-    this.runType = 'standard'; // 'standard' | 'daily'
+    // Run modes: 'standard' (Endless) | 'world' (World 1 Node) | 'daily'
+    this.runType = 'standard';
     this.dailyIndices = [];
     this.dailyStageIndex = 0;
     this.dailyResults = [];
@@ -112,11 +86,31 @@ export class Reel {
     this.currentShareOpts = null;
     this.shareToastTimer = null;
 
+    // Pack Progression & Mystery Reveal
+    this.pendingRevealQueue = store.getPendingRevealPacks();
+    this.activeRevealPack = null;
+    this.revealedCardIndices = new Set();
+    this._resumeAdvanceAfterReveal = false;
+
+    // Admin Playtester Mode (visible in `npm run dev`, ?admin=1, Shift+A, or 5x tap on Settings title)
+    const explicitAdmin = params.get('admin') === '1' || params.get('dev') === '1';
+    const isDevServer = Boolean(typeof import.meta !== 'undefined' && import.meta.env?.DEV);
+    this.adminMode = isDevServer || explicitAdmin || sessionStorage.getItem('gr_admin') === '1';
+    if (explicitAdmin || sessionStorage.getItem('gr_admin') === '1') sessionStorage.setItem('gr_admin', '1');
+    this._pausedByAdmin = false;
+    this._settingsTapCount = 0;
+    this._settingsTapTimer = null;
+
     this.bindUI();
     this.buildMenuIcons();
     this.buildPips();
     this.renderProfileUI();
     this.renderDailyMenuUI();
+    this.renderPackUI();
+    this.renderPlazaUI();
+    this.renderWorldMapUI();
+    this.syncAdminUI();
+    this.startHomeBeanPreview();
     setupNativeAndroidBridge(this);
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -124,22 +118,42 @@ export class Reel {
     this.last = performance.now();
     requestAnimationFrame((t) => this.loop(t));
 
-    // Direct game launch via URL query parameter (e.g. ?game=subway-surfers or ?g=12)
+    // Direct game launch via URL query parameter (adminMode overrides pack lock)
     const targetGame = params.get('game') || params.get('g');
     if (targetGame) {
       const idx = GAMES.findIndex((g, i) => g.meta.id === targetGame || String(i + 1) === targetGame || String(i) === targetGame);
-      if (idx !== -1) {
+      if (idx !== -1 && (this.isGameUnlocked(idx) || this.adminMode)) {
         if (store.data.meta.eliminated) {
           delete store.data.meta.eliminated[GAMES[idx].meta.id];
           store.save();
         }
-        setTimeout(() => this.jumpToGame(idx), 50);
+        setTimeout(() => this.jumpToGame(idx, this.adminMode), 50);
       }
+    } else if (explicitAdmin) {
+      setTimeout(() => this.openAdminModal(), 60);
     }
   }
 
-  isGameAlive(i) {
+  isGameUnlocked(i) {
     if (i < 0 || i >= GAMES.length) return false;
+    const id = GAMES[i].meta.id;
+    if (this.runType === 'world') {
+      const node = getWorldNodeById(this.activeWorldNodeId);
+      return !!node && node.gameIds.includes(id);
+    }
+    return store.isGameUnlocked(id);
+  }
+
+  getUnlockedIndices() {
+    const list = [];
+    for (let i = 0; i < GAMES.length; i++) {
+      if (this.isGameUnlocked(i)) list.push(i);
+    }
+    return list;
+  }
+
+  isGameAlive(i) {
+    if (!this.isGameUnlocked(i)) return false;
     const id = GAMES[i].meta.id;
     return !store.isEliminated(id);
   }
@@ -152,26 +166,147 @@ export class Reel {
     return list;
   }
 
+  /* ---------------------------------------------------------- Normalized Reel Points */
+  toPerfRP(gameId, rawDelta) {
+    const par = getGameParScore(gameId);
+    const linear = (Math.max(0, rawDelta) / Math.max(1, par)) * 1000;
+    return linear <= 1500 ? linear : Math.min(2500, 1500 + (linear - 1500) * 0.25);
+  }
+
+  getCycleMultiplier() {
+    const cycle = this.runType === 'daily' ? 1 : (store.meta.cycle || 1);
+    return Math.min(2.0, 1 + 0.05 * (cycle - 1));
+  }
+
+  getRunMultiplier() {
+    const questBoost = this.runType === 'daily' ? 1 : store.getQuestMultiplier();
+    return this.getCycleMultiplier() * questBoost;
+  }
+
+  computeLiveRP() {
+    if (!this.game || !GAMES[this.index]) return 0;
+    const rawDelta = Math.max(0, this.game.score - this.roundStartScore);
+    const perfRP = this.toPerfRP(GAMES[this.index].meta.id, rawDelta);
+    return Math.round(perfRP * this.getRunMultiplier());
+  }
+
+  computeFinalRoundRP({ survived = false, won = false, prestige = 1 } = {}) {
+    const id = GAMES[this.index].meta.id;
+    const rawDelta = Math.max(0, (this.game?.score || 0) - this.roundStartScore);
+    const perfRP = this.toPerfRP(id, rawDelta);
+    const runMult = this.getRunMultiplier();
+    if (!survived && !won) {
+      return Math.round(perfRP * 0.5 * runMult);
+    }
+    const survivalBase = 500;
+    const victoryBonus = won ? Math.min(2500, 1500 + (Math.max(1, prestige) - 1) * 250) : 0;
+    return Math.round((perfRP + survivalBase + victoryBonus) * runMult);
+  }
+
+  // Console/QA helper on window.__reel to test Pack Unlock & Mystery Reveal flow
+  debugGrantRP(amount = 25000) {
+    store.stats.lifetimeScore = (store.stats.lifetimeScore || 0) + Math.max(0, Math.round(amount));
+    store.save();
+    const unlocked = store.checkPackUnlocks();
+    this.buildMenuIcons();
+    this.buildPips();
+    this.renderProfileUI();
+    this.renderPackUI();
+    this.renderPlazaUI();
+    this.renderWorldMapUI();
+    if (unlocked.length > 0 && this.mode === 'menu') {
+      this.openPackRevealModal(unlocked[0], false);
+    }
+    return { lifetimeScore: store.stats.lifetimeScore, unlocked: unlocked.map((p) => p.id) };
+  }
+
   /* ---------------------------------------------------------- UI setup */
   bindUI() {
     $('#btnPlay').onclick = () => this.startRun(false);
-    $('#btnContinue').onclick = () => this.startRun(true);
-    $('#btnNew').onclick = () => this.startRun(false);
     $('#btnNext').onclick = () => this.nextCycle();
 
-    if (store.hasSession()) {
-      $('#btnPlay').classList.add('hidden');
-      $('#btnContinue').classList.remove('hidden');
-      $('#btnNew').classList.remove('hidden');
-      $('#btnContinue').style.animation = 'btnpulse 1.8s ease-in-out infinite';
+    const homeBeanBtn = $('#homeBeanBtn');
+    if (homeBeanBtn) {
+      homeBeanBtn.onclick = () => this.triggerHomeBeanBounce();
+    }
+    const btnNavHome = $('#btnNavHome');
+    if (btnNavHome) {
+      btnNavHome.onclick = () => this.triggerHomeBeanBounce();
     }
 
-    $('#btnMute').onclick = () => {
-      sounds.setMuted(!sounds.muted);
-      $('#muteIco').textContent = sounds.muted ? '🔇' : '🔊';
-      if (!sounds.muted) sounds.like();
-    };
-    $('#muteIco').textContent = sounds.muted ? '🔇' : '🔊';
+    // Toy Courtyard Plaza & World 1 Overworld Controls
+    ['#btnEnterWorld1', '#btnPlazaWorld1', '#btnPlazaStars'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.onclick = () => this.openWorldMap();
+    });
+    ['#btnPlazaDaily', '#btnNavDaily', '#btnWorldPlayDaily'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.onclick = () => this.startDailyRun();
+    });
+    ['#btnOpenQuestsPlaza', '#btnWorldOpenQuests'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.onclick = () => this.openQuestsModal();
+    });
+    const btnQuestsClose = $('#btnQuestsClose');
+    if (btnQuestsClose) btnQuestsClose.onclick = () => this.closeQuestsModal();
+    const btnQuestsDone = $('#btnQuestsDone');
+    if (btnQuestsDone) btnQuestsDone.onclick = () => this.closeQuestsModal();
+    const questsModal = $('#questsModal');
+    if (questsModal) {
+      questsModal.addEventListener('click', (e) => {
+        if (e.target === questsModal) this.closeQuestsModal();
+      });
+    }
+
+    const btnBackPlaza = $('#btnWorldBackPlaza');
+    if (btnBackPlaza) btnBackPlaza.onclick = () => this.closeWorldMap();
+    const btnWorldEndless = $('#btnWorldPlayEndless');
+    if (btnWorldEndless) {
+      btnWorldEndless.onclick = () => {
+        this.closeWorldMap(false);
+        this.startRun(false);
+      };
+    }
+    const btnPlayNode = $('#btnPlayWorldNode');
+    if (btnPlayNode) btnPlayNode.onclick = () => this.startWorldRun(this.activeWorldNodeId);
+    const btnChest = $('#btnWorldChest');
+    if (btnChest) btnChest.onclick = () => this.handleWorldChestClick();
+    const btnW2Portal = $('#btnWorld2Portal');
+    if (btnW2Portal) btnW2Portal.onclick = () => this.handleWorld2PortalClick();
+
+    const pinsLayer = $('#wmPinsLayer');
+    if (pinsLayer) {
+      pinsLayer.addEventListener('click', (e) => {
+        const nodeBtn = e.target.closest('.wm-node-btn[data-node]');
+        if (nodeBtn) {
+          this.selectWorldMapNode(nodeBtn.dataset.node);
+        }
+      });
+    }
+
+    const btnHowTo = $('#btnHowToPlay');
+    if (btnHowTo) btnHowTo.onclick = () => this.openHowTo();
+    const btnHowToClose = $('#btnHowToClose');
+    if (btnHowToClose) btnHowToClose.onclick = () => this.closeHowTo();
+    const btnHowToDone = $('#btnHowToDone');
+    if (btnHowToDone) btnHowToDone.onclick = () => this.closeHowTo();
+    const howToModal = $('#howToModal');
+    if (howToModal) {
+      howToModal.addEventListener('click', (e) => {
+        if (e.target === howToModal) this.closeHowTo();
+      });
+    }
+
+    const btnMute = $('#btnMute');
+    const muteIco = $('#muteIco');
+    if (btnMute) {
+      btnMute.onclick = () => {
+        sounds.setMuted(!sounds.muted);
+        if (muteIco) muteIco.textContent = sounds.muted ? '🔇' : '🔊';
+        if (!sounds.muted) sounds.like();
+      };
+    }
+    if (muteIco) muteIco.textContent = sounds.muted ? '🔇' : '🔊';
 
     // Pause button in HUD
     $('#btnPause').onclick = () => {
@@ -246,6 +381,92 @@ export class Reel {
     const btnDlyDone = $('#btnDailyDone');
     if (btnDlyDone) btnDlyDone.onclick = () => this.closeDailySummary();
 
+    // Packs Vault & Mystery Reveal modals
+    const openVaultOrReveal = () => {
+      const pending = store.getPendingRevealPacks();
+      if (pending.length > 0) {
+        this.openPackRevealModal(pending[0], false);
+      } else {
+        this.openPacksModal();
+      }
+    };
+    const btnPacks = $('#btnOpenPacks');
+    if (btnPacks) btnPacks.onclick = () => this.openPacksModal();
+    const btnVault = $('#btnOpenVault');
+    if (btnVault) btnVault.onclick = openVaultOrReveal;
+    const btnRpPill = $('#btnRpPill');
+    if (btnRpPill) btnRpPill.onclick = () => this.openPacksModal();
+    const btnGamesPill = $('#btnGamesPill');
+    if (btnGamesPill) btnGamesPill.onclick = () => this.openPacksModal();
+    const btnPacksClose = $('#btnPacksClose');
+    if (btnPacksClose) btnPacksClose.onclick = () => this.closePacksModal();
+    const btnPacksDone = $('#btnPacksDone');
+    if (btnPacksDone) btnPacksDone.onclick = () => this.closePacksModal();
+    const packCard = $('#packProgressCard');
+    if (packCard) {
+      packCard.onclick = openVaultOrReveal;
+      packCard.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          packCard.click();
+        }
+      };
+    }
+    const btnRevealAct = $('#btnPackRevealAction');
+    if (btnRevealAct) btnRevealAct.onclick = () => this.handlePackRevealAction();
+
+    // Admin Mode Launcher & Hidden 5-Tap Unlock on Settings Title
+    const btnAdminPill = $('#btnAdminPill');
+    if (btnAdminPill) btnAdminPill.onclick = () => this.openAdminModal();
+    const btnAdminFromSettings = $('#btnOpenAdminFromSettings');
+    if (btnAdminFromSettings) {
+      btnAdminFromSettings.onclick = () => {
+        $('#settingsModal').classList.add('hidden');
+        this.openAdminModal();
+      };
+    }
+    const settingsTitleEl = $('#settingsTitle');
+    if (settingsTitleEl) {
+      settingsTitleEl.onclick = () => {
+        this._settingsTapCount += 1;
+        clearTimeout(this._settingsTapTimer);
+        this._settingsTapTimer = setTimeout(() => { this._settingsTapCount = 0; }, 1600);
+        if (this._settingsTapCount >= 5) {
+          this._settingsTapCount = 0;
+          $('#settingsModal').classList.add('hidden');
+          this.enableAdminMode(true);
+        }
+      };
+    }
+    const btnAdminClose = $('#btnAdminClose');
+    if (btnAdminClose) btnAdminClose.onclick = () => this.closeAdminModal();
+    const adminModalEl = $('#adminModal');
+    if (adminModalEl) {
+      adminModalEl.addEventListener('click', (e) => {
+        if (e.target === adminModalEl) this.closeAdminModal();
+      });
+    }
+    const btnAdminPrev = $('#btnAdminPrev');
+    if (btnAdminPrev) btnAdminPrev.onclick = () => this.adminStepGame(-1);
+    const btnAdminNext = $('#btnAdminNext');
+    if (btnAdminNext) btnAdminNext.onclick = () => this.adminStepGame(1);
+    const btnAdminPrevQuick = $('#btnAdminPrevQuick');
+    if (btnAdminPrevQuick) btnAdminPrevQuick.onclick = () => this.adminStepGame(-1);
+    const btnAdminNextQuick = $('#btnAdminNextQuick');
+    if (btnAdminNextQuick) btnAdminNextQuick.onclick = () => this.adminStepGame(1);
+    const btnAdminTogglePacks = $('#btnAdminTogglePacks');
+    if (btnAdminTogglePacks) btnAdminTogglePacks.onclick = () => this.adminToggleAllPacks();
+    const btnAdminAddRP = $('#btnAdminAddRP');
+    if (btnAdminAddRP) btnAdminAddRP.onclick = () => this.adminAddRP(10000);
+    const btnAdminToggleTimer = $('#btnAdminToggleTimer');
+    if (btnAdminToggleTimer) btnAdminToggleTimer.onclick = () => this.adminToggleTimer();
+    const btnAdminRevive = $('#btnAdminRevive');
+    if (btnAdminRevive) btnAdminRevive.onclick = () => this.adminReviveAll();
+    const btnAdminPrestige = $('#btnAdminPrestige');
+    if (btnAdminPrestige) btnAdminPrestige.onclick = () => this.adminPromoteCurrentGame();
+    const btnAdminUnlockWorld = $('#btnAdminUnlockWorld');
+    if (btnAdminUnlockWorld) btnAdminUnlockWorld.onclick = () => this.adminToggleWorld1();
+
     // Mascot Closet modal controls (TICKET-03)
     $('#btnOpenCloset').onclick = () => this.openCloset();
     const btnProfCloset = $('#btnProfileOpenCloset');
@@ -264,15 +485,20 @@ export class Reel {
     const btnShareRun = $('#btnShareRun');
     if (btnShareRun) {
       btnShareRun.onclick = () => {
+        const unlocked = this.getUnlockedIndices();
         this.openShareModal({
           type: 'standard',
           score: store.meta.global,
           cycle: store.meta.cycle,
-          games: GAMES.map((g) => ({
-            icon: g.meta.icon,
-            title: g.meta.title,
-            state: store.isEliminated(g.meta.id) ? 'eliminated' : 'alive',
-          })),
+          unlockedCount: unlocked.length,
+          games: unlocked.map((idx) => {
+            const g = GAMES[idx];
+            return {
+              icon: g.meta.icon,
+              title: g.meta.title,
+              state: store.isEliminated(g.meta.id) ? 'eliminated' : 'alive',
+            };
+          }),
         });
       };
     }
@@ -339,27 +565,59 @@ export class Reel {
       if (e.key === 'Enter') saveName();
     });
 
-    $('#btnLike').onclick = () => {
-      if (!this.game) return;
-      const id = GAMES[this.index].meta.id;
-      const liked = store.toggleLike(id);
-      this.refreshLike();
-      if (liked) {
-        sounds.like();
-        haptics.light();
-      }
-    };
+    const btnLike = $('#btnLike');
+    if (btnLike) {
+      btnLike.onclick = () => {
+        if (!this.game) return;
+        const id = GAMES[this.index].meta.id;
+        const liked = store.toggleLike(id);
+        this.refreshLike();
+        if (liked) {
+          sounds.like();
+          haptics.light();
+        }
+      };
+    }
 
     // Keyboard shortcuts: 1..9, 0 to jump immediately to any game for testing
     // Note: When Motherload or Age of Beans is active (which use keys 1..3 for units/items),
     // require Shift+1..0 or clicking the top pips to jump, preventing key conflicts.
     window.addEventListener('keydown', (e) => {
+      const tag = document.activeElement?.tagName;
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+      if (!inInput && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        const modal = $('#adminModal');
+        if (modal && !modal.classList.contains('hidden')) this.closeAdminModal();
+        else this.enableAdminMode(true);
+        return;
+      }
+
+      if (!inInput && this.adminMode && (e.key === '[' || e.key === ']')) {
+        e.preventDefault();
+        this.adminStepGame(e.key === ']' ? 1 : -1);
+        return;
+      }
+
       if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
-        if (this.mode === 'paused') {
+        if (!$('#adminModal').classList.contains('hidden')) {
+          this.closeAdminModal();
+          return;
+        } else if (this.mode === 'paused') {
           this.resume();
           return;
         } else if (this.mode === 'playing') {
           this.pause();
+          return;
+        } else if (!$('#packRevealModal').classList.contains('hidden')) {
+          this.closePackRevealModal();
+          return;
+        } else if (!$('#questsModal')?.classList.contains('hidden')) {
+          this.closeQuestsModal();
+          return;
+        } else if (!$('#packsModal').classList.contains('hidden')) {
+          this.closePacksModal();
           return;
         } else if (!$('#settingsModal').classList.contains('hidden')) {
           this.closeSettings();
@@ -375,6 +633,9 @@ export class Reel {
           return;
         } else if (!$('#shareModal').classList.contains('hidden')) {
           this.closeShareModal();
+          return;
+        } else if (!$('#worldMapOverlay')?.classList.contains('hidden') && this.mode === 'menu') {
+          this.closeWorldMap();
           return;
         }
       }
@@ -430,12 +691,41 @@ export class Reel {
 
   buildMenuIcons() {
     const mi = $('#menuIcons');
-    mi.innerHTML = GAMES.map((g, i) => `<span data-i="${i}" title="Play Game ${i + 1}: ${g.meta.title} (Click or press ${i + 1})">${g.meta.icon}</span>`).join('');
+    if (!mi) return;
+    const html = [];
+    for (const pack of GAME_PACKS) {
+      if (!pack.comingSoon && store.isPackUnlocked(pack.id)) {
+        for (const gid of pack.gameIds) {
+          const i = GAMES.findIndex((g) => g.meta.id === gid);
+          if (i === -1) continue;
+          const g = GAMES[i];
+          html.push(`<span data-i="${i}" title="Play Game ${i + 1}: ${g.meta.title}">${g.meta.icon}</span>`);
+        }
+      } else {
+        const badge = pack.comingSoon ? `⏳ PACK ${pack.packNumber}` : `🔒 PACK ${pack.packNumber}`;
+        html.push(`<div class="pack-divider">${badge}</div>`);
+        const count = pack.mysteryCount || 5;
+        for (let k = 0; k < count; k++) {
+          html.push(`<span class="mystery" data-pack="${pack.id}" title="${pack.comingSoon ? 'Coming Soon' : `Unlock at ${pack.unlockRequirement?.label}`}">❓</span>`);
+        }
+      }
+    }
+    mi.innerHTML = html.join('');
     mi.onclick = (e) => {
+      const mystery = e.target.closest('.mystery');
+      if (mystery) {
+        mystery.classList.remove('shake');
+        void mystery.offsetWidth;
+        mystery.classList.add('shake');
+        sounds.fail();
+        haptics.light();
+        this.openPacksModal();
+        return;
+      }
       const btn = e.target.closest('[data-i]');
       if (!btn) return;
       const targetIndex = Number(btn.dataset.i);
-      if (Number.isNaN(targetIndex)) return;
+      if (Number.isNaN(targetIndex) || !this.isGameUnlocked(targetIndex)) return;
       store.data.started = true;
       this.jumpToGame(targetIndex);
     };
@@ -443,7 +733,17 @@ export class Reel {
 
   buildPips() {
     const pipsEl = $('#pips');
-    pipsEl.innerHTML = GAMES.map((g, i) => `<div class="pip" data-i="${i}" title="Game ${i + 1}: ${g.meta.title}">${g.meta.icon}</div>`).join('');
+    if (!pipsEl) return;
+    const unlocked = this.getUnlockedIndices();
+    const parts = unlocked.map((idx, pos) => {
+      const g = GAMES[idx];
+      return `<div class="pip" data-i="${idx}" title="Game ${pos + 1}: ${g.meta.title}">${g.meta.icon}</div>`;
+    });
+    const nextLocked = store.getNextLockedPack();
+    if (nextLocked && !nextLocked.comingSoon) {
+      parts.push(`<div class="pip mystery" data-locked-pack="${nextLocked.id}" title="Mystery Pack ${nextLocked.packNumber} (${nextLocked.unlockRequirement?.label})">❓</div>`);
+    }
+    pipsEl.innerHTML = parts.join('');
     
     let isDragging = false;
     let hasDragged = false;
@@ -455,7 +755,16 @@ export class Reel {
         hasDragged = false;
         return;
       }
-      const pip = e.target.closest('.pip');
+      const lockedPip = e.target.closest('.pip.mystery');
+      if (lockedPip) {
+        const nextPack = store.getNextLockedPack();
+        const prog = nextPack ? store.getPackProgress(nextPack) : null;
+        this.banner('MYSTERY PACK LOCKED 🔒', prog ? `${prog.remaining.toLocaleString()} RP to unlock +5 new games` : 'Keep playing to unlock!', 'info');
+        sounds.fail();
+        haptics.light();
+        return;
+      }
+      const pip = e.target.closest('.pip[data-i]');
       if (!pip) return;
       const targetIndex = Number(pip.dataset.i);
       if (Number.isNaN(targetIndex)) return;
@@ -504,12 +813,20 @@ export class Reel {
     });
   }
 
-  jumpToGame(i) {
+  jumpToGame(i, adminBypass = false) {
     if (i < 0 || i >= GAMES.length) return;
-    if (!this.isGameAlive(i)) {
+    if (!adminBypass && !this.isGameUnlocked(i)) {
+      this.banner('MYSTERY GAME LOCKED 🔒', 'Unlock this pack with Reel PTS first!', 'fail');
+      sounds.fail();
+      return;
+    }
+    if (!adminBypass && !this.isGameAlive(i)) {
       this.banner('GAME ELIMINATED! 💀', `${GAMES[i].meta.title} is excluded from this run`, 'fail');
       sounds.fail();
       return;
+    }
+    if (adminBypass && store.data.meta.eliminated) {
+      delete store.data.meta.eliminated[GAMES[i].meta.id];
     }
     sounds.init();
 
@@ -525,15 +842,19 @@ export class Reel {
     }
 
     // Dismiss overlays and show HUD
-    $('#menu').classList.add('hidden');
-    $('#summary').classList.add('hidden');
-    $('#hud').classList.remove('hidden');
+    $('#menu')?.classList.add('hidden');
+    $('#worldMapOverlay')?.classList.add('hidden');
+    $('#questsModal')?.classList.add('hidden');
+    $('#summary')?.classList.add('hidden');
+    $('#hud')?.classList.remove('hidden');
+    this.stopHomeBeanPreview();
+    this.worldMapScene?.stop();
 
     this.mode = 'playing';
     this.snap.style.display = 'none';
     this.input.reset();
     this.loadGame(i);
-    this.banner(`GAME ${i + 1} / ${GAMES.length}`, GAMES[i].meta.title, 'info');
+    this.presentRoundWrap();
     sounds.whoosh();
     haptics.light();
     store.save();
@@ -558,16 +879,18 @@ export class Reel {
       return;
     }
 
-    const res = store.meta.results;
-    document.querySelectorAll('.pip').forEach((el, i) => {
-      const isElim = !this.isGameAlive(i) || res[i] === 'eliminated';
+    const res = store.meta.results || {};
+    document.querySelectorAll('.pip[data-i]').forEach((el) => {
+      const i = Number(el.dataset.i);
+      const id = GAMES[i]?.meta.id;
+      const isElim = !this.isGameAlive(i) || res[id] === 'eliminated';
       el.className = 'pip';
       if (isElim) {
         el.classList.add('eliminated');
-      } else if (res[i] === 'survived') {
+      } else if (res[id] === 'survived') {
         el.classList.add('survived');
       }
-      if (isPrestigeGame(GAMES[i]) && store.getPrestige(GAMES[i].meta.id) > 1) {
+      if (store.getPrestige(id) > 1) {
         el.classList.add('prestiged');
       }
 
@@ -586,11 +909,13 @@ export class Reel {
   }
 
   refreshLike() {
-    const meta = GAMES[this.index].meta;
     const btn = $('#btnLike');
+    if (!btn) return;
+    const meta = GAMES[this.index].meta;
     btn.classList.toggle('liked', store.isLiked(meta.id));
     const n = store.likeCount(meta.id, meta.baseLikes);
-    $('#likeCount').textContent = n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+    const cnt = $('#likeCount');
+    if (cnt) cnt.textContent = n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
   }
 
   banner(title, sub, kind) {
@@ -600,6 +925,82 @@ export class Reel {
     b.querySelector('.banner-title').textContent = title;
     b.querySelector('.banner-sub').textContent = sub || '';
     b.classList.add('show', kind);
+  }
+
+  presentRoundWrap() {
+    const wrap = this._pendingWrap;
+    this._pendingWrap = null;
+    if (!wrap) return false;
+
+    const el = $('#cueFlash');
+    if (!el) return false;
+
+    const pillEl = $('#riwPill');
+    const gameEl = $('#riwGame');
+    const cueEl = $('#riwCue');
+    const subEl = $('#riwSub');
+    const deltasEl = $('#riwDeltas');
+
+    const isPrestigeUp = wrap.prestige > 1;
+    el.className = 'cue-flash';
+    if (isPrestigeUp) el.classList.add('is-prestige-up');
+    if (wrap.prestige >= 5) el.classList.add('tier-5');
+    else if (wrap.prestige >= 3) el.classList.add('tier-3');
+
+    if (pillEl) {
+      if (this.runType === 'daily') {
+        pillEl.textContent = `DAILY STAGE ${this.dailyStageIndex + 1}/10 · PRESTIGE 1`;
+      } else if (isPrestigeUp) {
+        pillEl.textContent = `★ PRESTIGE ${wrap.prestige} · HARDER`;
+      } else if (wrap.stageLabel) {
+        pillEl.textContent = `PRESTIGE 1 · ${wrap.stageLabel}`;
+      } else {
+        pillEl.textContent = 'PRESTIGE 1 · FIRST PLAY';
+      }
+    }
+
+    if (gameEl) {
+      gameEl.textContent = `${wrap.icon} ${wrap.title}`;
+    }
+
+    if (cueEl) {
+      cueEl.textContent = isPrestigeUp ? wrap.prestigeCue : wrap.cue;
+    }
+
+    if (subEl) {
+      if (wrap.restoredLabel) {
+        subEl.textContent = `⟲ Resuming: ${wrap.restoredLabel}`;
+      } else if (!isPrestigeUp && wrap.hint) {
+        subEl.textContent = wrap.hint;
+      } else {
+        subEl.textContent = '';
+      }
+    }
+
+    if (deltasEl) {
+      if (isPrestigeUp && wrap.deltas.length > 0) {
+        deltasEl.innerHTML = wrap.deltas
+          .slice(0, 3)
+          .map((d) => `<span class="riw-delta-chip">${d}</span>`)
+          .join('');
+      } else {
+        deltasEl.innerHTML = '';
+      }
+    }
+
+    if (this.runType !== 'daily') {
+      store.markSeenInRun(wrap.gameId);
+    }
+
+    void el.offsetWidth;
+    el.classList.add('show');
+    return true;
+  }
+
+  clearCueFlash() {
+    this._pendingWrap = null;
+    const el = $('#cueFlash');
+    if (el) el.classList.remove('show');
   }
 
   flash(kind) {
@@ -621,8 +1022,8 @@ export class Reel {
   startRun(cont) {
     sounds.init();
     this.runType = 'standard';
-    $('#dailyHudBadge').classList.add('hidden');
-    $('#cycleLabel').classList.remove('hidden');
+    $('#dailyHudBadge')?.classList.add('hidden');
+    $('#cycleLabel')?.classList.remove('hidden');
     this.buildPips();
 
     if (!cont) {
@@ -631,10 +1032,14 @@ export class Reel {
     }
     this.renderProfileUI();
     store.data.started = true;
-    $('#menu').classList.add('hidden');
-    $('#summary').classList.add('hidden');
-    $('#dailySummaryModal').classList.add('hidden');
-    $('#hud').classList.remove('hidden');
+    $('#menu')?.classList.add('hidden');
+    $('#worldMapOverlay')?.classList.add('hidden');
+    $('#questsModal')?.classList.add('hidden');
+    $('#summary')?.classList.add('hidden');
+    $('#dailySummaryModal')?.classList.add('hidden');
+    this.stopHomeBeanPreview();
+    this.worldMapScene?.stop();
+    $('#hud')?.classList.remove('hidden');
 
     const alive = this.getAliveIndices();
     if (alive.length === 0) {
@@ -655,7 +1060,6 @@ export class Reel {
     this.transT = 0.45;
     this.snap.style.display = 'none';
     sounds.whoosh();
-    this.banner(`GAME ${this.index + 1} / ${GAMES.length}`, GAMES[this.index].meta.title, 'info');
     this.renderPips();
     store.save();
   }
@@ -664,11 +1068,13 @@ export class Reel {
     const G = GAMES[i];
     this.index = i;
     this.game = new G(this.ctx, W, H, this.env);
-    // Prestige rank must be visible to the game BEFORE init() so it can scale difficulty.
-    const prestige = isPrestigeGame(G) ? store.getPrestige(G.meta.id) : 1;
-    this.game.prestige = prestige;
+    // Prestige rank & resolved scaling must be injected BEFORE init()
+    const prestige = this.runType === 'daily' ? 1 : store.getPrestige(G.meta.id);
+    this.game.applyPrestige(prestige);
     const snap = store.get(G.meta.id);
     this.game.init(snap ? snap.state : null, snap ? snap.score : 0);
+    // Ensure brief invulnerability while the round wrap pops in
+    this.game.grace = Math.max(this.game.grace || 0, 1.0);
     this.restored = !!snap;
     this.roundStartScore = this.game.score;
     this.roundLen = Number(new URLSearchParams(location.search).get('t')) || 60;
@@ -677,12 +1083,15 @@ export class Reel {
     this.lastScoreShown = -1;
     this.stage.classList.remove('urgent');
 
-    $('#infoTitle').textContent = `${G.meta.icon}  ${G.meta.title}`;
+    const infoTitle = $('#infoTitle');
+    if (infoTitle) infoTitle.textContent = `${G.meta.icon}  ${G.meta.title}`;
     const hint = $('#infoHint');
-    hint.textContent = G.meta.hint;
-    hint.classList.remove('fade');
-    clearTimeout(this.hintTimer);
-    this.hintTimer = setTimeout(() => hint.classList.add('fade'), 6000);
+    if (hint) {
+      hint.textContent = G.meta.hint;
+      hint.classList.remove('fade');
+      clearTimeout(this.hintTimer);
+      this.hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
+    }
     if (this.runType === 'daily') {
       $('#cycleLabel').classList.add('hidden');
       const dBadge = $('#dailyHudBadge');
@@ -695,22 +1104,45 @@ export class Reel {
       const dBadge = $('#dailyHudBadge');
       if (dBadge) dBadge.classList.add('hidden');
       const aliveCount = this.getAliveIndices().length;
-      $('#cycleLabel').textContent = `CYCLE ${store.meta.cycle} · ${aliveCount}/${GAMES.length} ACTIVE`;
-    }
-    $('#welcome').classList.remove('show');
-    const badge = $('#prestigeBadge');
-    if (badge) {
-      if (prestige > 1) {
-        badge.textContent = `★ PRESTIGE ${roman(prestige)} · HARDER`;
-        badge.classList.remove('hidden');
-        badge.classList.remove('pop');
-        void badge.offsetWidth;
-        badge.classList.add('pop');
+      const unlockedCount = this.getUnlockedIndices().length;
+      if (this.runType === 'world') {
+        const node = getWorldNodeById(this.activeWorldNodeId);
+        $('#cycleLabel').textContent = `${node.code} · CYCLE ${store.meta.cycle} · ${aliveCount}/${unlockedCount} ACTIVE`;
       } else {
-        badge.classList.add('hidden');
+        $('#cycleLabel').textContent = `CYCLE ${store.meta.cycle} · ${aliveCount}/${unlockedCount} ACTIVE`;
       }
     }
+    $('#welcome').classList.remove('show');
+
+    const badge = $('#prestigeBadge');
+    if (badge) {
+      const icon = prestige >= 5 ? '👑' : '★';
+      badge.textContent = `${icon} PRESTIGE ${prestige}`;
+      badge.dataset.tier = prestige >= 5 ? '5' : prestige >= 3 ? '3' : prestige === 2 ? '2' : '1';
+      badge.classList.remove('hidden');
+      badge.classList.remove('pop');
+      void badge.offsetWidth;
+      badge.classList.add('pop');
+    }
     this.refreshLike();
+
+    const unlocked = this.getUnlockedIndices();
+    const pos = unlocked.indexOf(i);
+    const stageLabel = pos !== -1 ? `GAME ${pos + 1}/${unlocked.length}` : `GAME #${i + 1}`;
+    this._pendingWrap = {
+      gameId: G.meta.id,
+      title: G.meta.title,
+      icon: G.meta.icon,
+      hint: G.meta.hint,
+      cue: getGameCue(G.meta.id) || G.meta.title.toUpperCase(),
+      prestigeCue: getGamePrestigeCue(G.meta.id),
+      prestige,
+      firstInRun: this.runType === 'daily' || !store.hasSeenInRun(G.meta.id),
+      stageLabel,
+      deltas: this.game.diffDeltas || [],
+      restoredLabel: snap ? this.game.restoreLabel() : '',
+    };
+
     store.meta.index = i;
     this.renderPips();
   }
@@ -721,42 +1153,44 @@ export class Reel {
   }
 
   bank() {
-    const live = Math.max(0, Math.round(this.game.score - this.roundStartScore));
-    store.meta.global += live;
-    store.meta.cycleBase += live;
+    const liveRP = this.computeLiveRP();
+    store.meta.global += liveRP;
+    store.meta.cycleBase += liveRP;
+    store.stats.lifetimeScore = (store.stats.lifetimeScore || 0) + liveRP;
+    store.recordQuestProgress('runScore', store.meta.global);
     this.roundStartScore = this.game.score;
+    this.handleUnlockedPacks();
   }
 
   onVictory(winReason) {
-    this.bank();
+    this.clearCueFlash();
     const id = GAMES[this.index].meta.id;
     const completable = isPrestigeGame(id);
+    const prestigeBefore = this.game.prestige || 1;
+    const rp = this.computeFinalRoundRP({ won: true, prestige: prestigeBefore });
 
-    let victoryBonus = 2500;
-    let title = 'APEX VICTORY! 👑';
-    let sub = winReason || 'MAXIMUM POWER ACHIEVED! · NEXT GAME';
+    let title = 'STAGE COMPLETED! ⭐';
+    let sub = winReason || 'Stage cleared!';
+    let rankNow = prestigeBefore;
 
-    if (completable) {
-      // COMPLETED: bonus climbs 3,000 -> 5,000 with each rank already held, then the game's
-      // frozen board is discarded and it restarts fresh at the next prestige rank.
-      const rankBefore = store.getPrestige(id);
-      victoryBonus = Math.min(5000, 2500 + rankBefore * 500);
-      const rankNow = store.promote(id);
-      title = 'STAGE COMPLETED! ⭐';
-      sub = `${winReason || 'Stage cleared!'} · PRESTIGE ${roman(rankNow)} NEXT`;
+    if (this.runType !== 'daily') {
+      rankNow = store.promote(id, { clearState: completable });
+      sub = `${winReason || 'Stage cleared!'} · PRESTIGE ${rankNow} NEXT`;
     }
 
-    // Bonus counts toward the run total immediately (keep roundStartScore in sync so the HUD doesn't double-count).
-    this.game.score = (this.game.score || 0) + victoryBonus;
-    this.roundStartScore = this.game.score;
-    store.meta.global += victoryBonus;
-    store.meta.cycleBase += victoryBonus;
-    if (!completable) {
+    this.roundStartScore = this.game.score || 0;
+    store.meta.global += rp;
+    store.meta.cycleBase += rp;
+    if (!completable && this.runType !== 'daily') {
       store.set(id, this.game.serialize(), this.game.score);
     }
-    store.meta.results[this.index] = 'survived';
-    store.recordStageVictory(id, this.game.score, victoryBonus);
+    store.meta.results[id] = 'survived';
+    store.recordStageVictory(id, this.game.score, rp);
     store.recordRunProgress(store.meta.cycle, store.meta.global);
+    store.recordQuestProgress('stagesCleared', 1);
+    store.recordQuestProgress('runScore', store.meta.global);
+    if (this.runType !== 'daily') store.recordQuestProgress('prestige2', rankNow);
+    this.handleUnlockedPacks();
     this.renderProfileUI();
     store.save();
 
@@ -764,7 +1198,7 @@ export class Reel {
       this.dailyResults[this.dailyStageIndex] = 'survived';
       this.mode = 'secured';
       this.holdT = 1.0;
-      this.banner(`STAGE ${this.dailyStageIndex + 1} CLEARED! ⭐`, `${GAMES[this.index].meta.title} · NEXT GAME`, 'ok');
+      this.banner(`STAGE ${this.dailyStageIndex + 1} CLEARED! ⭐`, `${GAMES[this.index].meta.title} (+${rp.toLocaleString()} PTS)`, 'ok');
       this.flash('ok');
       sounds.survive();
       sounds.up();
@@ -776,7 +1210,7 @@ export class Reel {
 
     this.mode = 'secured';
     this.holdT = 1.6;
-    this.banner(title, `${sub} (+${victoryBonus.toLocaleString()} PTS)`, 'ok');
+    this.banner(title, `${sub} (+${rp.toLocaleString()} PTS)`, 'ok');
     this.flash('ok');
     sounds.survive();
     sounds.up();
@@ -786,12 +1220,24 @@ export class Reel {
   }
 
   onSurvive() {
-    this.bank();
+    this.clearCueFlash();
     const id = GAMES[this.index].meta.id;
+    const rp = this.computeFinalRoundRP({ survived: true });
+    this.roundStartScore = this.game.score || 0;
+    store.meta.global += rp;
+    store.meta.cycleBase += rp;
     store.set(id, this.game.serialize(), this.game.score);
-    store.meta.results[this.index] = 'survived';
-    store.recordRoundSurvive(id, this.game.score);
+    let nextPrestige = 1;
+    if (this.runType !== 'daily') {
+      nextPrestige = store.promote(id, { clearState: false });
+    }
+    store.meta.results[id] = 'survived';
+    store.recordRoundSurvive(id, this.game.score, rp);
     store.recordRunProgress(store.meta.cycle, store.meta.global);
+    store.recordQuestProgress('timersSurvived', 1);
+    store.recordQuestProgress('runScore', store.meta.global);
+    if (this.runType !== 'daily') store.recordQuestProgress('prestige2', nextPrestige);
+    this.handleUnlockedPacks();
     this.renderProfileUI();
     store.save();
 
@@ -799,7 +1245,7 @@ export class Reel {
       this.dailyResults[this.dailyStageIndex] = 'survived';
       this.mode = 'secured';
       this.holdT = 1.0;
-      this.banner(`STAGE ${this.dailyStageIndex + 1} SURVIVED! ✓`, 'PROGRESS FROZEN · NEXT GAME', 'ok');
+      this.banner(`STAGE ${this.dailyStageIndex + 1} SURVIVED! ✓`, `+${rp.toLocaleString()} PTS · NEXT GAME`, 'ok');
       this.flash('ok');
       sounds.survive();
       haptics.success();
@@ -810,7 +1256,7 @@ export class Reel {
 
     this.mode = 'secured';
     this.holdT = 1.0;
-    this.banner('60s SURVIVED! ✓', 'PROGRESS FROZEN · NEXT GAME', 'ok');
+    this.banner('60s SURVIVED! ✓', `+${rp.toLocaleString()} PTS · PRESTIGE ${nextPrestige} NEXT`, 'ok');
     this.flash('ok');
     sounds.survive();
     haptics.success();
@@ -819,12 +1265,18 @@ export class Reel {
   }
 
   onDeath() {
-    this.bank();
+    this.clearCueFlash();
     const id = GAMES[this.index].meta.id;
+    const rp = this.computeFinalRoundRP({ survived: false, won: false });
+    this.roundStartScore = this.game.score || 0;
+    store.meta.global += rp;
+    store.meta.cycleBase += rp;
     store.eliminate(id);
-    store.meta.results[this.index] = 'eliminated';
-    store.recordGameScore(id, this.game.score);
+    store.meta.results[id] = 'eliminated';
+    store.recordRoundDeath(id, this.game.score, rp);
     store.recordRunProgress(store.meta.cycle, store.meta.global);
+    store.recordQuestProgress('runScore', store.meta.global);
+    this.handleUnlockedPacks();
     this.renderProfileUI();
     store.save();
 
@@ -845,7 +1297,7 @@ export class Reel {
     this.holdT = 1.1;
     const aliveLeft = this.getAliveIndices().length;
     const sub = this.game.deathReason ? `${this.game.deathReason} · ` : '';
-    this.banner('GAME ELIMINATED! 💀', `${sub}${aliveLeft} Games Remaining in Run`, 'fail');
+    this.banner('GAME ELIMINATED! 💀', `${sub}+${rp.toLocaleString()} PTS · ${aliveLeft} Left`, 'fail');
     this.flash('fail');
     sounds.fail();
     haptics.fail();
@@ -863,7 +1315,11 @@ export class Reel {
       this.dailyStageIndex += 1;
       const nextGameIdx = this.dailyIndices[this.dailyStageIndex];
       this.transitionTo(nextGameIdx, 0.7);
-      this.banner(`STAGE ${this.dailyStageIndex + 1} / 10`, GAMES[nextGameIdx].meta.title, 'info');
+      return;
+    }
+
+    if (this.pendingRevealQueue.length > 0) {
+      this.openPackRevealModal(this.pendingRevealQueue[0], true);
       return;
     }
 
@@ -886,11 +1342,11 @@ export class Reel {
 
       const loopIdx = alive[0];
       this.transitionTo(loopIdx, 0.7);
-      this.banner(`CYCLE ${store.meta.cycle} BEGUN! 🔁`, `${alive.length} Games Remaining · Saved Progress Resuming`, 'info');
     }
   }
 
   transitionTo(i, dur = 0.7) {
+    this.clearCueFlash();
     this.mode = 'transition';
     this.input.reset();
     const s = this.snap;
@@ -925,8 +1381,9 @@ export class Reel {
     this.snap.style.display = 'none';
     this.mode = 'playing';
     this.input.reset();
+    const showedWrap = this.presentRoundWrap();
     if (this.restored && this.game) {
-      this.showWelcome(this.game.restoreLabel());
+      if (!showedWrap) this.showWelcome(this.game.restoreLabel());
       sounds.welcome();
     }
     this.renderPips();
@@ -935,34 +1392,117 @@ export class Reel {
   showRunOver() {
     this.mode = 'summary';
     this.destroyGame();
-    sounds.fail();
-    haptics.fail();
-    this.flash('fail');
 
     const totalScore = store.meta.global;
     const cycles = store.meta.cycle;
 
     store.recordRunProgress(cycles, totalScore);
-    this.renderProfileUI();
-
-    $('#sumEyebrow').textContent = 'GAUNTLET TERMINATED';
-    $('#sumTitle').textContent = 'All Games Eliminated!';
+    const unlocked = this.getUnlockedIndices();
     const chipsEl = $('#sumChips');
-    chipsEl.innerHTML = GAMES.map((g, i) => `<div class="chip eliminated" data-i="${i}" title="${g.meta.title} (Eliminated)">${g.meta.icon}</div>`).join('');
+    chipsEl.innerHTML = unlocked.map((i) => {
+      const g = GAMES[i];
+      return `<div class="chip eliminated" data-i="${i}" title="${g.meta.title} (Eliminated)">${g.meta.icon}</div>`;
+    }).join('');
     chipsEl.onclick = null;
 
-    $('#sumMult').textContent = `CYCLE ${cycles}`;
-    $('#sumSub').textContent = `Total Score: ${totalScore.toLocaleString()} PTS · All ${GAMES.length} games succumbed!`;
-    const footEl = $('#sumFoot');
-    if (footEl) footEl.textContent = `All ${GAMES.length} games succumbed to the gauntlet. Can you survive longer next run?`;
-
+    const worldBox = $('#summaryWorldBox');
+    const retryWorldBtn = $('#btnRetryWorldNode');
     const btnNext = $('#btnNext');
-    btnNext.textContent = 'START NEW RUN 🔄';
-    btnNext.onclick = () => {
-      $('#summary').classList.add('hidden');
-      this.startRun(false);
-    };
+    const footEl = $('#sumFoot');
 
+    if (this.runType === 'world') {
+      const wRes = store.recordWorldRunResult(this.activeWorldNodeId, totalScore);
+      this.handleUnlockedPacks();
+      this.renderProfileUI();
+
+      if (wRes.clearedNow) {
+        sounds.survive();
+        sounds.up();
+        haptics.success();
+        this.flash('ok');
+      } else {
+        sounds.fail();
+        haptics.fail();
+        this.flash('fail');
+      }
+
+      $('#sumEyebrow').textContent = wRes.clearedNow ? 'STAGE CLEARED! ⭐' : 'RUN ENDED';
+      $('#sumTitle').textContent = `${wRes.node.code} · ${wRes.node.title}`;
+      $('#sumMult').textContent = `×${this.getRunMultiplier().toFixed(2)}`;
+      $('#sumSub').textContent = `Run Score: ${totalScore.toLocaleString()} PTS · Cycle ${cycles}`;
+
+      if (worldBox) {
+        worldBox.classList.remove('hidden');
+        const setTxt = (sel, txt) => {
+          const el = $(sel);
+          if (el) el.textContent = txt;
+        };
+        setTxt('#swbNodeTitle', `${wRes.node.code} · ${wRes.node.title.toUpperCase()}`);
+        setTxt('#swbNodeGoal', `${totalScore.toLocaleString()} / ${wRes.node.clearScore.toLocaleString()} PTS`);
+        setTxt('#swbStars', `${'★'.repeat(wRes.starsEarned)}${'☆'.repeat(3 - wRes.starsEarned)}`);
+        const fill = $('#swbBarFill');
+        if (fill) fill.style.width = `${Math.min(100, Math.round((totalScore / Math.max(1, wRes.node.clearScore)) * 100))}%`;
+        const bannerEl = $('#swbUnlockBanner');
+        if (bannerEl) {
+          if (wRes.nextUnlockedNode) {
+            bannerEl.classList.remove('hidden');
+            bannerEl.textContent = `🔓 ${wRes.nextUnlockedNode.code} ${wRes.nextUnlockedNode.title.toUpperCase()} (${wRes.nextUnlockedNode.gameIds.length} REELS) UNLOCKED! +${wRes.firstClearBonusRP.toLocaleString()} RP`;
+          } else if (wRes.world2JustUnlocked) {
+            bannerEl.classList.remove('hidden');
+            bannerEl.textContent = `👑 WORLD 1 CONQUERED! +${wRes.firstClearBonusRP.toLocaleString()} BONUS RP!`;
+          } else if (!wRes.clearedNow) {
+            const need = Math.max(0, wRes.node.clearScore - totalScore);
+            bannerEl.classList.remove('hidden');
+            bannerEl.textContent = `Need ${need.toLocaleString()} more PTS in one run to unlock next node!`;
+          } else {
+            bannerEl.classList.add('hidden');
+          }
+        }
+      }
+
+      if (footEl) {
+        footEl.textContent = wRes.clearedNow
+          ? 'Awesome run! Head back to the World 1 Map to walk forward.'
+          : 'Survive longer and build your Prestige multiplier to clear this node!';
+      }
+
+      btnNext.textContent = '🗺️ WORLD 1 MAP';
+      btnNext.onclick = () => {
+        $('#summary').classList.add('hidden');
+        this.openWorldMap();
+      };
+      if (retryWorldBtn) {
+        retryWorldBtn.classList.remove('hidden');
+        retryWorldBtn.textContent = `🔄 RETRY ${wRes.node.code}`;
+        retryWorldBtn.onclick = () => {
+          $('#summary').classList.add('hidden');
+          this.startWorldRun(wRes.node.id);
+        };
+      }
+    } else {
+      sounds.fail();
+      haptics.fail();
+      this.flash('fail');
+      this.renderProfileUI();
+
+      if (worldBox) worldBox.classList.add('hidden');
+      if (retryWorldBtn) retryWorldBtn.classList.add('hidden');
+
+      $('#sumEyebrow').textContent = 'GAUNTLET TERMINATED';
+      $('#sumTitle').textContent = 'All Games Eliminated!';
+      $('#sumMult').textContent = `CYCLE ${cycles}`;
+      $('#sumSub').textContent = `Total Score: ${totalScore.toLocaleString()} PTS · All ${unlocked.length} active games succumbed!`;
+      if (footEl) footEl.textContent = `All ${unlocked.length} active games succumbed to the gauntlet. Can you survive longer next run?`;
+
+      btnNext.textContent = 'START NEW RUN 🔄';
+      btnNext.onclick = () => {
+        $('#summary').classList.add('hidden');
+        this.startRun(false);
+      };
+    }
+
+    this.renderPackUI();
+    this.renderPlazaUI();
     $('#summary').classList.remove('hidden');
     this.lastScoreShown = -1;
   }
@@ -981,7 +1521,8 @@ export class Reel {
     store.save();
     const alive = this.getAliveIndices();
     if (alive.length === 0) {
-      this.startRun(false);
+      if (this.runType === 'world') this.startWorldRun(this.activeWorldNodeId);
+      else this.startRun(false);
     } else {
       this.transitionTo(alive[0], 0.7);
     }
@@ -1000,7 +1541,7 @@ export class Reel {
     $('#settingsGameIcon').textContent = G.meta.icon;
     $('#settingsGameTitle').textContent = G.meta.title;
     const secsLeft = Math.ceil(Math.max(0, this.timeLeft));
-    $('#settingsGameSub').textContent = `Time Remaining: ${secsLeft}s · Cycle ${store.meta.cycle}`;
+    $('#settingsGameSub').textContent = `Time Remaining: ${secsLeft}s · Cycle ${store.meta.cycle} · Prestige ${this.game.prestige || 1}`;
 
     $('#settingsEyebrow').textContent = 'TACTICAL PAUSE';
     $('#settingsTitle').textContent = 'GAME PAUSED';
@@ -1042,6 +1583,7 @@ export class Reel {
   }
 
   abandonRun() {
+    this.clearCueFlash();
     $('#settingsModal').classList.add('hidden');
     sounds.fail();
     haptics.medium();
@@ -1051,10 +1593,9 @@ export class Reel {
       this.renderProfileUI();
       this.destroyGame();
     }
-    if (this.runType === 'daily') {
-      this.runType = 'standard';
-      this.buildPips();
-    }
+    const wasWorld = this.runType === 'world';
+    this.runType = 'standard';
+    this.buildPips();
 
     // Terminate and clear active run session
     store.abandonSession();
@@ -1069,11 +1610,22 @@ export class Reel {
     this.mode = 'menu';
     $('#hud').classList.add('hidden');
     $('#welcome').classList.remove('show');
-    $('#menu').classList.remove('hidden');
-    $('#btnPlay').classList.remove('hidden');
-    $('#btnContinue').classList.add('hidden');
-    $('#btnNew').classList.add('hidden');
     this.stage.classList.remove('urgent');
+    this.buildMenuIcons();
+    this.renderProfileUI();
+    this.renderPackUI();
+
+    if (wasWorld) {
+      this.openWorldMap();
+    } else {
+      $('#menu').classList.remove('hidden');
+      $('#btnPlay')?.classList.remove('hidden');
+      this.startHomeBeanPreview();
+    }
+
+    if (this.pendingRevealQueue.length > 0) {
+      this.openPackRevealModal(this.pendingRevealQueue[0], false);
+    }
   }
 
   /* ----------------------------------------------------------- player profile (TICKET-02) */
@@ -1095,15 +1647,32 @@ export class Reel {
     const stats = store.stats;
     const rank = getRankTier(stats.lifetimeScore || 0);
 
-    // Main menu player pill
+    // Main menu top bar
     const menuAv = $('#menuPlayerAvatar');
-    if (menuAv) menuAv.textContent = prof.avatar;
+    if (menuAv) {
+      if (prof.avatar === '🫘') {
+        if (!menuAv.querySelector('img')) {
+          menuAv.innerHTML = '<img src="/assets/lobby/avatar-bean.png" alt="Bean Avatar" class="home-avatar-img" />';
+        }
+      } else {
+        menuAv.textContent = prof.avatar;
+      }
+    }
     const menuName = $('#menuPlayerName');
     if (menuName) menuName.textContent = prof.name;
     const menuRank = $('#menuPlayerRankChip');
-    if (menuRank) menuRank.textContent = `${rank.icon} ${rank.title.split(' ')[0]}`;
+    if (menuRank) menuRank.textContent = rank.title.split(' ')[0];
+    this.syncHomeHeroSkin();
+    const unlockedCount = store.getUnlockedGameIds().length;
+    const totalPlayable = store.getTotalPlayableGameCount();
+    const rpVal = $('#menuRpVal');
+    if (rpVal) rpVal.textContent = (stats.lifetimeScore || 0).toLocaleString();
+    const gamesVal = $('#menuGamesVal');
+    if (gamesVal) gamesVal.textContent = `${unlockedCount}/${totalPlayable}`;
     const menuMini = $('#menuPlayerMiniStats');
-    if (menuMini) menuMini.textContent = `${(stats.lifetimeScore || 0).toLocaleString()} PTS · Max Cycle ${stats.maxCycle || 1}`;
+    if (menuMini) {
+      menuMini.textContent = `${(stats.lifetimeScore || 0).toLocaleString()} RP · ${unlockedCount}/${totalPlayable} Games`;
+    }
 
     // Profile modal
     const avPrev = $('#profileAvatarPreview');
@@ -1407,13 +1976,350 @@ export class Reel {
     }
   }
 
+  /* ----------------------------------------------------------- hero lobby mascot & rules */
+  openHowTo() {
+    sounds.init();
+    $('#howToModal')?.classList.remove('hidden');
+    sounds.whoosh();
+    haptics.light();
+  }
+
+  closeHowTo() {
+    $('#howToModal')?.classList.add('hidden');
+    sounds.whoosh();
+  }
+
+  triggerHomeBeanBounce() {
+    sounds.init();
+    sounds.bubble();
+    haptics.light();
+    this.plazaScene?.triggerBounce();
+  }
+
+  syncHomeHeroSkin() {
+    this.renderPlazaUI();
+    if (!$('#worldMapOverlay')?.classList.contains('hidden')) {
+      this.renderWorldMapUI();
+    }
+  }
+
+  startHomeBeanPreview() {
+    this.plazaScene?.start();
+    this.renderPlazaUI();
+  }
+
+  stopHomeBeanPreview() {
+    this.plazaScene?.stop();
+  }
+
+  /* ----------------------------------------------------------- Toy Courtyard Plaza & World 1 Map */
+  renderPlazaUI() {
+    const starsEl = $('#menuStarsVal');
+    if (starsEl) starsEl.textContent = `${store.getWorld1Stars()}/15`;
+
+    const curNode = getWorldNodeById(store.worlds.selectedNodeId || '1-1');
+    const subEl = $('#plazaWorldSub');
+    if (subEl) subEl.textContent = `${curNode.code} · ${curNode.gameIds.length} REELS`;
+
+    const w1BtnSub = $('#btnEnterWorld1Sub');
+    if (w1BtnSub) w1BtnSub.textContent = `NEXT: ${curNode.code} ${curNode.title.toUpperCase()}`;
+
+    const endSub = $('#btnEndlessSub');
+    if (endSub) endSub.textContent = `${store.getUnlockedGameIds().length} REELS`;
+
+    const dlyBadge = $('#plazaDailyBadge');
+    if (dlyBadge) {
+      const streak = store.daily.streak || 0;
+      dlyBadge.textContent = streak > 0 ? `🔥${streak}` : '';
+    }
+
+    const qDot = $('#plazaQuestDot');
+    if (qDot) {
+      const readyCount = store.getClaimableQuestCount() + store.getClaimableChestCount();
+      qDot.classList.toggle('hidden', readyCount === 0);
+    }
+  }
+
+  openWorldMap() {
+    sounds.init();
+    sounds.whoosh();
+    haptics.light();
+    this.activeWorldNodeId = store.worlds.selectedNodeId || '1-1';
+    $('#menu')?.classList.add('hidden');
+    $('#summary')?.classList.add('hidden');
+    $('#questsModal')?.classList.add('hidden');
+    this.stopHomeBeanPreview();
+    $('#worldMapOverlay')?.classList.remove('hidden');
+    this.worldMapScene?.start();
+    this.worldMapScene?.syncToSelected(false);
+    this.renderWorldMapUI();
+  }
+
+  closeWorldMap(showPlaza = true) {
+    this.worldMapScene?.stop();
+    $('#worldMapOverlay')?.classList.add('hidden');
+    if (showPlaza) {
+      this.mode = 'menu';
+      $('#menu')?.classList.remove('hidden');
+      this.renderProfileUI();
+      this.renderPackUI();
+      this.startHomeBeanPreview();
+      sounds.whoosh();
+      if (this.pendingRevealQueue.length > 0) {
+        this.openPackRevealModal(this.pendingRevealQueue[0], false);
+      }
+    }
+  }
+
+  selectWorldMapNode(nodeId) {
+    const idx = WORLD_1_NODES.findIndex((n) => n.id === nodeId);
+    if (idx === -1) return;
+    if (!store.isNodeUnlocked(nodeId)) {
+      const prev = WORLD_1_NODES[idx - 1];
+      sounds.fail();
+      haptics.medium();
+      this.banner(
+        `${WORLD_1_NODES[idx].code} LOCKED 🔒`,
+        prev ? `Clear ${prev.code} (${prev.clearScore.toLocaleString()} PTS) to unlock!` : 'Keep playing!',
+        'fail',
+      );
+      return;
+    }
+    this.activeWorldNodeId = nodeId;
+    store.selectWorldNode(nodeId);
+    this.worldMapScene?.walkToNode(nodeId);
+    this.renderWorldMapUI();
+    sounds.pop();
+    haptics.light();
+  }
+
+  renderWorldMapUI() {
+    const curNode = getWorldNodeById(this.activeWorldNodeId || store.worlds.selectedNodeId || '1-1');
+    const curState = store.getNodeState(curNode.id);
+
+    const setTxt = (sel, txt) => {
+      const el = $(sel);
+      if (el) el.textContent = txt;
+    };
+    setTxt('#wmReelsVal', `${curNode.gameIds.length}/20`);
+    setTxt('#wmStarsVal', `${store.getWorld1Stars()}/15`);
+    setTxt('#wmRpVal', (store.stats.lifetimeScore || 0).toLocaleString());
+    setTxt('#wmBoostVal', `×${store.getQuestMultiplier().toFixed(1)}`);
+
+    document.querySelectorAll('.wm-node-btn[data-node]').forEach((btn) => {
+      const id = btn.dataset.node;
+      const st = store.getNodeState(id);
+      btn.classList.toggle('selected', id === curNode.id);
+      btn.classList.toggle('cleared', !!st.cleared);
+      btn.classList.toggle('locked', !st.unlocked);
+      const starsEl = btn.querySelector('.wnt-stars');
+      if (starsEl) {
+        starsEl.textContent = st.unlocked ? `${'★'.repeat(st.stars)}${'☆'.repeat(3 - st.stars)}` : '🔒';
+      }
+    });
+
+    setTxt('#wmPortalTag', store.worlds.world2Unlocked ? '✨ WORLD 2' : 'W2 SOON');
+
+    const chestBtn = $('#btnWorldChest');
+    const nextChest = store.getNextUnclaimedChest();
+    if (chestBtn) {
+      chestBtn.classList.toggle('ready', !!nextChest?.ready);
+      setTxt('#wmChestIco', nextChest ? nextChest.icon : '👑');
+      setTxt('#wmChestLbl', nextChest ? (nextChest.ready ? 'CLAIM!' : `${nextChest.starsReq}⭐`) : 'ALL ✓');
+    }
+
+    const wqDot = $('#worldQuestDot');
+    if (wqDot) {
+      const readyCount = store.getClaimableQuestCount() + store.getClaimableChestCount();
+      wqDot.classList.toggle('hidden', readyCount === 0);
+    }
+
+    setTxt('#wmSelCode', curNode.code);
+    setTxt('#wmSelTitle', curNode.title);
+    setTxt('#wmSelReels', `${curNode.gameIds.length} REELS`);
+    setTxt('#wmSelStars', `${'★'.repeat(curState.stars)}${'☆'.repeat(3 - curState.stars)}`);
+    setTxt('#wmSelIcons', curNode.gameIds.map((gid) => GAME_BY_ID[gid]?.meta?.icon || '🎮').join(' '));
+    setTxt(
+      '#wmSelThresh',
+      `1⭐ ${curNode.starScores[0].toLocaleString()} · 2⭐ ${curNode.starScores[1].toLocaleString()} · 3⭐ ${curNode.starScores[2].toLocaleString()}`,
+    );
+    setTxt('#wmSelBest', `BEST: ${curState.bestScore.toLocaleString()}`);
+    setTxt('#btnPlayWorldNode', `PLAY ${curNode.code} ▶`);
+  }
+
+  handleWorldChestClick() {
+    sounds.init();
+    const nextChest = store.getNextUnclaimedChest();
+    if (nextChest && nextChest.ready) {
+      this.claimStarChestUI(nextChest.id);
+      return;
+    }
+    this.openQuestsModal();
+  }
+
+  claimStarChestUI(chestId) {
+    const res = store.claimStarChest(chestId);
+    if (!res) {
+      sounds.fail();
+      return;
+    }
+    sounds.survive();
+    sounds.up();
+    haptics.success();
+    this.banner(`${res.chest.title.toUpperCase()}! 🎁`, `+${res.chest.rewardRP.toLocaleString()} Bonus RP added to Vault!`, 'ok');
+    this.handleUnlockedPacks();
+    this.renderProfileUI();
+    this.renderPackUI();
+    this.renderPlazaUI();
+    this.renderWorldMapUI();
+    this.renderQuestsModal();
+  }
+
+  handleWorld2PortalClick() {
+    sounds.init();
+    if (store.worlds.world2Unlocked) {
+      sounds.up();
+      haptics.success();
+      this.banner('WORLD 2 GATEWAY 🌀', 'World 1 conquered! Play Endless Mode & Pack 1 while World 2 arrives!', 'ok');
+    } else {
+      sounds.pop();
+      haptics.light();
+      this.banner('WORLD 2 PORTAL 🔒', 'Clear 1-5 Apex Spire (22,000 PTS) to awaken World 2!', 'info');
+    }
+  }
+
+  openQuestsModal() {
+    sounds.init();
+    this.renderQuestsModal();
+    $('#questsModal')?.classList.remove('hidden');
+    sounds.whoosh();
+    haptics.light();
+  }
+
+  closeQuestsModal() {
+    $('#questsModal')?.classList.add('hidden');
+    sounds.whoosh();
+  }
+
+  renderQuestsModal() {
+    const setEyebrow = $('#questsSetEyebrow');
+    if (setEyebrow) setEyebrow.textContent = `SET ${store.quests.setIndex || 1} · COMPLETE ALL 3 FOR +0.1×`;
+
+    const boostVal = $('#questsBoostVal');
+    if (boostVal) boostVal.textContent = `×${store.getQuestMultiplier().toFixed(1)}`;
+
+    const starsCount = $('#questsStarsCount');
+    if (starsCount) starsCount.textContent = `${store.getWorld1Stars()}/15 ⭐`;
+
+    const listEl = $('#questsList');
+    if (listEl) {
+      const quests = store.getActiveQuests();
+      listEl.innerHTML = quests.map((q) => {
+        const pct = Math.min(100, Math.round((q.progress / Math.max(1, q.target)) * 100));
+        const btnLabel = q.claimed ? 'CLAIMED ✓' : q.ready ? `CLAIM +${q.rewardRP}` : `${q.progress}/${q.target}`;
+        return `
+          <div class="quest-row ${q.ready ? 'ready' : ''} ${q.claimed ? 'claimed' : ''}">
+            <div class="qr-ico">${q.icon}</div>
+            <div class="qr-body">
+              <div class="qr-title">${q.title}</div>
+              <div class="qr-desc">${q.desc}</div>
+              <div class="qr-bar"><div class="qr-bar-fill" style="width:${pct}%"></div></div>
+            </div>
+            <button type="button" class="qr-btn ${q.ready ? 'claimable' : ''}" data-quest-slot="${q.slotIndex}">${btnLabel}</button>
+          </div>`;
+      }).join('');
+
+      listEl.querySelectorAll('.qr-btn.claimable').forEach((btn) => {
+        btn.onclick = () => {
+          const res = store.claimQuest(Number(btn.dataset.questSlot));
+          if (!res) return;
+          sounds.survive();
+          if (res.setCompleted) sounds.up();
+          haptics.success();
+          this.banner(
+            res.setCompleted ? 'QUEST SET COMPLETE! ⚡' : 'QUEST CLAIMED! 📜',
+            res.setCompleted
+              ? `+${res.rewardRP} RP · Permanent Boost now ×${res.multiplier.toFixed(1)}!`
+              : `+${res.rewardRP} RP earned!`,
+            'ok',
+          );
+          this.handleUnlockedPacks();
+          this.renderProfileUI();
+          this.renderPackUI();
+          this.renderPlazaUI();
+          this.renderWorldMapUI();
+          this.renderQuestsModal();
+        };
+      });
+    }
+
+    const chestsRow = $('#worldChestsRow');
+    if (chestsRow) {
+      const curStars = store.getWorld1Stars();
+      chestsRow.innerHTML = WORLD_1_CHESTS.map((c) => {
+        const claimed = store.isChestClaimed(c.id);
+        const ready = !claimed && curStars >= c.starsReq;
+        return `
+          <button type="button" class="wc-card ${claimed ? 'claimed' : ready ? 'ready' : ''}" data-chest-id="${c.id}">
+            <span class="wc-ico">${claimed ? '✅' : c.icon}</span>
+            <span class="wc-req">${c.starsReq} ⭐</span>
+            <span class="wc-rp">${claimed ? 'CLAIMED' : ready ? 'TAP CLAIM!' : `+${c.rewardRP.toLocaleString()} RP`}</span>
+          </button>`;
+      }).join('');
+
+      chestsRow.querySelectorAll('.wc-card.ready').forEach((btn) => {
+        btn.onclick = () => this.claimStarChestUI(btn.dataset.chestId);
+      });
+    }
+  }
+
+  startWorldRun(nodeId = this.activeWorldNodeId) {
+    const node = getWorldNodeById(nodeId || store.worlds.selectedNodeId || '1-1');
+    if (!store.isNodeUnlocked(node.id)) {
+      this.selectWorldMapNode(node.id);
+      return;
+    }
+
+    sounds.init();
+    this.activeWorldNodeId = node.id;
+    store.selectWorldNode(node.id);
+    this.runType = 'world';
+    $('#dailyHudBadge')?.classList.add('hidden');
+    $('#cycleLabel')?.classList.remove('hidden');
+
+    store.reset();
+    store.recordRunStart();
+    this.buildPips();
+    this.renderProfileUI();
+    store.data.started = true;
+
+    $('#menu')?.classList.add('hidden');
+    $('#worldMapOverlay')?.classList.add('hidden');
+    $('#questsModal')?.classList.add('hidden');
+    $('#summary')?.classList.add('hidden');
+    $('#dailySummaryModal')?.classList.add('hidden');
+    this.stopHomeBeanPreview();
+    this.worldMapScene?.stop();
+    $('#hud')?.classList.remove('hidden');
+
+    const freshAlive = this.getAliveIndices();
+    this.index = freshAlive[0] ?? 0;
+    this.loadGame(this.index);
+    this.mode = 'transition';
+    this.transT = 0.45;
+    this.snap.style.display = 'none';
+    sounds.whoosh();
+    this.renderPips();
+    store.save();
+  }
+
   /* ----------------------------------------------------------- daily challenge (TICKET-04) */
   setMenuMode(mode) {
     this.menuMode = mode;
-    $('#tabModeStandard').classList.toggle('active', mode === 'standard');
-    $('#tabModeDaily').classList.toggle('active', mode === 'daily');
-    $('#standardMenuContent').classList.toggle('hidden', mode !== 'standard');
-    $('#dailyMenuContent').classList.toggle('hidden', mode !== 'daily');
+    $('#tabModeStandard')?.classList.toggle('active', mode === 'standard');
+    $('#tabModeDaily')?.classList.toggle('active', mode === 'daily');
+    $('#standardMenuContent')?.classList.toggle('hidden', mode !== 'standard');
+    $('#dailyMenuContent')?.classList.toggle('hidden', mode !== 'daily');
     if (mode === 'daily') {
       this.renderDailyMenuUI();
     }
@@ -1435,8 +2341,8 @@ export class Reel {
     const tabTag = $('#menuDailyStreakTag');
     if (tabTag) tabTag.textContent = `🔥 ${streak}`;
 
-    // 10-Game Preview icons
-    const dailyIndices = getDailyGameIndices(GAMES.length, 10, todayStr);
+    // 10-Game Preview icons (drawn from STARTER_GAMES so daily runs never spoil mystery packs)
+    const dailyIndices = getDailyGameIndices(STARTER_GAMES.length, 10, todayStr);
     const iconsContainer = $('#dailyPreviewIcons');
     if (iconsContainer) {
       iconsContainer.innerHTML = dailyIndices.map((idx, i) => `<span title="Stage ${i + 1}: ${GAMES[idx].meta.title}">${GAMES[idx].meta.icon}</span>`).join('');
@@ -1482,18 +2388,24 @@ export class Reel {
   startDailyRun() {
     sounds.init();
     this.runType = 'daily';
-    this.dailyIndices = getDailyGameIndices(GAMES.length, 10);
+    this.dailyIndices = getDailyGameIndices(STARTER_GAMES.length, 10);
     this.dailyStageIndex = 0;
     this.dailyResults = new Array(10).fill(null);
 
     // Build pips for 10 daily games
     const pipsEl = $('#pips');
-    pipsEl.innerHTML = this.dailyIndices.map((gIdx, i) => `<div class="pip" data-i="${i}" title="Stage ${i + 1}: ${GAMES[gIdx].meta.title}">${GAMES[gIdx].meta.icon}</div>`).join('');
+    if (pipsEl) {
+      pipsEl.innerHTML = this.dailyIndices.map((gIdx, i) => `<div class="pip" data-i="${i}" title="Stage ${i + 1}: ${GAMES[gIdx].meta.title}">${GAMES[gIdx].meta.icon}</div>`).join('');
+    }
 
-    $('#menu').classList.add('hidden');
-    $('#summary').classList.add('hidden');
-    $('#dailySummaryModal').classList.add('hidden');
-    $('#hud').classList.remove('hidden');
+    $('#menu')?.classList.add('hidden');
+    $('#worldMapOverlay')?.classList.add('hidden');
+    $('#questsModal')?.classList.add('hidden');
+    $('#summary')?.classList.add('hidden');
+    $('#dailySummaryModal')?.classList.add('hidden');
+    this.stopHomeBeanPreview();
+    this.worldMapScene?.stop();
+    $('#hud')?.classList.remove('hidden');
 
     // Fresh run state
     store.meta.global = 0;
@@ -1506,7 +2418,6 @@ export class Reel {
     this.transT = 0.45;
     this.snap.style.display = 'none';
     sounds.whoosh();
-    this.banner('DAILY GAUNTLET 📅', `Stage 1 of 10 · ${GAMES[firstGameIdx].meta.title}`, 'info');
     this.renderPips();
   }
 
@@ -1516,6 +2427,7 @@ export class Reel {
 
     const totalScore = store.meta.global;
     const res = store.recordDailyResult(totalScore);
+    store.recordQuestProgress('dailyPlayed', 1);
 
     if (res.medal) {
       sounds.survive();
@@ -1552,8 +2464,10 @@ export class Reel {
     }
 
     modal.classList.remove('hidden');
+    this.handleUnlockedPacks();
     this.renderDailyMenuUI();
     this.renderProfileUI();
+    this.renderPlazaUI();
   }
 
   closeDailySummary() {
@@ -1564,7 +2478,13 @@ export class Reel {
     $('#menu').classList.remove('hidden');
     this.renderDailyMenuUI();
     this.renderProfileUI();
+    this.renderPackUI();
+    this.renderPlazaUI();
+    this.startHomeBeanPreview();
     sounds.whoosh();
+    if (this.pendingRevealQueue.length > 0) {
+      this.openPackRevealModal(this.pendingRevealQueue[0], false);
+    }
   }
 
   /* -------------------------------------------------------------- loop */
@@ -1629,7 +2549,7 @@ export class Reel {
     }
 
     if (this.game && (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'secured' || this.mode === 'dying')) {
-      const live = Math.max(0, Math.round(this.game.score - this.roundStartScore));
+      const live = (this.mode === 'playing' || this.mode === 'paused') ? this.computeLiveRP() : 0;
       const total = store.meta.global + live;
       if (total !== this.lastScoreShown) {
         this.lastScoreShown = total;
@@ -1758,6 +2678,503 @@ export class Reel {
     downloadCardPNG(canvas, filename);
     this.showShareToast('High-Res Poster saved to Downloads! 💾');
     sounds.like();
+  }
+
+  /* ----------------------------------------------------------- Pack Progression & Mystery Reveal */
+  handleUnlockedPacks() {
+    const newlyUnlocked = store.checkPackUnlocks();
+    if (newlyUnlocked.length > 0) {
+      for (const pack of newlyUnlocked) {
+        if (!this.pendingRevealQueue.some((p) => p.id === pack.id)) {
+          this.pendingRevealQueue.push(pack);
+        }
+      }
+      this.buildMenuIcons();
+      this.buildPips();
+    }
+    this.renderPackUI();
+    return newlyUnlocked;
+  }
+
+  renderPackUI() {
+    const unlockedCount = store.getUnlockedGameIds().length;
+    const totalPlayable = store.getTotalPlayableGameCount();
+    const tagline = $('#menuTagline');
+    if (tagline) {
+      tagline.innerHTML = unlockedCount > STARTER_GAMES.length
+        ? `${unlockedCount} unlocked games · 60 seconds each.<br />Earn Reel Points to unlock even more mystery packs!`
+        : `${STARTER_GAMES.length} starter games · 60 seconds each.<br />Earn Reel Points to unlock 5-game mystery packs!`;
+    }
+
+    const pending = store.getPendingRevealPacks();
+    const dot = $('#menuPackDot');
+    if (dot) dot.classList.toggle('hidden', pending.length === 0);
+
+    const card = $('#packProgressCard');
+    const sumBox = $('#summaryPackBox');
+    const nextPack = store.getNextLockedPack();
+
+    if (pending.length > 0) {
+      const readyPack = pending[0];
+      if (card) {
+        card.classList.add('ready');
+        card.classList.remove('hidden');
+        const titleEl = $('#packCardTitle');
+        const ptsEl = $('#packCardPts');
+        const fillEl = $('#packCardBarFill');
+        const pctEl = $('#packCardPct');
+        if (titleEl) titleEl.textContent = `${readyPack.title.toUpperCase()} READY!`;
+        if (ptsEl) ptsEl.textContent = 'TAP TO REVEAL ✨';
+        if (fillEl) fillEl.style.width = '100%';
+        if (pctEl) pctEl.textContent = '100%';
+      }
+      if (sumBox) {
+        sumBox.classList.remove('hidden');
+        const sTitle = $('#sumPackTitle');
+        const sPts = $('#sumPackPts');
+        const sFill = $('#sumPackBarFill');
+        if (sTitle) sTitle.textContent = `🎁 ${readyPack.title.toUpperCase()} UNLOCKED!`;
+        if (sPts) sPts.textContent = 'REVEAL IN MENU';
+        if (sFill) sFill.style.width = '100%';
+      }
+    } else if (nextPack) {
+      const prog = store.getPackProgress(nextPack);
+      const pct = Math.round(prog.pct * 100);
+      const rpStr = `${prog.current.toLocaleString()} / ${prog.target.toLocaleString()} RP`;
+      if (card) {
+        card.classList.remove('ready');
+        card.classList.remove('hidden');
+        const titleEl = $('#packCardTitle');
+        const ptsEl = $('#packCardPts');
+        const fillEl = $('#packCardBarFill');
+        const pctEl = $('#packCardPct');
+        if (titleEl) titleEl.textContent = nextPack.comingSoon ? `${nextPack.title.toUpperCase()} (SOON)` : nextPack.title.toUpperCase();
+        if (ptsEl) ptsEl.textContent = rpStr;
+        if (fillEl) fillEl.style.width = `${pct}%`;
+        if (pctEl) pctEl.textContent = `${pct}%`;
+      }
+      if (sumBox) {
+        sumBox.classList.remove('hidden');
+        const sTitle = $('#sumPackTitle');
+        const sPts = $('#sumPackPts');
+        const sFill = $('#sumPackBarFill');
+        if (sTitle) sTitle.textContent = nextPack.comingSoon ? `⏳ ${nextPack.title.toUpperCase()}` : `🔒 ${nextPack.title.toUpperCase()}`;
+        if (sPts) sPts.textContent = rpStr;
+        if (sFill) sFill.style.width = `${pct}%`;
+      }
+    } else {
+      if (card) {
+        card.classList.remove('ready');
+        const titleEl = $('#packCardTitle');
+        const ptsEl = $('#packCardPts');
+        const fillEl = $('#packCardBarFill');
+        const pctEl = $('#packCardPct');
+        if (titleEl) titleEl.textContent = 'ALL UNLOCKED';
+        if (ptsEl) ptsEl.textContent = `${unlockedCount}/${totalPlayable} GAMES`;
+        if (fillEl) fillEl.style.width = '100%';
+        if (pctEl) pctEl.textContent = '100%';
+      }
+      if (sumBox) sumBox.classList.add('hidden');
+    }
+
+    if (!$('#packsModal')?.classList.contains('hidden')) {
+      this.renderPacksModal();
+    }
+  }
+
+  openPacksModal() {
+    sounds.init();
+    this.renderPacksModal();
+    $('#packsModal').classList.remove('hidden');
+    sounds.whoosh();
+    haptics.light();
+  }
+
+  closePacksModal() {
+    $('#packsModal').classList.add('hidden');
+    sounds.whoosh();
+  }
+
+  renderPacksModal() {
+    const lifetime = store.stats.lifetimeScore || 0;
+    const unlockedCount = store.getUnlockedGameIds().length;
+    const totalPlayable = store.getTotalPlayableGameCount();
+    const pill = $('#packsBalancePill');
+    if (pill) {
+      pill.textContent = `🌟 ${lifetime.toLocaleString()} REEL PTS · ${unlockedCount}/${totalPlayable} GAMES UNLOCKED`;
+    }
+
+    const list = $('#packsList');
+    if (!list) return;
+    list.innerHTML = GAME_PACKS.map((pack) => {
+      const prog = store.getPackProgress(pack);
+      const isUnlocked = !pack.comingSoon && store.isPackUnlocked(pack.id);
+      const isRevealed = isUnlocked && store.isPackRevealed(pack.id);
+      const statusText = pack.comingSoon
+        ? 'COMING SOON'
+        : (isUnlocked ? (isRevealed ? 'UNLOCKED ✓' : 'READY TO REVEAL 🎁') : `🔒 ${prog.target.toLocaleString()} RP`);
+
+      const chipsHtml = pack.gameIds.map((gid) => {
+        const g = GAME_BY_ID[gid];
+        if (!isUnlocked || !isRevealed || !g) {
+          return '<span class="pvi-chip mystery" title="Mystery Game">❓ Mystery</span>';
+        }
+        return `<button type="button" class="pvi-chip" data-pack-gid="${gid}" title="Play ${g.meta.title}">${g.meta.icon} ${g.meta.title}</button>`;
+      }).join('');
+
+      const barHtml = pack.unlockRequirement
+        ? `<div class="pack-bar-bg"><div class="pack-bar-fill" style="width:${Math.round(prog.pct * 100)}%"></div></div>`
+        : '';
+
+      const actionBtn = isUnlocked && !isRevealed
+        ? `<button type="button" class="btn pack-reveal-inline-btn" data-reveal-pack="${pack.id}">REVEAL PACK ✨</button>`
+        : '';
+
+      return `
+        <div class="pack-vault-item ${isUnlocked ? 'unlocked' : 'locked'}">
+          <div class="pvi-head">
+            <div class="pvi-title">${pack.title}</div>
+            <div class="pvi-status">${statusText}</div>
+          </div>
+          <div class="pvi-desc">${pack.subtitle || pack.desc || ''}</div>
+          ${barHtml}
+          <div class="pvi-icons">${chipsHtml}</div>
+          ${actionBtn}
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('[data-pack-gid]').forEach((btn) => {
+      btn.onclick = () => {
+        const gid = btn.dataset.packGid;
+        const idx = GAMES.findIndex((g) => g.meta.id === gid);
+        if (idx !== -1 && this.isGameUnlocked(idx)) {
+          this.closePacksModal();
+          this.jumpToGame(idx);
+        }
+      };
+    });
+
+    list.querySelectorAll('[data-reveal-pack]').forEach((btn) => {
+      btn.onclick = () => {
+        const pack = GAME_PACKS.find((p) => p.id === btn.dataset.revealPack);
+        if (pack) {
+          this.closePacksModal();
+          this.openPackRevealModal(pack, false);
+        }
+      };
+    });
+  }
+
+  openPackRevealModal(pack, resumeAdvance = false) {
+    if (!pack) return;
+    this.activeRevealPack = pack;
+    this.revealedCardIndices = new Set();
+    this._resumeAdvanceAfterReveal = Boolean(resumeAdvance);
+
+    const eye = $('#packRevealEyebrow');
+    const title = $('#packRevealTitle');
+    const sub = $('#packRevealSub');
+    if (eye) eye.textContent = 'MYSTERY PACK UNLOCKED!';
+    if (title) title.textContent = pack.title.toUpperCase();
+    if (sub) sub.textContent = `Tap each mystery card to reveal your ${pack.gameIds.length} new reel games!`;
+
+    this.renderPackRevealGrid();
+    $('#packRevealModal').classList.remove('hidden');
+    sounds.up();
+    haptics.success();
+  }
+
+  renderPackRevealGrid() {
+    const pack = this.activeRevealPack;
+    if (!pack) return;
+    const grid = $('#packRevealGrid');
+    if (!grid) return;
+
+    grid.innerHTML = pack.gameIds.map((gid, idx) => {
+      const g = GAME_BY_ID[gid];
+      const shown = this.revealedCardIndices.has(idx);
+      if (shown && g) {
+        return `
+          <div class="mystery-reveal-card revealed" data-card-idx="${idx}">
+            <div class="mrc-icon">${g.meta.icon}</div>
+            <div class="mrc-title">${g.meta.title}</div>
+            <div class="mrc-sub">${g.meta.hint || 'Added to your Reel!'}</div>
+          </div>`;
+      }
+      return `
+        <button type="button" class="mystery-reveal-card" data-card-idx="${idx}">
+          <div class="mrc-icon">❓</div>
+          <div class="mrc-title">MYSTERY #${idx + 1}</div>
+          <div class="mrc-sub">Tap to reveal</div>
+        </button>`;
+    }).join('');
+
+    grid.querySelectorAll('[data-card-idx]').forEach((cardEl) => {
+      cardEl.onclick = () => {
+        const idx = Number(cardEl.dataset.cardIdx);
+        if (!this.revealedCardIndices.has(idx)) {
+          this.revealedCardIndices.add(idx);
+          sounds.pop();
+          haptics.medium();
+          if (this.revealedCardIndices.size >= pack.gameIds.length) {
+            sounds.up();
+            haptics.success();
+          }
+          this.renderPackRevealGrid();
+        }
+      };
+    });
+
+    const btn = $('#btnPackRevealAction');
+    if (btn) {
+      const allRevealed = this.revealedCardIndices.size >= pack.gameIds.length;
+      btn.textContent = allRevealed ? 'ADD TO REEL & PLAY ▶' : 'REVEAL ALL ✨';
+    }
+  }
+
+  handlePackRevealAction() {
+    const pack = this.activeRevealPack;
+    if (!pack) {
+      this.closePackRevealModal();
+      return;
+    }
+    if (this.revealedCardIndices.size < pack.gameIds.length) {
+      pack.gameIds.forEach((_, idx) => this.revealedCardIndices.add(idx));
+      sounds.up();
+      haptics.success();
+      this.renderPackRevealGrid();
+      return;
+    }
+    this.closePackRevealModal();
+  }
+
+  closePackRevealModal() {
+    const pack = this.activeRevealPack;
+    if (pack) {
+      store.markPackRevealed(pack.id);
+      this.pendingRevealQueue = this.pendingRevealQueue.filter((p) => p.id !== pack.id);
+    }
+    this.activeRevealPack = null;
+    this.revealedCardIndices.clear();
+    this.buildMenuIcons();
+    this.buildPips();
+    this.renderPackUI();
+    this.renderProfileUI();
+
+    if (this.pendingRevealQueue.length > 0) {
+      this.openPackRevealModal(this.pendingRevealQueue[0], this._resumeAdvanceAfterReveal);
+      return;
+    }
+
+    $('#packRevealModal').classList.add('hidden');
+    sounds.whoosh();
+
+    if (this._resumeAdvanceAfterReveal) {
+      this._resumeAdvanceAfterReveal = false;
+      this.advance();
+    }
+  }
+
+  /* --------------------------------------------------- Admin Playtester Mode */
+  syncAdminUI() {
+    const dock = $('#adminDock');
+    const settingsBtn = $('#btnOpenAdminFromSettings');
+    if (dock) dock.classList.toggle('hidden', !this.adminMode);
+    if (settingsBtn) settingsBtn.classList.toggle('hidden', !this.adminMode);
+  }
+
+  enableAdminMode(openNow = true) {
+    this.adminMode = true;
+    sessionStorage.setItem('gr_admin', '1');
+    this.syncAdminUI();
+    sounds.up();
+    haptics.success();
+    if (openNow) this.openAdminModal();
+  }
+
+  openAdminModal() {
+    if (!this.adminMode) {
+      this.adminMode = true;
+      sessionStorage.setItem('gr_admin', '1');
+      this.syncAdminUI();
+    }
+    if (this.mode === 'playing') {
+      this._pausedByAdmin = true;
+      this.mode = 'paused';
+    }
+    this.renderAdminModal();
+    $('#adminModal').classList.remove('hidden');
+    sounds.whoosh();
+  }
+
+  closeAdminModal() {
+    $('#adminModal').classList.add('hidden');
+    sounds.whoosh();
+    if (this._pausedByAdmin) {
+      this._pausedByAdmin = false;
+      if (this.mode === 'paused') {
+        this.mode = 'playing';
+        this.last = performance.now();
+      }
+    }
+  }
+
+  adminLaunchGame(i) {
+    if (i < 0 || i >= GAMES.length) return;
+    this._pausedByAdmin = false;
+    $('#adminModal').classList.add('hidden');
+    $('#packsModal').classList.add('hidden');
+    $('#settingsModal').classList.add('hidden');
+    store.data.started = true;
+    this.runType = 'standard';
+    this.buildPips();
+    this.jumpToGame(i, true);
+    this.syncAdminUI();
+  }
+
+  adminStepGame(dir) {
+    const nextIdx = (this.index + dir + GAMES.length) % GAMES.length;
+    this.adminLaunchGame(nextIdx);
+  }
+
+  adminToggleAllPacks() {
+    const allOpen = GAME_PACKS.filter((p) => !p.comingSoon).every((p) => store.isPackUnlocked(p.id));
+    if (allOpen) store.adminResetPacks();
+    else store.adminUnlockAllPacks();
+    this.pendingRevealQueue = store.getPendingRevealPacks();
+    this.buildMenuIcons();
+    this.buildPips();
+    this.renderPackUI();
+    this.renderProfileUI();
+    this.renderAdminModal();
+    sounds.up();
+    haptics.medium();
+  }
+
+  adminAddRP(delta = 10000) {
+    const newly = store.adminAddRP(delta);
+    if (newly.length > 0) this.pendingRevealQueue = store.getPendingRevealPacks();
+    this.renderProfileUI();
+    this.renderPackUI();
+    this.buildMenuIcons();
+    this.buildPips();
+    this.renderAdminModal();
+    sounds.like();
+    haptics.medium();
+  }
+
+  adminToggleTimer() {
+    this.roundLen = this.roundLen === 60 ? 10 : 60;
+    if (this.game) this.timeLeft = Math.min(this.timeLeft, this.roundLen);
+    this.renderAdminModal();
+    sounds.pop();
+  }
+
+  adminReviveAll() {
+    store.adminReviveAll();
+    this.buildPips();
+    this.renderAdminModal();
+    sounds.survive();
+    haptics.medium();
+  }
+
+  adminPromoteCurrentGame() {
+    const G = GAMES[this.index] || GAMES[0];
+    if (!G) return;
+    const rankNow = store.promote(G.meta.id, { clearState: false });
+    sounds.up();
+    haptics.success();
+    this.adminLaunchGame(this.index);
+    this.banner(`PRESTIGE ${rankNow} TEST! ★`, `${G.meta.title} scaled to Prestige ${rankNow}`, 'ok');
+  }
+
+  adminToggleWorld1() {
+    const allOpen = WORLD_1_NODES.every((n) => store.isNodeUnlocked(n.id));
+    if (allOpen) {
+      store.worlds.nodes = { '1-1': { unlocked: true, cleared: false, stars: 0, bestScore: 0 } };
+      store.worlds.selectedNodeId = '1-1';
+      store.worlds.world2Unlocked = false;
+    } else {
+      for (const n of WORLD_1_NODES) {
+        const cur = store.worlds.nodes[n.id] || {};
+        store.worlds.nodes[n.id] = {
+          unlocked: true,
+          cleared: n.id !== '1-5' ? true : !!cur.cleared,
+          stars: n.id !== '1-5' ? Math.max(cur.stars || 0, 3) : (cur.stars || 0),
+          bestScore: Math.max(cur.bestScore || 0, n.id !== '1-5' ? n.starScores[2] : 0),
+        };
+      }
+    }
+    store.save();
+    this.renderPlazaUI();
+    this.renderWorldMapUI();
+    this.renderAdminModal();
+    sounds.up();
+    haptics.medium();
+  }
+
+  renderAdminModal() {
+    const nowLabel = $('#adminNowLabel');
+    const curGame = GAMES[this.index] || GAMES[0];
+    if (nowLabel && curGame) {
+      const pRank = store.getPrestige(curGame.meta.id);
+      nowLabel.textContent = `#${String(this.index + 1).padStart(2, '0')} · ${curGame.meta.icon} ${curGame.meta.title} (P${pRank})`;
+    }
+
+    const btnPacks = $('#btnAdminTogglePacks');
+    if (btnPacks) {
+      const allOpen = GAME_PACKS.filter((p) => !p.comingSoon).every((p) => store.isPackUnlocked(p.id));
+      btnPacks.textContent = allOpen ? '🔒 LOCK PACK 1' : `🔓 UNLOCK ALL (${GAMES.length})`;
+    }
+
+    const btnTimer = $('#btnAdminToggleTimer');
+    if (btnTimer) btnTimer.textContent = `⏱️ TIMER: ${this.roundLen}s`;
+
+    const btnWorld = $('#btnAdminUnlockWorld');
+    if (btnWorld) {
+      const allOpen = WORLD_1_NODES.every((n) => store.isNodeUnlocked(n.id));
+      btnWorld.textContent = allOpen ? '🔒 RESET W1' : '🗺️ UNLOCK W1';
+    }
+
+    const listEl = $('#adminGameList');
+    if (!listEl) return;
+
+    listEl.innerHTML = GAME_PACKS.filter((p) => !p.comingSoon).map((pack) => {
+      const packUnlocked = store.isPackUnlocked(pack.id);
+      const rows = pack.gameIds.map((gid) => {
+        const idx = GAMES.findIndex((g) => g.meta.id === gid);
+        const G = GAMES[idx];
+        if (!G) return '';
+        const isCurrent = this.game && this.index === idx;
+        const isElim = store.isEliminated(gid);
+        const badges = [];
+        badges.push(G.meta.isPrestige ? 'PRESTIGE' : 'ENDLESS');
+        const pRank = store.getPrestige(gid);
+        if (pRank > 1) badges.push(`P${pRank}`);
+        if (!packUnlocked) badges.push('🔒');
+        if (isElim) badges.push('💀');
+        return `
+          <button type="button" class="admin-game-row ${isCurrent ? 'current' : ''}" data-admin-idx="${idx}">
+            <span class="agr-num">#${String(idx + 1).padStart(2, '0')}</span>
+            <span class="agr-icon">${G.meta.icon}</span>
+            <span class="agr-main">
+              <span class="agr-title">${G.meta.title}</span>
+              <span class="agr-hint">${G.meta.hint}</span>
+            </span>
+            <span class="agr-badge">${badges.join(' · ')}</span>
+          </button>`;
+      }).join('');
+
+      return `
+        <div class="admin-pack-group">
+          <div class="admin-pack-head">${pack.title} · ${packUnlocked ? 'UNLOCKED' : 'LOCKED (ADMIN BYPASS)'}</div>
+          ${rows}
+        </div>`;
+    }).join('');
+
+    listEl.querySelectorAll('[data-admin-idx]').forEach((btn) => {
+      btn.onclick = () => this.adminLaunchGame(Number(btn.dataset.adminIdx));
+    });
   }
 }
 

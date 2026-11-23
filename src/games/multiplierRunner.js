@@ -1,6 +1,18 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  mixColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  drawToyEyes,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TRACK_L = 45;
 const TRACK_R = 405;
@@ -19,8 +31,16 @@ export class MultiplierRunner extends Game {
     id: 'multiplier-runner',
     title: 'Albert Dock Rush',
     icon: '⚓',
-    hint: 'DRAG left/right! Pick +2/-2 gates, dodge dock hazards & build your squad to defeat the 10, 20 & 30 Bean Bosses!',
+    hint: 'DRAG left/right! Pick +2/-2 gates, dodge dock hazards & build your squad!',
     baseLikes: 4320,
+    isPrestige: true,
+    parScore60s: 2400,
+    cue: 'BUILD YOUR SQUAD!',
+    prestigeCue: 'TOUGHER BOSSES · FASTER RUN!',
+    scaling: {
+      bossReqMult:  { base: 1.0, rate: 0.18, cap: 1.90, mode: 'up', label: 'Boss Strength' },
+      runSpeedMult: { base: 1.0, rate: 0.16, cap: 1.40, mode: 'up', label: 'Run Speed' },
+    },
   };
 
   init(saved, score = 0) {
@@ -78,9 +98,9 @@ export class MultiplierRunner extends Game {
   }
 
   /* ------------------------------------------------------------ Stage & Boss Progression */
-  // Boss squad requirement/HP for a stage, +25% per prestige level.
+  // Boss squad requirement/HP for a stage, scaled asymptotically by prestige.
   bossReqFor(stage) {
-    return Math.round(stage * 10 * (1 + 0.25 * ((this.pLevel || 1) - 1)));
+    return Math.round(stage * 10 * (this.diff.bossReqMult ?? 1));
   }
 
   initStage(stage) {
@@ -379,7 +399,7 @@ export class MultiplierRunner extends Game {
       this.feverRush -= dt;
       this.speed = 265;
     } else {
-      this.speed = (195 + Math.min(50, this.stage * 10)) * (1 + 0.07 * (this.pLevel - 1));
+      this.speed = (195 + Math.min(50, this.stage * 10)) * (this.diff.runSpeedMult ?? 1);
     }
 
     this.dist += this.speed * dt;
@@ -953,14 +973,15 @@ export class MultiplierRunner extends Game {
           // Approaching warning banner on the quayside
           const ready = this.count >= r.req;
           ctx.save();
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '900 16px Outfit, system-ui, sans-serif';
-          ctx.lineWidth = 5;
-          ctx.strokeStyle = '#140924';
           const txt = ready
             ? `🟢 SQUAD READY! (${Math.round(this.count)} / ${r.req} BEANS) 🟢`
             : `⚠️ ${r.title} · NEED ${r.req} BEANS! ⚠️`;
+          ctx.font = "800 14px 'Fredoka', 'Outfit', sans-serif";
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = 4.5;
+          ctx.strokeStyle = '#0f172a';
           ctx.strokeText(txt, MID, y + r.r + 62);
           ctx.fillStyle = ready ? '#3dffa2' : '#facc15';
           ctx.fillText(txt, MID, y + r.r + 62);
@@ -976,9 +997,10 @@ export class MultiplierRunner extends Game {
     // Crowd Count Badge
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '900 32px Outfit, system-ui, sans-serif';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#140924';
+    ctx.font = "800 32px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 5.5;
+    ctx.strokeStyle = '#0f172a';
     const badgeY = CROWD_Y - rad - 28;
     ctx.strokeText(fmt(this.count), this.crowdX, badgeY);
     ctx.fillStyle = this.boostTimer > 0 ? '#3dffa2' : this.feverRush > 0 ? '#ffea00' : '#ffffff';
@@ -1020,6 +1042,13 @@ export class MultiplierRunner extends Game {
     ctx.lineTo(0, H);
     ctx.closePath();
     ctx.fill();
+
+    // Warm distant Liver clock tower pinpoints
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.5)';
+    ctx.beginPath();
+    ctx.arc(105, 98, 2.5, 0, TAU);
+    ctx.arc(185, 98, 2.5, 0, TAU);
+    ctx.fill();
   }
 
   renderBoardwalk(ctx, W, H) {
@@ -1032,7 +1061,7 @@ export class MultiplierRunner extends Game {
     ctx.fillRect(0, 0, TRACK_L, H);
 
     // Animated water ripples
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
     ctx.lineWidth = 1.5;
     const ripStep = 44;
     const ripOff = (this.t * 26) % ripStep;
@@ -1042,15 +1071,21 @@ export class MultiplierRunner extends Game {
       ctx.stroke();
     }
 
-    // Heavy timber quayside barrier
-    ctx.fillStyle = '#2d1808';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 2;
-    ctx.fillRect(TRACK_L - 5, 0, 6, H);
-    ctx.strokeRect(TRACK_L - 5, 0, 6, H);
+    // 3D beveled timber quayside barrier
+    const curbG = ctx.createLinearGradient(TRACK_L - 6, 0, TRACK_L + 2, 0);
+    curbG.addColorStop(0, '#78350f');
+    curbG.addColorStop(0.5, '#92400e');
+    curbG.addColorStop(1, '#451a03');
+    ctx.fillStyle = curbG;
+    ctx.fillRect(TRACK_L - 6, 0, 7, H);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.fillRect(TRACK_L - 5, 0, 2, H);
 
     // Right Flank: Historic Albert Dock Red Sugar-Brick Warehouse (TRACK_R to W)
-    ctx.fillStyle = '#782a3b';
+    const whG = ctx.createLinearGradient(TRACK_R, 0, W, 0);
+    whG.addColorStop(0, '#882d40');
+    whG.addColorStop(1, '#581c2c');
+    ctx.fillStyle = whG;
     ctx.fillRect(TRACK_R, 0, W - TRACK_R, H);
 
     // Mortar lines
@@ -1062,21 +1097,23 @@ export class MultiplierRunner extends Game {
       ctx.lineTo(W, y);
       ctx.stroke();
     }
-    ctx.fillStyle = '#140924';
+    ctx.fillStyle = '#4c1d24';
     ctx.fillRect(TRACK_R, 0, 4, H);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.fillRect(TRACK_R + 4, 0, 1.5, H);
 
     // Center Boardwalk Track: Solid Rich Timber
     const bg = ctx.createLinearGradient(TRACK_L, 0, TRACK_R, 0);
     bg.addColorStop(0, '#b07848');
-    bg.addColorStop(0.5, '#bd8754');
+    bg.addColorStop(0.5, '#c68f59');
     bg.addColorStop(1, '#b07848');
     ctx.fillStyle = bg;
     ctx.fillRect(TRACK_L, 0, TRACK_W, H);
 
-    // Scrolling plank seams
+    // Scrolling plank seams with subtle beveled highlight
     const seamGap = 32;
     const seamOff = (this.dist * 1.2) % seamGap;
-    ctx.strokeStyle = 'rgba(20, 9, 36, 0.3)';
+    ctx.strokeStyle = 'rgba(69, 26, 3, 0.25)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     for (let y = -seamGap + seamOff; y < H + seamGap; y += seamGap) {
@@ -1107,39 +1144,26 @@ export class MultiplierRunner extends Game {
       if (p.type === 'bollard') {
         const bx = TRACK_L - 12;
         ctx.translate(bx, dy);
-        ctx.fillStyle = '#1e293b';
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 2;
-        ctx.fillRect(-5, -15, 10, 18);
-        ctx.strokeRect(-5, -15, 10, 18);
-        ctx.beginPath();
-        ctx.arc(0, -15, 7, 0, TAU);
-        ctx.fill(); ctx.stroke();
+        drawToyShadow(ctx, 0, 5, 9, 3.5, 0.28);
+        drawToyBevelRect(ctx, -5.5, -15, 11, 18, 3, '#334155', { depth: 2, rimColor: '#0f172a', lineWidth: 1.3 });
+        drawToySphere(ctx, 0, -15, 7, '#475569', { rimColor: '#0f172a', lineWidth: 1.3, bottomBounce: false });
       } else if (p.type === 'lamp') {
         const lx = TRACK_R + 14;
         ctx.translate(lx, dy);
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(-2, -22, 4, 26);
-        ctx.fillStyle = '#fef08a';
-        ctx.beginPath();
-        ctx.arc(0, -22, 6, 0, TAU);
-        ctx.fill();
+        drawToyBevelRect(ctx, -2.5, -22, 5, 26, 2, '#334155', { depth: 0, rimColor: '#0f172a', lineWidth: 1 });
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.25)';
+        ctx.beginPath(); ctx.arc(0, -22, 11, 0, TAU); ctx.fill();
+        drawToySphere(ctx, 0, -22, 6, '#fef08a', { rimColor: '#b45309', lineWidth: 1.1, bottomBounce: false });
       } else if (p.type === 'crane') {
         const cx = TRACK_R + 24;
         ctx.translate(cx, dy);
-        ctx.fillStyle = '#eab308';
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 2;
-        ctx.fillRect(-12, -24, 24, 30);
-        ctx.strokeRect(-12, -24, 24, 30);
+        drawToyShadow(ctx, 0, 9, 14, 5, 0.28);
+        drawToyBevelRect(ctx, -12, -24, 24, 30, 5, '#eab308', { depth: 3, rimColor: '#92400e', lineWidth: 1.5 });
       } else if (p.type === 'crate') {
         const cx = TRACK_L - 14;
         ctx.translate(cx, dy);
-        ctx.fillStyle = '#78350f';
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 2;
-        ctx.fillRect(-8, -8, 16, 16);
-        ctx.strokeRect(-8, -8, 16, 16);
+        drawToyShadow(ctx, 0, 10, 10, 4, 0.28);
+        drawToyBevelRect(ctx, -8, -8, 16, 16, 3, '#b45309', { depth: 2.5, rimColor: '#78350f', lineWidth: 1.4 });
       }
       ctx.restore();
     }
@@ -1160,84 +1184,95 @@ export class MultiplierRunner extends Game {
       const h = 92;
       const topY = y - h / 2;
       const alpha = r.done ? 0.35 : 1;
+      const baseCol = g.good ? '#0ea5e9' : '#ef4444';
+      const rimCol = toyRim(baseCol, 0.56);
 
       ctx.save();
       ctx.globalAlpha = alpha;
 
-      // Gate Glow Background
+      // Frosted 3D Toy Gate Panel
       const sg = ctx.createLinearGradient(0, topY, 0, topY + h);
       if (g.good) {
-        sg.addColorStop(0, 'rgba(56, 189, 248, 0.85)');
-        sg.addColorStop(0.5, 'rgba(3, 105, 161, 0.45)');
-        sg.addColorStop(1, 'rgba(56, 189, 248, 0.85)');
+        sg.addColorStop(0, 'rgba(56, 189, 248, 0.88)');
+        sg.addColorStop(0.5, 'rgba(2, 132, 199, 0.52)');
+        sg.addColorStop(1, 'rgba(56, 189, 248, 0.88)');
       } else {
-        sg.addColorStop(0, 'rgba(239, 68, 68, 0.85)');
-        sg.addColorStop(0.5, 'rgba(153, 27, 27, 0.45)');
-        sg.addColorStop(1, 'rgba(239, 68, 68, 0.85)');
+        sg.addColorStop(0, 'rgba(244, 63, 94, 0.88)');
+        sg.addColorStop(0.5, 'rgba(159, 18, 57, 0.52)');
+        sg.addColorStop(1, 'rgba(244, 63, 94, 0.88)');
       }
       ctx.fillStyle = sg;
-      ctx.beginPath();
-      ctx.roundRect(x0, topY, w, h, 14);
+      traceRoundRect(ctx, x0, topY, w, h, 14);
       ctx.fill();
 
-      // Bold Cel Border
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 3.5;
+      // Soft bottom lip & crisp tinted rim
+      ctx.strokeStyle = rimCol;
+      ctx.lineWidth = 2.2;
       ctx.stroke();
 
-      // Neon Top Banner
-      ctx.fillStyle = g.good ? '#38bdf8' : '#ef4444';
-      ctx.beginPath();
-      ctx.roundRect(x0 + 4, topY + 4, w - 8, 16, 6);
-      ctx.fill();
+      // Glossy Toy Pill Top Banner
+      drawToyPill(ctx, x0 + 5, topY + 5, w - 10, 17, g.good ? '#38bdf8' : '#f43f5e', {
+        rimColor: rimCol,
+        lineWidth: 1.2,
+        gloss: true,
+      });
 
-      ctx.font = '900 11px Outfit, system-ui, sans-serif';
+      ctx.font = "800 10.5px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(g.good ? '✨ BOOST' : '⚠️ PENALTY', (x0 + x1) / 2, topY + 13);
+      ctx.fillText(g.good ? '✨ BOOST' : '⚠️ PENALTY', (x0 + x1) / 2, topY + 13.5);
 
       // High Contrast Math Text
-      ctx.font = '900 44px Outfit, system-ui, sans-serif';
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = '#140924';
+      ctx.font = "800 42px 'Fredoka', 'Outfit', sans-serif";
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 5.5;
+      ctx.strokeStyle = '#0f172a';
       const label = `${g.op}${g.v}`;
       ctx.strokeText(label, (x0 + x1) / 2, y + 5);
       ctx.fillStyle = '#ffffff';
       ctx.fillText(label, (x0 + x1) / 2, y + 5);
 
       // Subtitle badge
-      ctx.font = '900 12px Outfit, system-ui, sans-serif';
-      ctx.lineWidth = 3.5;
+      ctx.font = "800 12px 'Fredoka', 'Outfit', sans-serif";
+      ctx.lineWidth = 3.2;
       const subLabel = g.op === '+' ? `+${g.v} BEANS` : `−${g.v} BEANS`;
-      ctx.strokeText(subLabel, (x0 + x1) / 2, y + 30);
-      ctx.fillStyle = g.good ? '#fef08a' : '#fca5a5';
-      ctx.fillText(subLabel, (x0 + x1) / 2, y + 30);
+      ctx.strokeText(subLabel, (x0 + x1) / 2, y + 31);
+      ctx.fillStyle = g.good ? '#fef08a' : '#fecdd3';
+      ctx.fillText(subLabel, (x0 + x1) / 2, y + 31);
 
       ctx.restore();
     });
 
-    // Central Deadly Spike Mooring Post (Anti-AFK!)
+    // Central Deadly Spike Mooring Post (3D Vinyl Toy Pillar!)
     ctx.save();
     ctx.translate(midX, y);
-    ctx.fillStyle = '#dc2626';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(-10, -50, 20, 100, 6);
-    ctx.fill();
-    ctx.stroke();
+    drawToyShadow(ctx, 0, 52, 16, 6, 0.28);
 
     // Spikes protruding from the central post
-    ctx.fillStyle = '#ffffff';
     for (let sy = -40; sy <= 40; sy += 20) {
+      ctx.fillStyle = '#e2e8f0';
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1.4;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.moveTo(-10, sy); ctx.lineTo(-16, sy + 5); ctx.lineTo(-10, sy + 10); ctx.fill();
+      ctx.moveTo(-10, sy); ctx.lineTo(-17, sy + 5); ctx.lineTo(-10, sy + 10); ctx.closePath();
+      ctx.fill(); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(10, sy); ctx.lineTo(16, sy + 5); ctx.lineTo(10, sy + 10); ctx.fill();
+      ctx.moveTo(10, sy); ctx.lineTo(17, sy + 5); ctx.lineTo(10, sy + 10); ctx.closePath();
+      ctx.fill(); ctx.stroke();
     }
 
-    ctx.font = '900 12px Outfit, system-ui, sans-serif';
+    drawToyBevelRect(ctx, -10, -50, 20, 100, 7, '#dc2626', {
+      depth: 3,
+      rimColor: toyRim('#dc2626', 0.56),
+      lineWidth: 1.8,
+      gloss: true,
+    });
+
+    ctx.font = "800 12px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('💀', 0, 0);
     ctx.restore();
@@ -1248,20 +1283,17 @@ export class MultiplierRunner extends Game {
     const ctx = this.ctx;
     ctx.save();
 
-    // Top mounting beam / pivot high above the track
     const pivotY = y - 170;
     const anchorX = r.x;
     const anchorY = y;
 
-    // Cast dynamic drop shadow on the quayside timber
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-    ctx.beginPath();
-    ctx.ellipse(anchorX, y + 16, 32, 14, 0, 0, TAU);
-    ctx.fill();
+    // Cast dynamic grounding shadow on the quayside timber
+    drawToyShadow(ctx, anchorX, y + 20, 32, 12, 0.3);
 
     // Heavy hemp hawser rope / steel chain from top pivot to anchor ring
     ctx.strokeStyle = '#b45309';
     ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(MID, pivotY);
     ctx.lineTo(anchorX, anchorY - 34);
@@ -1281,13 +1313,14 @@ export class MultiplierRunner extends Game {
     ctx.translate(anchorX, anchorY);
     ctx.rotate(r.swingAngle || 0);
 
-    // Cast-iron Pirate Anchor Body
-    ctx.fillStyle = '#334155';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 4;
+    const ironRim = toyRim('#475569', 0.56);
+    const lw = 1.9;
     ctx.lineJoin = 'round';
 
     // Top Shackle Ring
+    ctx.fillStyle = '#475569';
+    ctx.strokeStyle = ironRim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.arc(0, -32, 11, 0, TAU);
     ctx.fill();
@@ -1297,21 +1330,22 @@ export class MultiplierRunner extends Game {
     ctx.arc(0, -32, 5, 0, TAU);
     ctx.fill();
 
-    // Stock / Crossbar
-    ctx.fillStyle = '#475569';
-    ctx.fillRect(-28, -20, 56, 8);
-    ctx.strokeRect(-28, -20, 56, 8);
-    // Brass end knobs on stock
-    ctx.fillStyle = '#f59e0b';
-    ctx.beginPath(); ctx.arc(-28, -16, 5, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(28, -16, 5, 0, TAU); ctx.fill(); ctx.stroke();
+    // Stock / Crossbar + Brass end knobs
+    drawToyBevelRect(ctx, -28, -20, 56, 8, 4, '#64748b', { depth: 2, rimColor: ironRim, lineWidth: lw });
+    drawToySphere(ctx, -28, -16, 5.5, '#f59e0b', { rimColor: '#92400e', lineWidth: 1.3, bottomBounce: false });
+    drawToySphere(ctx, 28, -16, 5.5, '#f59e0b', { rimColor: '#92400e', lineWidth: 1.3, bottomBounce: false });
 
     // Central Shank
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(-6, -20, 12, 36);
-    ctx.strokeRect(-6, -20, 12, 36);
+    drawToyBevelRect(ctx, -6, -20, 12, 36, 4, '#475569', { depth: 0, rimColor: ironRim, lineWidth: lw });
 
-    // Curved Flukes / Arms
+    // Curved Flukes / Arms with metallic gradient
+    const fg = ctx.createLinearGradient(-34, 4, 34, 32);
+    fg.addColorStop(0, '#64748b');
+    fg.addColorStop(0.5, '#475569');
+    fg.addColorStop(1, '#334155');
+    ctx.fillStyle = fg;
+    ctx.strokeStyle = ironRim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.moveTo(-34, 4);
     ctx.quadraticCurveTo(0, 32, 34, 4);
@@ -1330,18 +1364,18 @@ export class MultiplierRunner extends Game {
     ctx.fill(); ctx.stroke();
 
     // Skull emblem on crown
-    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.font = "800 13px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('☠️', 0, 4);
 
     // Hazard Badge
-    ctx.font = '900 12px Outfit, system-ui, sans-serif';
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#140924';
+    ctx.font = "800 12px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#0f172a';
     ctx.strokeText('−2 BEANS', 0, 38);
-    ctx.fillStyle = '#f87171';
+    ctx.fillStyle = '#fda4af';
     ctx.fillText('−2 BEANS', 0, 38);
 
     ctx.restore();
@@ -1358,12 +1392,11 @@ export class MultiplierRunner extends Game {
 
     // 1. Quayside Drop Zone Telegraph Warning Box
     const pulse = Math.sin(this.t * 16) > 0 ? 0.8 : 0.4;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.5;
     ctx.strokeStyle = isDrop ? '#ef4444' : `rgba(239, 68, 68, ${pulse})`;
     ctx.fillStyle = isDrop ? 'rgba(239, 68, 68, 0.35)' : `rgba(239, 68, 68, ${pulse * 0.25})`;
 
-    ctx.beginPath();
-    ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, 8);
+    traceRoundRect(ctx, -r.w / 2, -r.h / 2, r.w, r.h, 8);
     ctx.fill();
     ctx.stroke();
 
@@ -1381,19 +1414,20 @@ export class MultiplierRunner extends Game {
     let crateYOff = 0;
     let crateScale = 1.0;
     if (isWarn) {
-      // Hovering high above with slight winch sway
       crateYOff = -130 + Math.sin(this.t * 6) * 8;
       crateScale = 0.85;
     } else if (isDrop) {
-      // Smashed down onto timber floor!
       crateYOff = 0;
-      crateScale = 1.05; // Impact squash
+      crateScale = 1.05;
     } else {
-      // Lifting back up
       const liftProgress = (r.animT - r.warnDur - r.smashDur) / r.liftDur;
       crateYOff = -130 * Math.min(1, liftProgress * 1.5);
       crateScale = 0.95;
     }
+
+    // Ground shadow that tightens as crate drops
+    const shadowScale = clamp(1 - (-crateYOff / 180) * 0.45, 0.55, 1.05);
+    drawToyShadow(ctx, 0, r.h * 0.48, (r.w * 0.52) * shadowScale, 12 * shadowScale, isDrop ? 0.34 : 0.22);
 
     // Crane Winch Chains
     ctx.strokeStyle = '#64748b';
@@ -1405,7 +1439,7 @@ export class MultiplierRunner extends Game {
 
     // Impact Ground Dust Puffs when dropped
     if (isDrop) {
-      ctx.fillStyle = 'rgba(245, 158, 11, 0.6)';
+      ctx.fillStyle = 'rgba(253, 224, 71, 0.58)';
       for (let i = -r.w / 2; i <= r.w / 2; i += 22) {
         ctx.beginPath();
         ctx.arc(i, r.h / 2 + 4, 9, 0, TAU);
@@ -1413,49 +1447,51 @@ export class MultiplierRunner extends Game {
       }
     }
 
-    // Crate Body
+    // 3D Toy Crate Body
     ctx.save();
     ctx.translate(0, crateYOff);
     ctx.scale(crateScale, crateScale);
 
-    // Heavy Royal Albert Sugar Crate Planks
-    ctx.fillStyle = '#b45309';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, 6);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, -r.w / 2, -r.h / 2, r.w, r.h, 8, '#b45309', {
+      depth: 5,
+      rimColor: toyRim('#b45309', 0.56),
+      lineWidth: 2,
+      gloss: true,
+    });
 
     // Planks line texture
-    ctx.strokeStyle = '#78350f';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(120, 53, 15, 0.55)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-r.w / 2, -r.h / 6); ctx.lineTo(r.w / 2, -r.h / 6);
-    ctx.moveTo(-r.w / 2, r.h / 6); ctx.lineTo(r.w / 2, r.h / 6);
+    ctx.moveTo(-r.w / 2 + 3, -r.h / 6); ctx.lineTo(r.w / 2 - 3, -r.h / 6);
+    ctx.moveTo(-r.w / 2 + 3, r.h / 6); ctx.lineTo(r.w / 2 - 3, r.h / 6);
     ctx.stroke();
 
     // Heavy iron cross-braces
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 3.2;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(-r.w / 2 + 6, -r.h / 2 + 6); ctx.lineTo(r.w / 2 - 6, r.h / 2 - 6);
-    ctx.moveTo(r.w / 2 - 6, -r.h / 2 + 6); ctx.lineTo(-r.w / 2 + 6, r.h / 2 - 6);
+    ctx.moveTo(-r.w / 2 + 7, -r.h / 2 + 7); ctx.lineTo(r.w / 2 - 7, r.h / 2 - 7);
+    ctx.moveTo(r.w / 2 - 7, -r.h / 2 + 7); ctx.lineTo(-r.w / 2 + 7, r.h / 2 - 7);
     ctx.stroke();
 
     // Stenciled Sugar / Rum Cargo Stamp
     ctx.fillStyle = '#fef08a';
-    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.font = "800 12.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0f172a';
+    ctx.strokeText('CRUMP CARGO', 0, 0);
     ctx.fillText('CRUMP CARGO', 0, 0);
 
     // Warning Badge
-    ctx.font = '900 11px Outfit, system-ui, sans-serif';
+    ctx.font = "800 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.lineWidth = 3;
-    ctx.strokeStyle = '#140924';
+    ctx.strokeStyle = '#0f172a';
     ctx.strokeText(isDrop ? '💥 −3 BEANS' : '⚠️ WATCH OUT', 0, -r.h / 2 - 12);
-    ctx.fillStyle = isDrop ? '#ef4444' : '#facc15';
+    ctx.fillStyle = isDrop ? '#fda4af' : '#facc15';
     ctx.fillText(isDrop ? '💥 −3 BEANS' : '⚠️ WATCH OUT', 0, -r.h / 2 - 12);
 
     ctx.restore();
@@ -1470,43 +1506,37 @@ export class MultiplierRunner extends Game {
       const hop = Math.abs(Math.sin(c.rot * 2)) * 3;
       ctx.translate(c.x, y - hop);
 
-      // Drop shadow
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-      ctx.beginPath();
-      ctx.ellipse(0, c.r + 3, c.r * 1.1, c.r * 0.45, 0, 0, TAU);
-      ctx.fill();
+      // Grounding toy shadow
+      drawToyShadow(ctx, 0, c.r + 4 + hop, c.r * 1.05, c.r * 0.4, 0.3);
 
       // Barrel Rotation
       ctx.rotate(c.rot);
 
-      // Oak Barrel Exterior
-      ctx.fillStyle = '#92400e';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(0, 0, c.r, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      // 3D Shaded Oak Barrel Exterior
+      drawToySphere(ctx, 0, 0, c.r, '#b45309', {
+        rimColor: toyRim('#92400e', 0.58),
+        lineWidth: toyLineW(c.r * 2, 0.045, 1.4, 2.2),
+        shine: 0.45,
+      });
 
       // Brass Hoops
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3.2;
       ctx.beginPath(); ctx.arc(0, 0, c.r * 0.72, 0, TAU); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, 0, c.r * 0.38, 0, TAU); ctx.stroke();
 
       // Wooden staves spoke lines
-      ctx.strokeStyle = '#78350f';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(69, 26, 3, 0.48)';
+      ctx.lineWidth = 2;
       for (let a = 0; a < Math.PI; a += Math.PI / 3) {
         ctx.beginPath();
-        ctx.moveTo(-Math.cos(a) * c.r, -Math.sin(a) * c.r);
-        ctx.lineTo(Math.cos(a) * c.r, Math.sin(a) * c.r);
+        ctx.moveTo(-Math.cos(a) * c.r * 0.92, -Math.sin(a) * c.r * 0.92);
+        ctx.lineTo(Math.cos(a) * c.r * 0.92, Math.sin(a) * c.r * 0.92);
         ctx.stroke();
       }
 
       // Center Bung Plug
-      ctx.fillStyle = '#451a03';
-      ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
+      drawToySphere(ctx, 0, 0, 5, '#78350f', { rimColor: '#451a03', lineWidth: 1, bottomBounce: false });
 
       ctx.restore();
 
@@ -1515,11 +1545,12 @@ export class MultiplierRunner extends Game {
       ctx.translate(c.x, y - c.r - 16);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '900 12px Outfit, system-ui, sans-serif';
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#140924';
+      ctx.font = "800 12px 'Fredoka', 'Outfit', sans-serif";
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#0f172a';
       ctx.strokeText('🪵 −2 BEANS', 0, 0);
-      ctx.fillStyle = '#f87171';
+      ctx.fillStyle = '#fda4af';
       ctx.fillText('🪵 −2 BEANS', 0, 0);
       ctx.restore();
     }
@@ -1547,10 +1578,11 @@ export class MultiplierRunner extends Game {
     const zoneW = r.w;
     const zoneX = isLeft ? TRACK_L : TRACK_R - zoneW;
     ctx.fillStyle = isSlam ? 'rgba(162, 28, 175, 0.35)' : 'rgba(162, 28, 175, 0.15)';
-    ctx.fillRect(zoneX, y - 26, zoneW, 52);
-    ctx.strokeStyle = isSlam ? '#a21caf' : 'rgba(162, 28, 175, 0.4)';
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(zoneX, y - 26, zoneW, 52);
+    traceRoundRect(ctx, zoneX, y - 26, zoneW, 52, 8);
+    ctx.fill();
+    ctx.strokeStyle = isSlam ? '#d946ef' : 'rgba(217, 70, 239, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
     // 3. Animated Tentacle Model
     const reach = isSlam ? zoneW : isWarn ? zoneW * 0.35 : zoneW * 0.7;
@@ -1558,15 +1590,17 @@ export class MultiplierRunner extends Game {
     const tentY = y - (isSlam ? 0 : 25 + Math.sin(this.t * 8) * 8);
 
     // Drop shadow
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
-    ctx.beginPath();
-    ctx.ellipse((edgeX + tipX) / 2, y + 10, reach * 0.5, 12, 0, 0, TAU);
-    ctx.fill();
+    drawToyShadow(ctx, (edgeX + tipX) / 2, y + 12, reach * 0.5, 11, 0.32);
 
-    // Glossy Kraken Tentacle Body
-    ctx.fillStyle = '#a21caf';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
+    // Glossy 3D Kraken Tentacle Body
+    const tg = ctx.createLinearGradient(0, tentY - 28, 0, tentY + 26);
+    tg.addColorStop(0, '#e879f9');
+    tg.addColorStop(0.45, '#a21caf');
+    tg.addColorStop(1, '#581c87');
+    ctx.fillStyle = tg;
+    ctx.strokeStyle = toyRim('#a21caf', 0.58);
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(edgeX, y - 24);
     ctx.bezierCurveTo(
@@ -1583,19 +1617,17 @@ export class MultiplierRunner extends Game {
     ctx.fill();
     ctx.stroke();
 
-    // Bright Yellow Suction Cups
-    ctx.fillStyle = '#fde047';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 2;
+    // Bright Yellow 3D Suction Cups
     const numCups = 5;
     for (let i = 1; i <= numCups; i++) {
       const frac = i / (numCups + 1);
       const cupX = edgeX + (tipX - edgeX) * frac;
       const cupY = tentY + Math.sin(frac * Math.PI) * (isLeft ? 6 : -6);
-      ctx.beginPath();
-      ctx.arc(cupX, cupY, 6.5 - frac * 2, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToySphere(ctx, cupX, cupY, 6.5 - frac * 2, '#fde047', {
+        rimColor: '#92400e',
+        lineWidth: 1.2,
+        bottomBounce: false,
+      });
     }
 
     // Splash Particles when slammed
@@ -1609,14 +1641,15 @@ export class MultiplierRunner extends Game {
     }
 
     // Warning Badge
-    ctx.font = '900 12px Outfit, system-ui, sans-serif';
+    ctx.font = "800 12px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#140924';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#0f172a';
     const badgeX = isLeft ? TRACK_L + zoneW * 0.5 : TRACK_R - zoneW * 0.5;
     ctx.strokeText(isSlam ? '🐙 SLAM! −2' : '⚠️ TENTACLE!', badgeX, y - 36);
-    ctx.fillStyle = isSlam ? '#f43f5e' : '#facc15';
+    ctx.fillStyle = isSlam ? '#fda4af' : '#facc15';
     ctx.fillText(isSlam ? '🐙 SLAM! −2' : '⚠️ TENTACLE!', badgeX, y - 36);
 
     ctx.restore();
@@ -1629,10 +1662,7 @@ export class MultiplierRunner extends Game {
     ctx.translate(r.x, y);
 
     // Cast circular base shadow
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-    ctx.beginPath();
-    ctx.arc(0, 0, r.armLen * 0.95, 0, TAU);
-    ctx.fill();
+    drawToyShadow(ctx, 0, 5, r.armLen * 0.92, r.armLen * 0.85, 0.25);
 
     // 3 Rotating Boom Arms
     for (let i = 0; i < 3; i++) {
@@ -1640,34 +1670,31 @@ export class MultiplierRunner extends Game {
       ctx.save();
       ctx.rotate(armAng);
 
-      // Padded Arm with Hazard Stripes
-      ctx.fillStyle = '#e2e8f0';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.roundRect(14, -8, r.armLen - 14, 16, 6);
-      ctx.fill();
-      ctx.stroke();
+      // Padded 3D Toy Arm with Hazard Stripes
+      drawToyPill(ctx, 14, -8, r.armLen - 14, 16, '#f1f5f9', {
+        rimColor: '#475569',
+        lineWidth: 1.8,
+        gloss: true,
+      });
 
       // Red hazard stripes
       ctx.fillStyle = '#ef4444';
       for (let sx = 25; sx < r.armLen - 10; sx += 24) {
-        ctx.fillRect(sx, -7, 12, 14);
+        ctx.fillRect(sx, -6.5, 12, 13);
       }
 
       // Rubber End Bumper
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(r.armLen, 0, 10, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToySphere(ctx, r.armLen, 0, 10, '#334155', {
+        rimColor: '#0f172a',
+        lineWidth: 1.6,
+      });
 
       ctx.restore();
     }
 
     // Safe Open Wedge Indicator (Glowing green guide)
     const openAng = r.angle + TAU / 6;
-    ctx.strokeStyle = 'rgba(74, 222, 128, 0.7)';
+    ctx.strokeStyle = 'rgba(74, 222, 128, 0.72)';
     ctx.lineWidth = 3;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
@@ -1676,21 +1703,18 @@ export class MultiplierRunner extends Game {
     ctx.setLineDash([]);
 
     // Central Brass Customs Turret
-    ctx.fillStyle = '#f59e0b';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, 22, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, TAU);
-    ctx.fill();
+    drawToySphere(ctx, 0, 0, 22, '#f59e0b', {
+      rimColor: '#92400e',
+      lineWidth: 2,
+    });
+    drawToySphere(ctx, 0, 0, 12, '#b45309', {
+      rimColor: '#78350f',
+      lineWidth: 1.2,
+      bottomBounce: false,
+    });
 
     // Rivets
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#fef08a';
     for (let a = 0; a < TAU; a += TAU / 4) {
       ctx.beginPath();
       ctx.arc(Math.cos(a) * 17, Math.sin(a) * 17, 2.5, 0, TAU);
@@ -1698,13 +1722,14 @@ export class MultiplierRunner extends Game {
     }
 
     // Header label
-    ctx.font = '900 12px Outfit, system-ui, sans-serif';
+    ctx.font = "800 12px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#140924';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#0f172a';
     ctx.strokeText('🔄 −2 BEANS', 0, -r.armLen - 12);
-    ctx.fillStyle = '#f87171';
+    ctx.fillStyle = '#fda4af';
     ctx.fillText('🔄 −2 BEANS', 0, -r.armLen - 12);
 
     ctx.restore();
@@ -1716,58 +1741,56 @@ export class MultiplierRunner extends Game {
     ctx.save();
     ctx.translate(r.x, y);
 
-    // 1. Shimmering Iridescent Grease Puddle on Boardwalk
-    const pudGrad = ctx.createRadialGradient(0, 0, 8, 0, 0, r.w * 0.5);
-    pudGrad.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
-    pudGrad.addColorStop(0.5, 'rgba(232, 121, 249, 0.45)');
-    pudGrad.addColorStop(1, 'rgba(250, 204, 21, 0.15)');
+    // 1. Shimmering Iridescent Grease Puddle on Boardwalk (soft wet rim, no heavy black outline)
+    const pudGrad = ctx.createRadialGradient(-r.w * 0.1, -r.h * 0.1, 6, 0, 0, r.w * 0.5);
+    pudGrad.addColorStop(0, 'rgba(56, 189, 248, 0.72)');
+    pudGrad.addColorStop(0.55, 'rgba(232, 121, 249, 0.5)');
+    pudGrad.addColorStop(1, 'rgba(250, 204, 21, 0.2)');
 
     ctx.fillStyle = pudGrad;
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.72)';
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.ellipse(0, 0, r.w * 0.48, r.h * 0.48, 0.15, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    // Slick skid streaks
-    ctx.strokeStyle = '#ffffff';
+    // Slick skid streaks & specular gloss
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
     ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(-r.w * 0.28, -6); ctx.lineTo(r.w * 0.25, 4);
     ctx.moveTo(-r.w * 0.15, 8); ctx.lineTo(r.w * 0.2, 14);
     ctx.stroke();
 
     // Puddle Badge
-    ctx.font = '900 11px Outfit, system-ui, sans-serif';
+    ctx.font = "800 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
     ctx.lineWidth = 3;
-    ctx.strokeStyle = '#140924';
+    ctx.strokeStyle = '#0f172a';
     ctx.strokeText('⚠️ SLICK OIL −1', 0, 0);
     ctx.fillStyle = '#ffffff';
     ctx.fillText('⚠️ SLICK OIL −1', 0, 0);
 
-    // 2. Flying Cartoon Liverpool Seagulls Overhead
+    // 2. Flying 3D Vinyl Liverpool Seagulls Overhead
     for (const g of r.gulls) {
       ctx.save();
       ctx.translate(g.offX, g.offY);
 
-      // Flapping wing calculation
       const wingFlap = Math.sin(g.flap) * 12;
+      const gRim = '#475569';
 
-      // Seagull Body
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2.5;
-
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 11, 6, 0, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      // Subtle shadow beneath airborne gull
+      drawToyShadow(ctx, 0, 32, 10, 4, 0.16);
 
       // Animated Wings
       ctx.fillStyle = '#e2e8f0';
+      ctx.strokeStyle = gRim;
+      ctx.lineWidth = 1.4;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-4, 0);
       ctx.lineTo(-2, -14 - wingFlap);
@@ -1784,15 +1807,30 @@ export class MultiplierRunner extends Game {
       ctx.fill();
       ctx.stroke();
 
+      // Shaded Seagull Body
+      const bg = ctx.createRadialGradient(-3, -2, 1, 0, 0, 11);
+      bg.addColorStop(0, '#ffffff');
+      bg.addColorStop(0.7, '#f8fafc');
+      bg.addColorStop(1, '#cbd5e1');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 11, 6, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
       // Yellow Beak
       ctx.fillStyle = '#f59e0b';
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(10, -2);
+      ctx.moveTo(10, -2.5);
       ctx.lineTo(17, 0);
-      ctx.lineTo(10, 2);
+      ctx.lineTo(10, 2.5);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+
+      drawToyEyes(ctx, 5.5, -1, 1.3, { spacing: 0, lookX: 0.4 });
 
       ctx.restore();
     }
@@ -1806,25 +1844,19 @@ export class MultiplierRunner extends Game {
     ctx.save();
     ctx.translate(MID, y);
 
-    // Center Pivot Turret
-    ctx.fillStyle = '#334155';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, TAU);
-    ctx.fill(); ctx.stroke();
+    drawToySphere(ctx, 0, 0, 18, '#475569', { rimColor: '#0f172a', lineWidth: 1.8 });
 
-    // Spiked Wooden Boom
     ctx.rotate(r.angle);
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(-r.beamLen / 2, -10, r.beamLen, 20);
-    ctx.strokeRect(-r.beamLen / 2, -10, r.beamLen, 20);
+    drawToyBevelRect(ctx, -r.beamLen / 2, -10, r.beamLen, 20, 5, '#92400e', {
+      depth: 3,
+      rimColor: '#451a03',
+      lineWidth: 1.6,
+    });
 
-    // Safe Passage Gap Indicator (Green ring)
-    ctx.fillStyle = '#22c55e';
-    ctx.beginPath();
-    ctx.arc(r.gapDist - r.beamLen / 2, 0, 14, 0, TAU);
-    ctx.fill();
+    drawToySphere(ctx, r.gapDist - r.beamLen / 2, 0, 14, '#22c55e', {
+      rimColor: '#14532d',
+      lineWidth: 1.5,
+    });
 
     ctx.restore();
   }
@@ -1834,17 +1866,16 @@ export class MultiplierRunner extends Game {
     const ctx = this.ctx;
     if (r.done) ctx.globalAlpha = 0.25;
 
-    // Draw Rival Mob with angry scallywag styling
     this.drawLivingCrowd(r.x, y, Math.min(r.n, 90), '#ef4444', -1);
 
-    // Gang Strength Banner
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '900 24px Outfit, system-ui, sans-serif';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#140924';
+    ctx.font = "800 22px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#0f172a';
     ctx.strokeText(`⚔️ ${fmt(r.n)} GANG`, r.x, y - r.r * 0.6 - 22);
-    ctx.fillStyle = '#fca5a5';
+    ctx.fillStyle = '#fecdd3';
     ctx.fillText(`⚔️ ${fmt(r.n)} GANG`, r.x, y - r.r * 0.6 - 22);
 
     ctx.globalAlpha = 1;
@@ -1856,25 +1887,23 @@ export class MultiplierRunner extends Game {
     ctx.save();
     ctx.translate(r.x, y);
 
-    // Bridge Timber Planks
-    ctx.fillStyle = '#92400e';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(-r.w / 2, -40, r.w, 80, 8);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, -r.w / 2, -40, r.w, 80, 10, '#92400e', {
+      depth: 4,
+      rimColor: '#451a03',
+      lineWidth: 2,
+    });
 
-    // Steel boundary chains
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(-r.w / 2, -38); ctx.lineTo(-r.w / 2, 38);
     ctx.moveTo(r.w / 2, -38); ctx.lineTo(r.w / 2, 38);
     ctx.stroke();
 
-    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.font = "800 13px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fef08a';
     ctx.fillText('⚓ DRAWBRIDGE', 0, 0);
 
@@ -1887,28 +1916,24 @@ export class MultiplierRunner extends Game {
     for (const b of r.barrels) {
       ctx.save();
       ctx.translate(b.x, y);
+      drawToyShadow(ctx, 0, b.r * 1.15, b.r * 1.1, b.r * 0.4, 0.3);
 
-      // Red Explosive Barrel
-      ctx.fillStyle = '#dc2626';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.roundRect(-b.r, -b.r * 1.1, b.r * 2, b.r * 2.2, 8);
-      ctx.fill(); ctx.stroke();
+      drawToyBevelRect(ctx, -b.r, -b.r * 1.1, b.r * 2, b.r * 2.2, 8, '#dc2626', {
+        depth: 3,
+        rimColor: '#7f1d1d',
+        lineWidth: 1.8,
+      });
 
-      // Steel hoops
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(-b.r, -b.r * 0.6, b.r * 2, 4);
-      ctx.fillRect(-b.r, b.r * 0.6 - 4, b.r * 2, 4);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(-b.r + 1, -b.r * 0.6, b.r * 2 - 2, 4);
+      ctx.fillRect(-b.r + 1, b.r * 0.6 - 4, b.r * 2 - 2, 4);
 
-      // Flashing Fuse
-      ctx.fillStyle = Math.sin(this.t * 16) > 0 ? '#fef08a' : '#f97316';
-      ctx.beginPath();
-      ctx.arc(0, -b.r * 1.1 - 4, 4, 0, TAU);
-      ctx.fill();
+      const spark = Math.sin(this.t * 16) > 0 ? '#fef08a' : '#f97316';
+      drawToySphere(ctx, 0, -b.r * 1.1 - 4, 4.5, spark, { rimColor: '#92400e', lineWidth: 1, bottomBounce: false });
 
-      ctx.font = '900 14px Outfit, system-ui, sans-serif';
+      ctx.font = "800 14px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillStyle = '#ffffff';
       ctx.fillText('TNT', 0, 2);
 
@@ -1923,29 +1948,37 @@ export class MultiplierRunner extends Game {
     ctx.translate(r.x, y);
 
     if (r.type === 'cannon') {
-      // Golden Recruiter Cannon
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.25)';
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, 10);
-      ctx.fill(); ctx.stroke();
-
-      ctx.font = '900 24px Outfit, system-ui, sans-serif';
+      drawToyBevelRect(ctx, -r.w / 2, -r.h / 2, r.w, r.h, 12, '#f59e0b', {
+        depth: 4,
+        rimColor: '#92400e',
+        lineWidth: 2,
+        gloss: true,
+      });
+      ctx.font = "800 22px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('🚀 +3 BEANS', 0, 6);
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#0f172a';
+      ctx.strokeText('🚀 +3 BEANS', 0, 1);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('🚀 +3 BEANS', 0, 1);
     } else {
-      // Nitro Speed Pad
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.25)';
-      ctx.strokeStyle = '#4ade80';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, 10);
-      ctx.fill(); ctx.stroke();
-
-      ctx.font = '900 24px Outfit, system-ui, sans-serif';
+      drawToyBevelRect(ctx, -r.w / 2, -r.h / 2, r.w, r.h, 12, '#10b981', {
+        depth: 4,
+        rimColor: '#065f46',
+        lineWidth: 2,
+        gloss: true,
+      });
+      ctx.font = "800 22px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('⚡ NITRO RUSH', 0, 6);
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#0f172a';
+      ctx.strokeText('⚡ NITRO RUSH', 0, 1);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('⚡ NITRO RUSH', 0, 1);
     }
 
     ctx.restore();
@@ -1956,17 +1989,16 @@ export class MultiplierRunner extends Game {
     const ctx = this.ctx;
     ctx.save();
     ctx.translate(r.x, y);
+    drawToyShadow(ctx, 0, r.r + 3, r.r, r.r * 0.36, 0.28);
     ctx.rotate(r.rot);
 
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, r.r, 0, TAU);
-    ctx.fill(); ctx.stroke();
+    drawToySphere(ctx, 0, 0, r.r, '#f8fafc', {
+      rimColor: '#64748b',
+      lineWidth: 2,
+    });
 
     ctx.strokeStyle = '#e11d48';
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 5.5;
     ctx.beginPath(); ctx.arc(0, 0, r.r * 0.65, 0, TAU); ctx.stroke();
 
     ctx.strokeStyle = '#0284c7';
@@ -1983,15 +2015,14 @@ export class MultiplierRunner extends Game {
       if (c.collected) continue;
       ctx.save();
       ctx.translate(c.x, y + c.yOff);
+      drawToyShadow(ctx, 0, 14, 10, 3.8, 0.26);
 
-      ctx.fillStyle = '#facc15';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 12, 0, TAU);
-      ctx.fill(); ctx.stroke();
+      drawToySphere(ctx, 0, 0, 12, '#ffd166', {
+        rimColor: '#92400e',
+        lineWidth: 1.6,
+      });
 
-      ctx.font = '900 11px Outfit, system-ui, sans-serif';
+      ctx.font = "800 11px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#78350f';
@@ -2007,9 +2038,12 @@ export class MultiplierRunner extends Game {
     ctx.save();
     ctx.translate(r.x, y);
 
+    // Grounding toy shadow beneath boss
+    drawToyShadow(ctx, 0, 68, 62, 18, 0.32);
+
     // Dynamic ground shockwaves on slam
     for (const sw of r.shockwaves) {
-      ctx.strokeStyle = '#ef4444';
+      ctx.strokeStyle = '#f43f5e';
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(0, 0, sw.r, 0, TAU);
@@ -2037,83 +2071,65 @@ export class MultiplierRunner extends Game {
     ctx.restore();
   }
 
-  /* 1. PIRATE CAPTAIN CRUMP — The Dreaded Liverpool Dock Scallywag */
+  /* 1. PIRATE CAPTAIN CRUMP — The Dreaded Liverpool Dock Scallywag (3D Vinyl Toy Edition) */
   drawPirateCaptainCrump(r, ctx) {
     const bob = Math.sin(this.t * 7) * 4;
     const isAttacking = r.slamTimer > 0.9;
     const cutlassRot = isAttacking ? 0.9 : Math.sin(this.t * 5) * 0.25;
 
     // A. Wooden Peg Leg (Left) & Heavy Naval Boot (Right)
-    // Left Peg Leg
-    ctx.fillStyle = '#78350f';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(-28, 30 + bob, 12, 38, 4);
-    ctx.fill(); ctx.stroke();
-    // Iron ferrule tip
+    drawToyBevelRect(ctx, -28, 30 + bob, 12, 38, 4, '#92400e', { depth: 2, rimColor: '#451a03', lineWidth: 1.8 });
     ctx.fillStyle = '#64748b';
     ctx.fillRect(-28, 62 + bob, 12, 6);
 
-    // Right Naval Sea Boot
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.roundRect(14, 30 + bob, 20, 38, 6);
-    ctx.fill(); ctx.stroke();
-    // Gold buckle
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(18, 48 + bob, 12, 8);
+    drawToyBevelRect(ctx, 14, 30 + bob, 20, 38, 6, '#334155', { depth: 2, rimColor: '#0f172a', lineWidth: 1.8 });
+    drawToyBevelRect(ctx, 18, 48 + bob, 12, 8, 2, '#facc15', { depth: 0, rimColor: '#92400e', lineWidth: 1 });
 
     // B. Crimson Royal Admiral Coat & Body
-    ctx.fillStyle = '#991b1b';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.roundRect(-46, -30 + bob, 92, 68, 16);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -46, -30 + bob, 92, 68, 16, '#b91c1c', {
+      depth: 5,
+      rimColor: toyRim('#b91c1c', 0.56),
+      lineWidth: 2.2,
+      gloss: true,
+    });
 
     // Gold Frogging & Brass Coat Buttons
-    ctx.fillStyle = '#facc15';
     for (let by = -20; by <= 20; by += 12) {
-      ctx.beginPath();
-      ctx.arc(-16, by + bob, 4, 0, TAU);
-      ctx.arc(16, by + bob, 4, 0, TAU);
-      ctx.fill();
+      drawToySphere(ctx, -16, by + bob, 4, '#facc15', { rimColor: '#92400e', lineWidth: 0.9, bottomBounce: false });
+      drawToySphere(ctx, 16, by + bob, 4, '#facc15', { rimColor: '#92400e', lineWidth: 0.9, bottomBounce: false });
     }
 
     // White Ruffled Silk Cravat
     ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.ellipse(0, -18 + bob, 14, 18, 0, 0, TAU);
     ctx.fill();
+    ctx.stroke();
 
-    // Gold Shoulder Epaulets with Fringe
-    ctx.fillStyle = '#eab308';
-    ctx.fillRect(-52, -32 + bob, 16, 10);
-    ctx.fillRect(36, -32 + bob, 16, 10);
+    // Gold Shoulder Epaulets
+    drawToyBevelRect(ctx, -52, -32 + bob, 16, 10, 4, '#eab308', { depth: 2, rimColor: '#92400e', lineWidth: 1.3 });
+    drawToyBevelRect(ctx, 36, -32 + bob, 16, 10, 4, '#eab308', { depth: 2, rimColor: '#92400e', lineWidth: 1.3 });
 
-    // Wide Black Leather Sword Belt with Gold Skull Buckle
-    ctx.fillStyle = '#0f172a';
+    // Wide Leather Sword Belt with Gold Skull Buckle
+    ctx.fillStyle = '#1e293b';
     ctx.fillRect(-44, 16 + bob, 88, 14);
-    ctx.fillStyle = '#facc15';
-    ctx.beginPath();
-    ctx.roundRect(-14, 13 + bob, 28, 20, 4);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#140924';
-    ctx.font = '900 10px Outfit, system-ui, sans-serif';
+    drawToyBevelRect(ctx, -14, 13 + bob, 28, 20, 5, '#facc15', { depth: 2, rimColor: '#92400e', lineWidth: 1.5 });
+    ctx.fillStyle = '#0f172a';
+    ctx.font = "800 10px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.fillText('💀', 0, 24 + bob);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💀', 0, 23 + bob);
 
     // C. Left Arm: Menacing Iron Pirate Hook
     ctx.save();
     ctx.translate(-46, -10 + bob);
     ctx.rotate(Math.sin(this.t * 6) * 0.2);
-    ctx.fillStyle = '#991b1b';
-    ctx.fillRect(-10, 0, 14, 22);
-    ctx.strokeRect(-10, 0, 14, 22);
-    // Iron Hook
-    ctx.strokeStyle = '#cbd5e1';
+    drawToyBevelRect(ctx, -10, 0, 14, 22, 5, '#b91c1c', { depth: 0, rimColor: toyRim('#b91c1c'), lineWidth: 1.8 });
+    ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.arc(-3, 30, 12, 0.4, Math.PI * 1.5, false);
     ctx.stroke();
@@ -2123,16 +2139,16 @@ export class MultiplierRunner extends Game {
     ctx.save();
     ctx.translate(46, -16 + bob);
     ctx.rotate(cutlassRot);
-    ctx.fillStyle = '#991b1b';
-    ctx.fillRect(-4, 0, 14, 20);
-    ctx.strokeRect(-4, 0, 14, 20);
-    // Brass Cutlass Guard
-    ctx.fillStyle = '#facc15';
-    ctx.beginPath(); ctx.arc(3, 20, 8, 0, TAU); ctx.fill();
-    // Curved Steel Blade
-    ctx.fillStyle = '#e2e8f0';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
+    drawToyBevelRect(ctx, -4, 0, 14, 20, 5, '#b91c1c', { depth: 0, rimColor: toyRim('#b91c1c'), lineWidth: 1.8 });
+    drawToySphere(ctx, 3, 20, 8, '#facc15', { rimColor: '#92400e', lineWidth: 1.4 });
+    const bg = ctx.createLinearGradient(3, 20, 32, -45);
+    bg.addColorStop(0, '#cbd5e1');
+    bg.addColorStop(0.5, '#f8fafc');
+    bg.addColorStop(1, '#94a3b8');
+    ctx.fillStyle = bg;
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(3, 20);
     ctx.quadraticCurveTo(24, 0, 32, -45);
@@ -2142,45 +2158,42 @@ export class MultiplierRunner extends Game {
     ctx.restore();
 
     // E. Menacing Scallywag Head & Face
-    ctx.fillStyle = '#fbcfe8';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.roundRect(-24, -62 + bob, 48, 42, 10);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -24, -62 + bob, 48, 42, 12, '#fbcfe8', {
+      depth: 3,
+      rimColor: toyRim('#f472b6', 0.54),
+      lineWidth: 2,
+      gloss: true,
+    });
 
-    // Bushy Black Pirate Beard
-    ctx.fillStyle = '#0f172a';
+    // Bushy Pirate Beard
+    ctx.fillStyle = '#1e293b';
     ctx.beginPath();
     ctx.arc(0, -32 + bob, 22, 0, Math.PI);
     ctx.fill();
 
     // Grimace & Shiny Gold Tooth
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-12, -40 + bob, 24, 6);
-    ctx.fillStyle = '#facc15'; // Gold tooth!
+    traceRoundRect(ctx, -12, -40 + bob, 24, 6, 2);
+    ctx.fill();
+    ctx.fillStyle = '#facc15';
     ctx.fillRect(-2, -40 + bob, 6, 6);
 
-    // Angry Left Eye
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(10, -50 + bob, 6, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(11, -50 + bob, 3, 0, TAU); ctx.fill();
-    // Bushy Eyebrow
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(4, -58 + bob); ctx.lineTo(18, -54 + bob); ctx.stroke();
-
-    // Leather Eyepatch (Right Eye)
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(-10, -50 + bob, 7, 0, TAU); ctx.fill();
-    ctx.lineWidth = 2.5;
+    // Crisp Toy Angry Eye (Left) & Leather Eyepatch (Right)
+    drawToyEyes(ctx, 10, -50 + bob, 5.2, { spacing: 0, style: 'angry', lookX: -0.25 });
+    drawToySphere(ctx, -10, -50 + bob, 7.2, '#334155', { rimColor: '#0f172a', lineWidth: 1.5, bottomBounce: false });
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.moveTo(-24, -56 + bob); ctx.lineTo(4, -44 + bob); ctx.stroke();
 
     // F. Massive Feathery Black Tricorn Hat
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
+    const hg = ctx.createLinearGradient(0, -104 + bob, 0, -62 + bob);
+    hg.addColorStop(0, '#334155');
+    hg.addColorStop(1, '#0f172a');
+    ctx.fillStyle = hg;
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-54, -62 + bob);
     ctx.quadraticCurveTo(0, -82 + bob, 54, -62 + bob);
@@ -2198,16 +2211,18 @@ export class MultiplierRunner extends Game {
     ctx.stroke();
 
     // Jolly Roger Skull Emblem
-    ctx.font = '900 18px Outfit, system-ui, sans-serif';
+    ctx.font = "800 18px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('☠️', 0, -78 + bob);
 
     // Red Feather Plume
-    ctx.fillStyle = '#ef4444';
+    ctx.fillStyle = '#f43f5e';
+    ctx.strokeStyle = '#881337';
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.ellipse(32, -100 + bob, 8, 18, 0.4, 0, TAU);
-    ctx.fill();
+    ctx.fill(); ctx.stroke();
   }
 
   /* 2. MERSEY KRAKEN MECHA — The Steampunk Submersible Dock Monster */
@@ -2215,59 +2230,51 @@ export class MultiplierRunner extends Game {
     const bob = Math.sin(this.t * 6) * 5;
 
     // A. 4 Animated Segmented Mechanical Tentacles
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#92400e';
-    ctx.fillStyle = '#b45309';
+    ctx.lineWidth = 8.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#b45309';
 
-    // Left Tentacles (T1, T2)
     const tL1 = Math.sin(this.t * 4) * 25;
     const tL2 = Math.cos(this.t * 3.5) * 30;
     ctx.beginPath();
     ctx.moveTo(-35, 10 + bob);
     ctx.bezierCurveTo(-85, -20 + bob, -110 + tL1, 30 + bob, -135, 5 + bob);
     ctx.stroke();
-    // Spiked iron claw
-    ctx.fillStyle = '#334155';
-    ctx.beginPath(); ctx.arc(-135, 5 + bob, 10, 0, TAU); ctx.fill();
+    drawToySphere(ctx, -135, 5 + bob, 10, '#475569', { rimColor: '#0f172a', lineWidth: 1.6 });
 
     ctx.beginPath();
     ctx.moveTo(-30, 25 + bob);
     ctx.bezierCurveTo(-75, 45 + bob, -95 + tL2, 85 + bob, -125, 60 + bob);
     ctx.stroke();
-    ctx.beginPath(); ctx.arc(-125, 60 + bob, 9, 0, TAU); ctx.fill();
+    drawToySphere(ctx, -125, 60 + bob, 9, '#475569', { rimColor: '#0f172a', lineWidth: 1.6 });
 
-    // Right Tentacles (T3, T4)
     const tR1 = Math.cos(this.t * 4.2) * 25;
     const tR2 = Math.sin(this.t * 3.7) * 30;
     ctx.beginPath();
     ctx.moveTo(35, 10 + bob);
     ctx.bezierCurveTo(85, -20 + bob, 110 + tR1, 30 + bob, 135, 5 + bob);
     ctx.stroke();
-    ctx.beginPath(); ctx.arc(135, 5 + bob, 10, 0, TAU); ctx.fill();
+    drawToySphere(ctx, 135, 5 + bob, 10, '#475569', { rimColor: '#0f172a', lineWidth: 1.6 });
 
     ctx.beginPath();
     ctx.moveTo(30, 25 + bob);
     ctx.bezierCurveTo(75, 45 + bob, 95 + tR2, 85 + bob, 125, 60 + bob);
     ctx.stroke();
-    ctx.beginPath(); ctx.arc(125, 60 + bob, 9, 0, TAU); ctx.fill();
+    drawToySphere(ctx, 125, 60 + bob, 9, '#475569', { rimColor: '#0f172a', lineWidth: 1.6 });
 
     // Brass Suction Cups along tentacles
-    ctx.fillStyle = '#facc15';
     for (let cx = -110; cx <= 110; cx += 28) {
       if (Math.abs(cx) > 45) {
-        ctx.beginPath(); ctx.arc(cx, 16 + bob, 4, 0, TAU); ctx.fill();
+        drawToySphere(ctx, cx, 16 + bob, 4.2, '#facc15', { rimColor: '#92400e', lineWidth: 0.9, bottomBounce: false });
       }
     }
 
     // B. Twin Brass Steam Exhaust Smokestacks
-    ctx.fillStyle = '#b45309';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.fillRect(-34, -70 + bob, 16, 26); ctx.strokeRect(-34, -70 + bob, 16, 26);
-    ctx.fillRect(18, -70 + bob, 16, 26); ctx.strokeRect(18, -70 + bob, 16, 26);
+    drawToyBevelRect(ctx, -34, -70 + bob, 16, 26, 4, '#b45309', { depth: 0, rimColor: '#78350f', lineWidth: 1.8 });
+    drawToyBevelRect(ctx, 18, -70 + bob, 16, 26, 4, '#b45309', { depth: 0, rimColor: '#78350f', lineWidth: 1.8 });
 
     // Billowing White Steam Puffs
-    ctx.fillStyle = 'rgba(241, 245, 249, 0.7)';
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.72)';
     const steam1 = (this.t * 30) % 20;
     const steam2 = ((this.t + 0.5) * 30) % 20;
     ctx.beginPath();
@@ -2276,28 +2283,24 @@ export class MultiplierRunner extends Game {
     ctx.fill();
 
     // C. Heavy Riveted Bronze Diving-Bell Chassis
-    ctx.fillStyle = '#d97706';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(0, bob, 52, 0, TAU);
-    ctx.fill(); ctx.stroke();
+    drawToySphere(ctx, 0, bob, 52, '#d97706', {
+      rimColor: toyRim('#b45309', 0.56),
+      lineWidth: 2.4,
+    });
 
     // Rivet Perimeter Ring
-    ctx.fillStyle = '#fef08a';
     for (let a = 0; a < TAU; a += TAU / 10) {
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * 44, Math.sin(a) * 44 + bob, 3, 0, TAU);
-      ctx.fill();
+      drawToySphere(ctx, Math.cos(a) * 44, Math.sin(a) * 44 + bob, 3.2, '#fef08a', {
+        rimColor: '#92400e',
+        lineWidth: 0.8,
+        bottomBounce: false,
+      });
     }
 
     // D. Giant Glowing Cyan Cyclops Viewport Lens
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(0, -4 + bob, 28, 0, TAU); ctx.fill();
-    ctx.stroke();
+    drawToySphere(ctx, 0, -4 + bob, 28, '#334155', { rimColor: '#0f172a', lineWidth: 2 });
 
-    // Glowing cyan glass
-    const cg = ctx.createRadialGradient(0, -4 + bob, 4, 0, -4 + bob, 24);
+    const cg = ctx.createRadialGradient(-4, -8 + bob, 3, 0, -4 + bob, 24);
     cg.addColorStop(0, '#e0f2fe');
     cg.addColorStop(0.4, '#38bdf8');
     cg.addColorStop(0.85, '#0284c7');
@@ -2305,15 +2308,13 @@ export class MultiplierRunner extends Game {
     ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(0, -4 + bob, 22, 0, TAU); ctx.fill();
 
-    // Specular reflection glint
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     ctx.beginPath();
     ctx.ellipse(-7, -11 + bob, 8, 4, -0.4, 0, TAU);
     ctx.fill();
 
     // E. Spinning Brass Cogs & Iron Jaw Grate
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(-24, 24 + bob, 48, 12);
+    drawToyBevelRect(ctx, -24, 24 + bob, 48, 12, 4, '#1e293b', { depth: 0, rimColor: '#0f172a', lineWidth: 1.4 });
     ctx.fillStyle = '#f59e0b';
     for (let jx = -20; jx <= 16; jx += 8) {
       ctx.fillRect(jx, 26 + bob, 4, 8);
@@ -2325,7 +2326,7 @@ export class MultiplierRunner extends Game {
     const bob = Math.sin(this.t * 5) * 3;
     const beaconRot = this.t * 2.8;
 
-    // A. Sweeping Lighthouse Beacon Light Cone (Atmospheric Fog)
+    // A. Sweeping Lighthouse Beacon Light Cone
     ctx.save();
     ctx.translate(0, -78 + bob);
     ctx.rotate(beaconRot);
@@ -2342,35 +2343,20 @@ export class MultiplierRunner extends Game {
     ctx.restore();
 
     // B. Miniature Maritime Lighthouse Crown on Top of Head
-    // Base platform
-    ctx.fillStyle = '#334155';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.fillRect(-22, -62 + bob, 44, 8);
-    ctx.strokeRect(-22, -62 + bob, 44, 8);
-
-    // Red & White Striped Lighthouse Tower
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-14, -86 + bob, 28, 24);
-    ctx.strokeRect(-14, -86 + bob, 28, 24);
+    drawToyBevelRect(ctx, -22, -62 + bob, 44, 8, 3, '#475569', { depth: 2, rimColor: '#0f172a', lineWidth: 1.5 });
+    drawToyBevelRect(ctx, -14, -86 + bob, 28, 24, 4, '#f8fafc', { depth: 0, rimColor: '#475569', lineWidth: 1.6 });
     ctx.fillStyle = '#dc2626';
-    ctx.fillRect(-14, -80 + bob, 28, 8);
-
-    // Glass Lantern Room & Dome
-    ctx.fillStyle = '#fef08a';
-    ctx.beginPath();
-    ctx.arc(0, -92 + bob, 10, Math.PI, 0);
-    ctx.fill(); ctx.stroke();
+    ctx.fillRect(-13, -80 + bob, 26, 8);
+    drawToySphere(ctx, 0, -90 + bob, 10, '#fef08a', { rimColor: '#b45309', lineWidth: 1.4 });
 
     // C. Giant Sugar-Brick Masonry Torso & Shoulders
-    ctx.fillStyle = '#7f1d1d';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.roundRect(-54, -40 + bob, 108, 82, 14);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -54, -40 + bob, 108, 82, 14, '#991b1b', {
+      depth: 6,
+      rimColor: toyRim('#7f1d1d', 0.56),
+      lineWidth: 2.2,
+      gloss: true,
+    });
 
-    // Brick mortar lines
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 1.5;
     for (let my = -30; my <= 30; my += 14) {
@@ -2379,20 +2365,12 @@ export class MultiplierRunner extends Game {
       ctx.stroke();
     }
 
-    // Carved Granite Coping Stones on Shoulders
-    ctx.fillStyle = '#94a3b8';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.fillRect(-58, -44 + bob, 22, 14); ctx.strokeRect(-58, -44 + bob, 22, 14);
-    ctx.fillRect(36, -44 + bob, 22, 14); ctx.strokeRect(36, -44 + bob, 22, 14);
+    drawToyBevelRect(ctx, -58, -44 + bob, 22, 14, 4, '#94a3b8', { depth: 2, rimColor: '#475569', lineWidth: 1.6 });
+    drawToyBevelRect(ctx, 36, -44 + bob, 22, 14, 4, '#94a3b8', { depth: 2, rimColor: '#475569', lineWidth: 1.6 });
 
     // D. Molten Caramel Furnace Boiler in Chest
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.roundRect(-22, -10 + bob, 44, 38, 8);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -22, -10 + bob, 44, 38, 8, '#1e293b', { depth: 2, rimColor: '#0f172a', lineWidth: 1.6 });
 
-    // Glowing fire core
     const fg = ctx.createRadialGradient(0, 9 + bob, 2, 0, 9 + bob, 18);
     fg.addColorStop(0, '#fef08a');
     fg.addColorStop(0.5, '#f97316');
@@ -2400,26 +2378,14 @@ export class MultiplierRunner extends Game {
     ctx.fillStyle = fg;
     ctx.beginPath(); ctx.arc(0, 9 + bob, 16, 0, TAU); ctx.fill();
 
-    // Iron furnace cross-bars
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = '#334155';
     ctx.fillRect(-20, 7 + bob, 40, 4);
     ctx.fillRect(-2, -8 + bob, 4, 34);
 
     // E. Heavy Steel Crane Arm & Spiked Anchor Wrecking Fist
-    // Left Fist: Brick Piston
-    ctx.fillStyle = '#7f1d1d';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.roundRect(-78, -12 + bob, 26, 32, 8);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -78, -12 + bob, 26, 32, 8, '#991b1b', { depth: 3, rimColor: toyRim('#7f1d1d'), lineWidth: 1.8 });
+    drawToyBevelRect(ctx, 52, -26 + bob, 24, 14, 4, '#eab308', { depth: 2, rimColor: '#92400e', lineWidth: 1.6 });
 
-    // Right Arm: Industrial Crane Lattice Boom & Naval Anchor
-    ctx.fillStyle = '#eab308';
-    ctx.fillRect(52, -26 + bob, 24, 14);
-    ctx.strokeRect(52, -26 + bob, 24, 14);
-
-    // Heavy Iron Links Chain
     ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -2427,31 +2393,22 @@ export class MultiplierRunner extends Game {
     ctx.lineTo(64, 26 + bob);
     ctx.stroke();
 
-    // Colossal Spiked Naval Anchor
     ctx.save();
     ctx.translate(64, 38 + bob);
-    ctx.fillStyle = '#334155';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3.5;
+    drawToySphere(ctx, 0, -12, 8, '#475569', { rimColor: '#0f172a', lineWidth: 1.5, bottomBounce: false });
+    drawToyBevelRect(ctx, -4, -4, 8, 28, 3, '#475569', { depth: 0, rimColor: '#0f172a', lineWidth: 1.5 });
     ctx.beginPath();
-    ctx.arc(0, -12, 8, 0, TAU); // Ring
-    ctx.fill(); ctx.stroke();
-    ctx.fillRect(-4, -4, 8, 28); // Shank
-    ctx.strokeRect(-4, -4, 8, 28);
-    ctx.beginPath(); // Flukes
     ctx.arc(0, 16, 22, 0.2, Math.PI - 0.2);
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 6.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#334155';
     ctx.stroke();
     ctx.restore();
 
     // F. Glowing Molten Eyes beneath Heavy Brow
-    ctx.fillStyle = '#140924';
-    ctx.fillRect(-26, -34 + bob, 52, 10);
-    ctx.fillStyle = '#facc15';
-    ctx.beginPath();
-    ctx.arc(-12, -29 + bob, 4.5, 0, TAU);
-    ctx.arc(12, -29 + bob, 4.5, 0, TAU);
-    ctx.fill();
+    drawToyBevelRect(ctx, -26, -34 + bob, 52, 10, 4, '#1e293b', { depth: 0, rimColor: '#0f172a', lineWidth: 1.4 });
+    drawToySphere(ctx, -12, -29 + bob, 4.8, '#facc15', { rimColor: '#92400e', lineWidth: 1, bottomBounce: false });
+    drawToySphere(ctx, 12, -29 + bob, 4.8, '#facc15', { rimColor: '#92400e', lineWidth: 1, bottomBounce: false });
   }
 
   /* Universal Deluxe Boss Health Bar */
@@ -2459,50 +2416,37 @@ export class MultiplierRunner extends Game {
     const hpPct = clamp(r.hp / r.maxHp, 0, 1);
     const barW = 160;
     const barH = 16;
-    const barY = r.r + 36; // Positioned below boss character to avoid HUD overlap
+    const barY = r.r + 36;
 
-    // Outer Chrome Shield Frame
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(-barW / 2 - 4, barY - 4, barW + 8, barH + 8, 8);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -barW / 2 - 4, barY - 4, barW + 8, barH + 8, 9, '#0f172a', {
+      depth: 3,
+      rimColor: '#475569',
+      lineWidth: 2,
+      gloss: false,
+    });
 
-    // Empty Track
     ctx.fillStyle = '#334155';
-    ctx.beginPath();
-    ctx.roundRect(-barW / 2, barY, barW, barH, 5);
+    traceRoundRect(ctx, -barW / 2, barY, barW, barH, 6);
     ctx.fill();
 
-    // Glowing Animated Health Fill
-    const hg = ctx.createLinearGradient(-barW / 2, 0, barW / 2, 0);
-    if (hpPct > 0.5) {
-      hg.addColorStop(0, '#22c55e');
-      hg.addColorStop(1, '#4ade80');
-    } else if (hpPct > 0.25) {
-      hg.addColorStop(0, '#eab308');
-      hg.addColorStop(1, '#facc15');
-    } else {
-      hg.addColorStop(0, '#dc2626');
-      hg.addColorStop(1, '#f87171');
+    if (hpPct > 0) {
+      const fillCol = hpPct > 0.5 ? '#22c55e' : hpPct > 0.25 ? '#eab308' : '#ef4444';
+      drawToyPill(ctx, -barW / 2, barY, Math.max(10, barW * hpPct), barH, fillCol, {
+        lineWidth: 0,
+        gloss: true,
+      });
     }
-    ctx.fillStyle = hg;
-    ctx.beginPath();
-    ctx.roundRect(-barW / 2, barY, barW * hpPct, barH, 5);
-    ctx.fill();
 
-    // HP Text & Percent
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 10.5px Outfit, system-ui, sans-serif';
+    ctx.font = "800 10.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`HP: ${Math.max(0, Math.round(r.hp))} / ${r.maxHp}`, 0, barY + barH / 2);
 
-    // Grand Boss Title Banner
-    ctx.font = '900 22px Outfit, system-ui, sans-serif';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#140924';
+    ctx.font = "800 20px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#0f172a';
     ctx.strokeText(`👑 ${r.title}`, 0, barY - 18);
     ctx.fillStyle = '#fde047';
     ctx.fillText(`👑 ${r.title}`, 0, barY - 18);
@@ -2525,16 +2469,19 @@ export class MultiplierRunner extends Game {
       const sw = 220 - i * 16;
       const sx = MID - sw / 2;
 
-      ctx.fillStyle = s.color;
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 3.5;
-      ctx.fillRect(sx, sy, sw, 40);
-      ctx.strokeRect(sx, sy, sw, 40);
+      drawToyBevelRect(ctx, sx, sy, sw, 40, 10, s.color, {
+        depth: 5,
+        rimColor: toyRim(s.color, 0.56),
+        lineWidth: 2,
+        gloss: true,
+      });
 
-      ctx.font = '900 24px Outfit, system-ui, sans-serif';
+      ctx.font = "800 22px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.lineWidth = 5;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4.5;
+      ctx.strokeStyle = '#0f172a';
       ctx.strokeText(`STEP ${s.step} · ×${s.mult}`, MID, sy + 20);
       ctx.fillStyle = '#ffffff';
       ctx.fillText(`STEP ${s.step} · ×${s.mult}`, MID, sy + 20);
@@ -2558,10 +2505,10 @@ export class MultiplierRunner extends Game {
       const color = isFast
         ? '#3dffa2'
         : customColor || (i % 3 === 0 ? '#38bdf8' : i % 3 === 1 ? '#f472b6' : '#facc15');
-      const outline = '#140924';
 
       // Leader Captain Bean
       if (i === 0 && isPlayer) {
+        drawToyShadow(ctx, x, y + 12, 13, 4.5, 0.28);
         drawBean(ctx, x, y - 6, 26, {
           color: isFast ? '#3dffa2' : '#0284c7',
           bellyColor: '#fda4af',
@@ -2573,40 +2520,43 @@ export class MultiplierRunner extends Game {
         continue;
       }
 
-      // Mini Runner Bean Body
+      // 3D Vinyl Mini Runner Bean Body
       const bw = 5.4;
       const bh = 8.0;
+      const rim = toyRim(color, 0.56);
 
-      ctx.fillStyle = outline;
-      ctx.beginPath();
-      ctx.arc(x, y - bh * 0.35, bw + 1.8, Math.PI, 0);
-      ctx.arc(x, y + bh * 0.35, bw + 1.8, 0, Math.PI);
-      ctx.closePath();
-      ctx.fill();
+      drawToyShadow(ctx, x, y + bh * 0.82, bw * 0.95, 2.5, 0.22);
 
-      ctx.fillStyle = color;
+      const bg = ctx.createRadialGradient(x - bw * 0.3, y - bh * 0.35, 1, x, y, bh * 1.1);
+      bg.addColorStop(0, shadeColor(color, 0.45));
+      bg.addColorStop(0.45, color);
+      bg.addColorStop(1, shadeColor(color, -0.25));
+      ctx.fillStyle = bg;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 1.05;
       ctx.beginPath();
       ctx.arc(x, y - bh * 0.35, bw, Math.PI, 0);
       ctx.arc(x, y + bh * 0.35, bw, 0, Math.PI);
       ctx.closePath();
       ctx.fill();
+      ctx.stroke();
 
       // Specular shine
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
       ctx.beginPath();
-      ctx.arc(x - bw * 0.35, y - bh * 0.45, 1.8, 0, TAU);
+      ctx.ellipse(x - bw * 0.35, y - bh * 0.48, 2.0, 1.1, -0.35, 0, TAU);
       ctx.fill();
 
-      // Eyes
-      ctx.fillStyle = '#140924';
+      // Crisp Toy Eyes
+      ctx.fillStyle = '#0f172a';
       ctx.beginPath();
-      ctx.arc(x - 2.0, y - 1, 1.2, 0, TAU);
-      ctx.arc(x + 2.0, y - 1, 1.2, 0, TAU);
+      ctx.arc(x - 1.9, y - 1, 1.25, 0, TAU);
+      ctx.arc(x + 1.9, y - 1, 1.25, 0, TAU);
       ctx.fill();
     }
   }
 
-  /* ------------------------------------------------------------ Clean HUD */
+  /* ------------------------------------------------------------ Clean Toy HUD */
   renderHUD(ctx, W, H) {
     const pillX = 14;
     const pillY = 105;
@@ -2614,49 +2564,47 @@ export class MultiplierRunner extends Game {
     const pillH = 74;
 
     ctx.save();
-    // Glassmorphic dark badge
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(pillX, pillY, pillW, pillH, 16);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, pillX, pillY, pillW, pillH, 16, '#0f172a', {
+      depth: 3,
+      rimColor: '#38bdf8',
+      lineWidth: 2,
+      gloss: false,
+    });
 
-    // Stage & Boss Title (Truncated cleanly if needed)
+    // Stage & Boss Title
     const curBoss = this.getUpcomingBoss();
     const bossTitle = curBoss
       ? (curBoss.type === 'captain' ? 'CAPTAIN CRUMP' : curBoss.type === 'kraken' ? 'KRAKEN MECHA' : 'SUGAR COLOSSUS')
       : `BOSS ${this.stage}`;
 
     ctx.fillStyle = '#38bdf8';
-    ctx.font = '900 12.5px Outfit, system-ui, sans-serif';
+    ctx.font = "800 12.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
     ctx.fillText(`⚓ STAGE ${this.stage} · ${bossTitle}`, pillX + 14, pillY + 18);
 
     // Boss distance on top right
     const distToBoss = curBoss ? Math.max(0, Math.round((curBoss.d - this.dist) / 10)) : 0;
     ctx.fillStyle = '#fde047';
-    ctx.font = '800 11px Outfit, system-ui, sans-serif';
+    ctx.font = "800 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'right';
     ctx.fillText(distToBoss > 0 ? `👑 BOSS IN ${distToBoss}m` : '👑 BOSS ENGAGED!', pillX + pillW - 14, pillY + 18);
 
     // Beans Count & Required
     const ready = this.count >= this.bossReq;
-    ctx.font = '900 15px Outfit, system-ui, sans-serif';
+    ctx.font = "800 15px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('ARMY: ', pillX + 14, pillY + 40);
 
     ctx.fillStyle = ready ? '#3dffa2' : '#f87171';
-    ctx.fillText(`${Math.round(this.count)}`, pillX + 66, pillY + 40);
+    ctx.fillText(`${Math.round(this.count)}`, pillX + 68, pillY + 40);
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '800 13px Outfit, system-ui, sans-serif';
-    ctx.fillText(`/ ${this.bossReq} REQ`, pillX + 96, pillY + 40);
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillText(`/ ${this.bossReq} REQ`, pillX + 100, pillY + 40);
 
     // Readiness Status Pill on Right
-    ctx.font = '900 11px Outfit, system-ui, sans-serif';
+    ctx.font = "800 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'right';
     if (ready) {
       ctx.fillStyle = '#3dffa2';
@@ -2673,19 +2621,18 @@ export class MultiplierRunner extends Game {
     const barX = pillX + 14;
     const barY = pillY + 54;
     const barW = pillW - 28;
-    const barH = 7;
+    const barH = 8;
 
-    // Track
     ctx.fillStyle = '#1e293b';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, 4);
+    traceRoundRect(ctx, barX, barY, barW, barH, 4);
     ctx.fill();
 
-    // Progress fill
-    ctx.fillStyle = ready ? '#3dffa2' : '#38bdf8';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW * stageProgress, barH, 4);
-    ctx.fill();
+    if (stageProgress > 0) {
+      drawToyPill(ctx, barX, barY, Math.max(10, barW * stageProgress), barH, ready ? '#3dffa2' : '#38bdf8', {
+        lineWidth: 0,
+        gloss: true,
+      });
+    }
 
     ctx.restore();
   }

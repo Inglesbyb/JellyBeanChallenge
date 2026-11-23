@@ -1,5 +1,15 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const GROUND_Y = 660;
@@ -20,7 +30,16 @@ export class BallBlast extends Game {
     icon: '💣',
     hint: 'DRAG left & right to DODGE bouncing boulders · BLAST them into pieces & COLLECT gold!',
     baseLikes: 8940,
+    isPrestige: false,
+    parScore60s: 6400,
     roundLen: 90,
+    cue: 'DODGE & BLAST BOULDERS!',
+    prestigeCue: 'TOUGHER FASTER BOULDERS!',
+    scaling: {
+      boulderHpMult:    { base: 1.0, rate: 0.16, cap: 1.75, mode: 'up',   label: 'Boulder HP' },
+      boulderSpeedMult: { base: 1.0, rate: 0.15, cap: 1.38, mode: 'up',   label: 'Bounce Speed' },
+      waveDelayScale:   { base: 1.0, rate: 0.14, floor: 0.72, mode: 'down', label: 'Spawn Pace' },
+    },
   };
 
   init(saved, score = 0) {
@@ -98,11 +117,11 @@ export class BallBlast extends Game {
 
     for (let i = 0; i < ballCount; i++) {
       const tier = i === 0 && w >= 3 ? 4 : w >= 2 ? 3 : 2;
-      const baseHp = BALL_TIERS[tier].baseHp + (w - 1) * 16;
+      const baseHp = (BALL_TIERS[tier].baseHp + (w - 1) * 16) * (this.diff.boulderHpMult ?? 1);
       this.waveSpawnQueue.push({
         tier,
         hp: Math.round(baseHp * (0.8 + Math.random() * 0.4)),
-        delay: i * 2.2,
+        delay: i * 2.2 * (this.diff.waveDelayScale ?? 1),
       });
     }
   }
@@ -171,7 +190,7 @@ export class BallBlast extends Game {
     const proto = BALL_TIERS[tier];
     const spawnX = x !== null ? x : 40 + Math.random() * (this.W - 80);
     const spawnY = y !== null ? y : 120 + Math.random() * 40;
-    const initialVx = vx !== null ? vx : (Math.random() < 0.5 ? -1 : 1) * (85 + Math.random() * 55);
+    const initialVx = vx !== null ? vx : (Math.random() < 0.5 ? -1 : 1) * (85 + Math.random() * 55) * (this.diff.boulderSpeedMult ?? 1);
 
     this.balls.push({
       tier,
@@ -614,25 +633,36 @@ export class BallBlast extends Game {
   }
 
   renderBackdrop(ctx, W, H) {
-    // 1. Cheerful Sunny Pastel Sky Gradient
+    // 1. Cheerful Sunny Pastel Toy Sky Gradient
     const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-    sky.addColorStop(0, '#a2d2ff'); // Baby Cerulean Blue
-    sky.addColorStop(0.55, '#cdb4db'); // Soft Lilac
-    sky.addColorStop(1, '#ffcbf2'); // Bubblegum Blush
+    sky.addColorStop(0, '#93c5fd');
+    sky.addColorStop(0.55, '#c4b5fd');
+    sky.addColorStop(1, '#fbcfe8');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
     ctx.save();
 
-    // 2. Fluffy Puffy Marshmallow Clouds with cartoon black outlines
+    // Soft studio key-light glow in upper sky
+    const sun = ctx.createRadialGradient(80, 120, 10, 80, 120, 220);
+    sun.addColorStop(0, 'rgba(255, 255, 255, 0.36)');
+    sun.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(0, 0, W, GROUND_Y);
+
+    // 2. Fluffy Puffy 3D Marshmallow Clouds with soft sky-slate rims
     const drawCloud = (cx, cy, scale) => {
       ctx.save();
       ctx.translate(cx, cy);
       ctx.scale(scale, scale);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
+      const cg = ctx.createLinearGradient(0, -24, 0, 30);
+      cg.addColorStop(0, '#ffffff');
+      cg.addColorStop(0.68, '#f8fafc');
+      cg.addColorStop(1, '#dbeafe');
+      ctx.fillStyle = cg;
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.8;
 
       ctx.beginPath();
       ctx.arc(0, 0, 22, 0, TAU);
@@ -644,10 +674,15 @@ export class BallBlast extends Game {
       ctx.fill();
       ctx.stroke();
 
-      // Soft pink cloud cheek highlight
-      ctx.fillStyle = 'rgba(255, 175, 204, 0.45)';
+      // Soft top sheen & pink cheek blush
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
       ctx.beginPath();
-      ctx.arc(10, 8, 12, 0, TAU);
+      ctx.ellipse(14, -12, 16, 5.5, -0.1, 0, TAU);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 175, 204, 0.36)';
+      ctx.beginPath();
+      ctx.arc(10, 10, 11, 0, TAU);
       ctx.fill();
 
       ctx.restore();
@@ -657,10 +692,14 @@ export class BallBlast extends Game {
     drawCloud(W - 80, 210, 1.05);
     drawCloud(190, 270, 0.75);
 
-    // 3. Distant Frosted Candy Mountain Ridges with black outlines
-    ctx.fillStyle = '#bde0fe';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3.5;
+    // 3. Distant Frosted 3D Candy Mountain Ridges
+    const mg = ctx.createLinearGradient(0, 440, 0, GROUND_Y);
+    mg.addColorStop(0, '#e0f2fe');
+    mg.addColorStop(0.45, '#bae6fd');
+    mg.addColorStop(1, '#7dd3fc');
+    ctx.fillStyle = mg;
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
     ctx.quadraticCurveTo(80, 470, 160, 520);
@@ -677,52 +716,71 @@ export class BallBlast extends Game {
   renderGround(ctx, W) {
     ctx.save();
 
-    // Inflatable Ground Platform with bold black outline
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(0, GROUND_Y);
-    ctx.lineTo(W, GROUND_Y);
-    ctx.stroke();
-
-    // Vibrant Grass Turf
-    ctx.fillStyle = '#06d6a0';
-    ctx.fillRect(0, GROUND_Y, W, 8);
-
+    // Dark Diorama Bedrock Base
     const earthGrad = ctx.createLinearGradient(0, GROUND_Y + 8, 0, this.H);
     earthGrad.addColorStop(0, '#1e293b');
     earthGrad.addColorStop(1, '#0f172a');
     ctx.fillStyle = earthGrad;
     ctx.fillRect(0, GROUND_Y + 8, W, this.H - GROUND_Y);
 
-    // Inflatable Striped Side Cushion Bumpers
-    const drawBumper = (bx, isLeft) => {
+    // Tactile 3D Beveled Mint Grass Platform
+    const turfGrad = ctx.createLinearGradient(0, GROUND_Y, 0, GROUND_Y + 12);
+    turfGrad.addColorStop(0, '#34d399');
+    turfGrad.addColorStop(0.55, '#06d6a0');
+    turfGrad.addColorStop(1, '#047857');
+    ctx.fillStyle = turfGrad;
+    ctx.fillRect(0, GROUND_Y, W, 11);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillRect(0, GROUND_Y + 1, W, 2.5);
+
+    ctx.strokeStyle = toyRim('#06d6a0', 0.6);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(W, GROUND_Y);
+    ctx.stroke();
+
+    // Inflatable 3D Vinyl Striped Side Cushion Bumpers
+    const drawBumper = (bx) => {
       ctx.save();
       const bw = 16;
       const bh = GROUND_Y - 90;
-      
-      // Bumper Body
-      ctx.fillStyle = '#ffafcc';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, 90, bw, bh, 8);
-      ctx.fill();
-      ctx.stroke();
+      const rim = toyRim('#ff8fab', 0.56);
 
-      // Diagonal Candy Stripes
-      ctx.fillStyle = '#ffffff';
+      drawToyBevelRect(ctx, bx, 90, bw, bh, 8, '#ff8fab', {
+        depth: 0,
+        rimColor: rim,
+        lineWidth: 1.8,
+        gloss: false,
+      });
+
+      // Cylindrical left-to-right shading
+      const cg = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      cg.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
+      cg.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+      cg.addColorStop(1, 'rgba(15, 23, 42, 0.2)');
+      ctx.fillStyle = cg;
+      traceRoundRect(ctx, bx + 1, 91, bw - 2, bh - 2, 7);
+      ctx.fill();
+
+      // Glossy Candy Stripes
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
       for (let y = 100; y < GROUND_Y - 20; y += 28) {
-        ctx.beginPath();
-        ctx.roundRect(bx + 2, y, bw - 4, 12, 4);
+        traceRoundRect(ctx, bx + 2.5, y, bw - 5, 11, 4);
         ctx.fill();
       }
+
+      // Vertical glossy studio highlight ribbon
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+      traceRoundRect(ctx, bx + 3, 94, 3.2, bh - 8, 1.5);
+      ctx.fill();
 
       ctx.restore();
     };
 
-    drawBumper(4, true);
-    drawBumper(W - 20, false);
+    drawBumper(4);
+    drawBumper(W - 20);
 
     ctx.restore();
   }
@@ -734,6 +792,9 @@ export class BallBlast extends Game {
     ctx.save();
     ctx.translate(cx, cy);
 
+    // Grounding Diorama Shadow
+    drawToyShadow(ctx, 0, 14, 28, 7, 0.28);
+
     // Laser Beam FX
     if (this.laserTimer > 0) {
       const beamGrad = ctx.createLinearGradient(-14, 0, 14, 0);
@@ -744,117 +805,129 @@ export class BallBlast extends Game {
       ctx.fillRect(-14, -cy + 85, 28, cy - 85);
     }
 
-    // Shield Bubble
+    // Translucent 3D Shield Bubble
     if (this.shieldActive) {
-      ctx.strokeStyle = '#00b4d8';
-      ctx.fillStyle = 'rgba(0, 180, 216, 0.2)';
-      ctx.lineWidth = 3;
+      const sg = ctx.createRadialGradient(-10, -10, 4, 0, 0, 34);
+      sg.addColorStop(0, 'rgba(255, 255, 255, 0.32)');
+      sg.addColorStop(0.65, 'rgba(56, 189, 248, 0.2)');
+      sg.addColorStop(1, 'rgba(0, 180, 216, 0.42)');
+      ctx.fillStyle = sg;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.arc(0, 0, 34, 0, TAU);
       ctx.fill();
       ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.52)';
+      ctx.beginPath();
+      ctx.ellipse(-12, -16, 11, 4.5, -0.55, 0, TAU);
+      ctx.fill();
     }
 
     // Cannon Barrels (Muzzle)
     const recoilY = this.cannonRecoil;
     const barrelH = 30 - recoilY;
     const barrels = this.upgrades.barrels;
-
-    // Metallic barrel gradient
-    const barrelGrad = ctx.createLinearGradient(-15, 0, 15, 0);
-    barrelGrad.addColorStop(0, '#f59e0b');
-    barrelGrad.addColorStop(0.3, '#fbbf24');
-    barrelGrad.addColorStop(0.7, '#d97706');
-    barrelGrad.addColorStop(1, '#92400e');
+    const barrelRim = toyRim('#d97706', 0.62);
 
     const drawBarrel = (ox, bw) => {
-      ctx.fillStyle = barrelGrad;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
+      const bg = ctx.createLinearGradient(ox, 0, ox + bw, 0);
+      bg.addColorStop(0, '#fde047');
+      bg.addColorStop(0.35, '#fbbf24');
+      bg.addColorStop(0.75, '#d97706');
+      bg.addColorStop(1, '#92400e');
+
+      ctx.fillStyle = bg;
+      ctx.strokeStyle = barrelRim;
+      ctx.lineWidth = toyLineW(bw, 0.12, 1.2, 1.7);
       ctx.beginPath();
       ctx.roundRect(ox, -barrelH, bw, barrelH, [4, 4, 1, 1]);
       ctx.fill();
       ctx.stroke();
 
-      // Golden muzzle ring at top
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath();
-      ctx.roundRect(ox - 1, -barrelH - 2, bw + 2, 4, 2);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(ox - 1, -barrelH - 2, bw + 2, 4, 2);
+      // Golden 3D muzzle ring
+      drawToyBevelRect(ctx, ox - 1.5, -barrelH - 3, bw + 3, 5, 2.5, '#fef08a', {
+        depth: 1,
+        rimColor: barrelRim,
+        lineWidth: 1.2,
+        gloss: true,
+      });
     };
 
     if (barrels === 1) {
       drawBarrel(-7, 14);
     } else if (barrels === 2) {
-      [-11, 2].forEach(ox => drawBarrel(ox, 9));
+      [-11, 2].forEach((ox) => drawBarrel(ox, 9));
     } else if (barrels === 3) {
-      [-14, -4, 6].forEach(ox => drawBarrel(ox, 8));
+      [-14, -4, 6].forEach((ox) => drawBarrel(ox, 8));
     } else {
-      [-16, -8, 0, 8].forEach(ox => drawBarrel(ox, 7));
+      [-16, -8, 0, 8].forEach((ox) => drawBarrel(ox, 7));
     }
 
     // Muzzle Fire Flash Particle if recoiling
     if (this.cannonRecoil > 1.2) {
+      ctx.fillStyle = 'rgba(255, 190, 11, 0.65)';
+      ctx.beginPath();
+      ctx.arc(0, -barrelH - 5, 9.5, 0, TAU);
+      ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(0, -barrelH - 4, 6, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#ffbe0b';
-      ctx.beginPath();
-      ctx.arc(0, -barrelH - 4, 9, 0, TAU);
+      ctx.arc(0, -barrelH - 5, 5.5, 0, TAU);
       ctx.fill();
     }
 
-    // Heavy Armored Chassis Hub
-    const chassisGrad = ctx.createLinearGradient(-18, -8, 18, 10);
-    chassisGrad.addColorStop(0, '#ef4444');
-    chassisGrad.addColorStop(0.5, '#dc2626');
-    chassisGrad.addColorStop(1, '#991b1b');
-    ctx.fillStyle = chassisGrad;
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.roundRect(-18, -6, 36, 17, [8, 8, 4, 4]);
-    ctx.fill();
-    ctx.stroke();
+    // Heavy Armored 3D Vinyl Chassis Hub
+    drawToyBevelRect(ctx, -18, -7, 36, 17, 7, '#ef4444', {
+      depth: 2.5,
+      rimColor: toyRim('#ef4444', 0.62),
+      lineWidth: 1.8,
+      gloss: true,
+    });
 
     // Center Gold Core Emblem
-    ctx.fillStyle = '#ffd166';
-    ctx.beginPath();
-    ctx.arc(0, 2, 4.5, 0, TAU);
-    ctx.fill();
+    drawToySphere(ctx, 0, 1.5, 5, '#ffd166', {
+      rimColor: toyRim('#d97706', 0.6),
+      lineWidth: 1.2,
+      shine: 0.78,
+    });
 
-    // Two Spoked Heavy Rubber Tires
+    // Two Spoked Heavy 3D Rubber Tires
     [-17, 17].forEach((wx) => {
       ctx.save();
       ctx.translate(wx, 5);
       ctx.rotate(this.wheelRotation);
 
-      // Outer Tire
-      ctx.fillStyle = '#1e293b';
-      ctx.strokeStyle = '#475569';
-      ctx.lineWidth = 2.5;
+      drawToySphere(ctx, 0, 0, 9.5, '#334155', {
+        rimColor: '#0f172a',
+        lineWidth: 1.6,
+        shine: 0.35,
+        bottomBounce: false,
+      });
+
+      // Inner rim bevel
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.arc(0, 0, 9, 0, TAU);
-      ctx.fill();
+      ctx.arc(0, 0, 6.2, 0, TAU);
       ctx.stroke();
 
       // Golden Spokes
       ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(-6, 0); ctx.lineTo(6, 0);
-      ctx.moveTo(0, -6); ctx.lineTo(0, 6);
+      ctx.moveTo(-5.5, 0); ctx.lineTo(5.5, 0);
+      ctx.moveTo(0, -5.5); ctx.lineTo(0, 5.5);
       ctx.stroke();
 
       // Hub Cap
-      ctx.fillStyle = '#f59e0b';
-      ctx.beginPath();
-      ctx.arc(0, 0, 3, 0, TAU);
-      ctx.fill();
+      drawToySphere(ctx, 0, 0, 3.2, '#fbbf24', {
+        rimColor: toyRim('#d97706', 0.55),
+        lineWidth: 0.9,
+        shine: 0.75,
+        bottomBounce: false,
+      });
 
       ctx.restore();
     });
@@ -868,15 +941,12 @@ export class BallBlast extends Game {
       ctx.translate(b.x, b.y);
       ctx.scale(b.scale, b.scale);
 
-      // Soft Shadow on Ground
+      // Soft Grounding Shadow on Floor
       const groundDist = GROUND_Y - b.y;
       const shadowScale = Math.max(0.2, 1.0 - groundDist / 500);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-      ctx.beginPath();
-      ctx.ellipse(0, groundDist, b.r * 0.9 * shadowScale, 6 * shadowScale, 0, 0, TAU);
-      ctx.fill();
+      drawToyShadow(ctx, 0, groundDist, b.r * 0.9 * shadowScale, 6 * shadowScale, 0.24);
 
-      // Boulder Body with Faceted Rocky Outlines
+      // Faceted 3D Vinyl Candy-Crystal Boulder Body
       ctx.rotate(b.rotation);
       ctx.beginPath();
       const facets = 12;
@@ -890,28 +960,45 @@ export class BallBlast extends Game {
       }
       ctx.closePath();
 
-      // Shading Gradient
-      const grad = ctx.createRadialGradient(-b.r * 0.35, -b.r * 0.35, 2, 0, 0, b.r);
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.3, b.hitFlash > 0 ? '#ffffff' : b.color);
-      grad.addColorStop(1, b.dark);
+      const baseCol = b.hitFlash > 0 ? '#ffffff' : b.color;
+      const grad = ctx.createRadialGradient(-b.r * 0.34, -b.r * 0.34, 2, 0, 0, b.r);
+      grad.addColorStop(0, shadeColor(baseCol, 0.58));
+      grad.addColorStop(0.38, baseCol);
+      grad.addColorStop(0.86, b.hitFlash > 0 ? '#e2e8f0' : b.dark);
+      grad.addColorStop(1, b.hitFlash > 0 ? '#cbd5e1' : shadeColor(b.dark, -0.2));
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Bold cartoon outline
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = Math.max(3.8, b.r * 0.12);
+      // Tinted vinyl rim
+      ctx.strokeStyle = toyRim(b.color, 0.62);
+      ctx.lineWidth = toyLineW(b.r * 2, 0.042, 1.4, 2.4);
       ctx.lineJoin = 'round';
       ctx.stroke();
 
-      // Unrotate for Number Text
+      // Unrotate for studio highlight & crisp centered HP label
       ctx.rotate(-b.rotation);
+
+      // Upper-left studio specular shine
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(-b.r * 0.3, -b.r * 0.34, b.r * 0.28, b.r * 0.14, -0.5, 0, TAU);
+      ctx.fill();
+
+      // Freeze frost shimmer if active
+      if (this.freezeTimer > 0) {
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, b.r * 0.88, 0, TAU);
+        ctx.stroke();
+      }
 
       // Number Label in Center
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.font = `bold ${Math.max(12, Math.round(b.r * 0.72))}px system-ui, sans-serif`;
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = Math.max(2.5, b.r * 0.12);
+      ctx.lineJoin = 'round';
+      ctx.font = `700 ${Math.max(12, Math.round(b.r * 0.72))}px 'Fredoka', 'Outfit', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.strokeText(String(b.hp), 0, 1);
@@ -924,20 +1011,12 @@ export class BallBlast extends Game {
   renderBullets(ctx) {
     ctx.save();
     for (const p of this.bullets) {
-      // Bouncy cartoon candy pellet with bold black outline & glint
-      ctx.fillStyle = '#ffbe0b';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 4.8, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
-
-      // Specular shine glint
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(p.x - 1.5, p.y - 1.5, 1.8, 0, TAU);
-      ctx.fill();
+      drawToySphere(ctx, p.x, p.y, 5.0, '#ffbe0b', {
+        rimColor: toyRim('#f59e0b', 0.58),
+        lineWidth: 1.1,
+        shine: 0.85,
+        bottomBounce: false,
+      });
     }
     ctx.restore();
   }
@@ -945,19 +1024,18 @@ export class BallBlast extends Game {
   renderCoins(ctx) {
     ctx.save();
     for (const c of this.droppedCoins) {
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, 7, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToySphere(ctx, c.x, c.y, 7.2, '#ffd166', {
+        rimColor: toyRim('#d97706', 0.58),
+        lineWidth: 1.2,
+        shine: 0.8,
+        bottomBounce: false,
+      });
 
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = '#78350f';
+      ctx.font = "700 9px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('$', c.x, c.y);
+      ctx.fillText('$', c.x, c.y + 0.5);
     }
     ctx.restore();
   }
@@ -965,20 +1043,30 @@ export class BallBlast extends Game {
   renderPowerups(ctx) {
     ctx.save();
     for (const p of this.powerups) {
-      // Glowing floating orb
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 14, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      const orbColor =
+        p.type === 'freeze' ? '#38bdf8' :
+        p.type === 'shield' ? '#ffd166' :
+        p.type === 'laser' ? '#f72585' : '#ef233c';
 
-      ctx.font = '16px sans-serif';
+      // Soft outer halo
+      ctx.fillStyle = shadeColor(orbColor, 0.35);
+      ctx.globalAlpha = 0.24;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 18, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      drawToySphere(ctx, p.x, p.y, 14, orbColor, {
+        rimColor: toyRim(orbColor, 0.58),
+        lineWidth: 1.6,
+        shine: 0.72,
+      });
+
+      ctx.font = "700 15px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const icon = p.type === 'freeze' ? '❄️' : p.type === 'shield' ? '🛡️' : p.type === 'laser' ? '⚡' : '💣';
-      ctx.fillText(icon, p.x, p.y);
+      ctx.fillText(icon, p.x, p.y + 0.5);
     }
     ctx.restore();
   }
@@ -987,36 +1075,34 @@ export class BallBlast extends Game {
     ctx.save();
     const barY = 94;
 
-    // 3D Cartoon Drop Shadow
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.roundRect(14, barY + 3.5, W - 28, 36, 18);
-    ctx.fill();
+    drawToyPill(ctx, 14, barY, W - 28, 36, '#1e293b', {
+      rimColor: '#334155',
+      lineWidth: 2,
+      gloss: true,
+    });
 
-    // Background pill with 2.5px solid black border
-    ctx.fillStyle = '#1e293b';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(14, barY, W - 28, 36, 18);
-    ctx.fill();
-    ctx.stroke();
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = '#0f172a';
 
     // Wave Badge
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    ctx.strokeText(`WAVE ${this.wave}`, 30, barY + 18);
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(`WAVE ${this.wave}`, 30, barY + 18);
 
     // Coins Collected
-    ctx.fillStyle = '#ffd166';
     ctx.textAlign = 'center';
+    ctx.strokeText(`💰 $${this.coins}`, W / 2, barY + 18);
+    ctx.fillStyle = '#ffd166';
     ctx.fillText(`💰 $${this.coins}`, W / 2, barY + 18);
 
     // Score
-    ctx.fillStyle = '#00b4d8';
     ctx.textAlign = 'right';
+    ctx.strokeText(`⭐ ${this.score}`, W - 30, barY + 18);
+    ctx.fillStyle = '#38bdf8';
     ctx.fillText(`⭐ ${this.score}`, W - 30, barY + 18);
 
     ctx.restore();
@@ -1058,35 +1144,21 @@ export class BallBlast extends Game {
       const by = dockY;
       const bh = 34;
 
-      // 3D Cartoon Drop Shadow
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(bx, by + 3.5, bw, bh, 10);
-      ctx.fill();
-
-      // Card Face
-      ctx.fillStyle = btn.canAfford ? '#334155' : '#1e293b';
-      ctx.strokeStyle = btn.canAfford ? '#ffd166' : '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, by, bw, bh, 10);
-      ctx.fill();
-      ctx.stroke();
-
-      // Top Specular Highlight
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.beginPath();
-      ctx.roundRect(bx + 2, by + 2, bw - 4, (bh - 4) * 0.4, [8, 8, 0, 0]);
-      ctx.fill();
+      drawToyBevelRect(ctx, bx, by, bw, bh, 10, btn.canAfford ? '#334155' : '#1e293b', {
+        depth: 3,
+        rimColor: btn.canAfford ? '#ffd166' : '#0f172a',
+        lineWidth: 2,
+        gloss: true,
+      });
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${btn.icon} ${btn.title} (${btn.val})`, bx + bw / 2, by + 11);
 
-      ctx.fillStyle = btn.canAfford ? '#ffd166' : '#ef233c';
-      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = btn.canAfford ? '#ffd166' : '#fb7185';
+      ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`$${btn.cost}`, bx + bw / 2, by + 24);
     });
 

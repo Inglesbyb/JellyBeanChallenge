@@ -11,7 +11,7 @@
 Welcome to **Jelly Bean: 60s Challenge** ("the Game", "we", "our", or "us"). We respect your privacy and are committed to protecting it. This Privacy Policy explains our practices regarding the collection, use, and disclosure of information when you use our mobile application on Android and web platforms.
 
 **Our Core Privacy Promise:**  
-We believe gaming should be fun, fast, and private. **Jelly Bean: 60s Challenge does not collect, transmit, sell, or share any personal information.** You can play all 20 mini-games, complete daily gauntlets, and customize your mascot without creating an account or providing any private data.
+We believe gaming should be fun, fast, and private. **Jelly Bean: 60s Challenge does not collect, transmit, sell, or share any personal information.** You can play the 20 starter mini-games, unlock mystery game packs through gameplay, complete daily gauntlets, and customize your mascot without creating an account or providing any private data.
 
 ---
 

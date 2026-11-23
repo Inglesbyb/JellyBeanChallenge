@@ -21,6 +21,17 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  drawToyEyes,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -171,22 +182,31 @@ export class BeanSurvivors extends Game {
     id: 'bean-survivors',
     title: 'Bean Survivors',
     icon: '🧄',
-    hint: 'DRAG to move · WEAPONS AUTO-FIRE · LEVEL UP to pick new weapons & slay the Gummy Behemoth!',
+    hint: 'DRAG to move · WEAPONS AUTO-FIRE · LEVEL UP to slay the Gummy Behemoth!',
     baseLikes: 5890,
     isPrestige: true,
+    parScore60s: 2300,
     roundLen: 60,
+    cue: 'MOVE & SURVIVE SWARMS!',
+    prestigeCue: 'FASTER SWARMS · TANKIER BOSS!',
+    scaling: {
+      swarmSpeedMult: { base: 1.0, rate: 0.15, cap: 1.38, mode: 'up',   label: 'Swarm Speed' },
+      swarmHpMult:    { base: 1.0, rate: 0.18, cap: 1.85, mode: 'up',   label: 'Swarm HP' },
+      bossHpMult:     { base: 1.0, rate: 0.20, cap: 2.00, mode: 'up',   label: 'Boss HP' },
+      spawnPaceScale: { base: 1.0, rate: 0.15, floor: 0.70, mode: 'down', label: 'Spawn Pace' },
+    },
   };
 
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
 
-    // Prestige difficulty scalers (+25% base difficulty on top)
+    // SSOT Prestige difficulty scalers (+25% base difficulty on top)
     this.pLevel = Math.max(1, this.prestige || 1);
-    this.swarmSpeedScale = this.scaleStat(1.0, 0.08) * SPEED_DIFFICULTY; // +8% enemy speed per prestige
-    this.swarmHpScale = this.scaleStat(1.0, 0.20) * DIFFICULTY;          // +20% enemy HP per prestige
+    this.swarmSpeedScale = (this.diff.swarmSpeedMult ?? 1) * SPEED_DIFFICULTY;
+    this.swarmHpScale = (this.diff.swarmHpMult ?? 1) * DIFFICULTY;
     this.swarmDmgScale = DIFFICULTY;
-    this.bossMaxHp = Math.round(this.scaleStat(450, 0.35) * DIFFICULTY);
+    this.bossMaxHp = Math.round(450 * (this.diff.bossHpMult ?? 1) * DIFFICULTY);
 
     // Player Hero Bean
     this.player = {
@@ -586,7 +606,7 @@ export class BeanSurvivors extends Game {
     if (this.spawnTimer <= 0) {
       // Faster, denser swarms as time progresses (+25% overall spawn rate)
       const timeScale = clamp(this.waveTime / 45, 0, 1);
-      this.spawnTimer = Math.max(0.14, (0.85 - timeScale * 0.55) / DIFFICULTY);
+      this.spawnTimer = Math.max(0.14, ((0.85 - timeScale * 0.55) / DIFFICULTY) * (this.diff.spawnPaceScale ?? 1));
 
       // Choose enemy archetype based on round progression
       let type = 'gummyBear';
@@ -1015,16 +1035,17 @@ export class BeanSurvivors extends Game {
     ctx.save();
     ctx.translate(shake.x, shake.y);
 
-    // 1. Dark Confectionery Dungeon Backdrop
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0f0a1c');
-    bg.addColorStop(0.5, '#1b122f');
+    // 1. Studio Confectionery Diorama Backdrop
+    const midY = (Game.SAFE_TOP + Game.SAFE_BOTTOM) * 0.5;
+    const bg = ctx.createRadialGradient(W * 0.5, midY, 40, W * 0.5, midY, W * 0.95);
+    bg.addColorStop(0, '#241842');
+    bg.addColorStop(0.55, '#17102c');
     bg.addColorStop(1, '#0b0816');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // Subtle arena floor grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    // Subtle arena floor tile grid
+    ctx.strokeStyle = 'rgba(196, 181, 253, 0.055)';
     ctx.lineWidth = 1;
     for (let y = Game.SAFE_TOP; y <= Game.SAFE_BOTTOM; y += 40) {
       ctx.beginPath();
@@ -1039,74 +1060,175 @@ export class BeanSurvivors extends Game {
       ctx.stroke();
     }
 
-    // 2. Sugar Gems
+    // 2. Faceted 3D Candy Sugar Gems
     for (const g of this.gems) {
-      ctx.fillStyle = g.color;
+      const r = g.r + 1;
+      const rim = toyRim(g.color, 0.55);
+      const gg = ctx.createLinearGradient(g.x - r, g.y - r, g.x + r, g.y + r);
+      gg.addColorStop(0, shadeColor(g.color, 0.5));
+      gg.addColorStop(0.5, g.color);
+      gg.addColorStop(1, shadeColor(g.color, -0.32));
+      ctx.fillStyle = gg;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 1.3;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r, 0, TAU);
+      ctx.moveTo(g.x, g.y - r * 1.15);
+      ctx.lineTo(g.x + r * 0.95, g.y);
+      ctx.lineTo(g.x, g.y + r * 1.15);
+      ctx.lineTo(g.x - r * 0.95, g.y);
+      ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1.8;
       ctx.stroke();
+
+      // Top crystal facet shine
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.beginPath();
+      ctx.moveTo(g.x, g.y - r * 0.8);
+      ctx.lineTo(g.x - r * 0.45, g.y - r * 0.1);
+      ctx.lineTo(g.x, g.y);
+      ctx.closePath();
+      ctx.fill();
     }
 
-    // 3. Enemies
+    // 3. 3D Vinyl Toy Enemies (Gummy Bears, Sour Bats, Jawbreakers, Behemoth Boss)
     for (const e of this.enemies) {
-      const col = e.hurt > 0 ? '#ffffff' : e.color;
-      ctx.fillStyle = col;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = e.isBoss ? 3.5 : 2.2;
+      const isHurt = e.hurt > 0;
+      const col = isHurt ? '#ffffff' : e.color;
+      const rim = isHurt ? '#94a3b8' : toyRim(e.color, 0.58);
+      const lw = toyLineW(e.r * 2, 0.042, 0.85, 2.3);
 
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, e.r, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      // Soft grounding shadow
+      drawToyShadow(ctx, e.x, e.y + e.r * 0.9, e.r * 0.88, e.r * 0.32, 0.3);
 
-      // Cute/Scary monster eyes
-      ctx.fillStyle = '#ffffff';
-      const eyeDx = (this.player.x - e.x) > 0 ? 3 : -3;
-      ctx.beginPath();
-      ctx.arc(e.x - e.r * 0.35 + eyeDx, e.y - e.r * 0.2, e.r * 0.22, 0, TAU);
-      ctx.arc(e.x + e.r * 0.35 + eyeDx, e.y - e.r * 0.2, e.r * 0.22, 0, TAU);
-      ctx.fill();
+      if (e.isBoss) {
+        // Boss menacing floor aura ring
+        const pulse = 1 + Math.sin(this.waveTime * 5) * 0.08;
+        ctx.fillStyle = 'rgba(239, 35, 60, 0.22)';
+        ctx.beginPath();
+        ctx.ellipse(e.x, e.y + e.r * 0.72, e.r * 1.28 * pulse, e.r * 0.46 * pulse, 0, 0, TAU);
+        ctx.fill();
+      }
 
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.arc(e.x - e.r * 0.35 + eyeDx * 1.5, e.y - e.r * 0.2, e.r * 0.12, 0, TAU);
-      ctx.arc(e.x + e.r * 0.35 + eyeDx * 1.5, e.y - e.r * 0.2, e.r * 0.12, 0, TAU);
-      ctx.fill();
+      // Archetype appendages behind torso
+      if (e.type === 'gummyBear' || e.isBoss) {
+        const earR = e.r * (e.isBoss ? 0.32 : 0.36);
+        const earOffX = e.r * 0.64;
+        const earOffY = -e.r * 0.66;
+        drawToySphere(ctx, e.x - earOffX, e.y + earOffY, earR, col, { rimColor: rim, lineWidth: lw * 0.88, shine: 0.45, bottomBounce: false });
+        drawToySphere(ctx, e.x + earOffX, e.y + earOffY, earR, col, { rimColor: rim, lineWidth: lw * 0.88, shine: 0.45, bottomBounce: false });
+      } else if (e.type === 'sourBat') {
+        const flap = Math.sin(this.waveTime * 15 + e.id) * e.r * 0.42;
+        ctx.fillStyle = isHurt ? '#e2e8f0' : shadeColor(col, -0.15);
+        ctx.strokeStyle = rim;
+        ctx.lineWidth = lw * 0.9;
+        ctx.lineJoin = 'round';
+        [-1, 1].forEach((side) => {
+          ctx.beginPath();
+          ctx.moveTo(e.x + side * e.r * 0.55, e.y - e.r * 0.15);
+          ctx.quadraticCurveTo(e.x + side * e.r * 1.45, e.y - e.r * 0.95 + flap, e.x + side * e.r * 1.65, e.y + e.r * 0.1 + flap * 0.6);
+          ctx.quadraticCurveTo(e.x + side * e.r * 1.1, e.y + e.r * 0.45, e.x + side * e.r * 0.55, e.y + e.r * 0.3);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        });
+      }
+
+      // Main 3D Vinyl Body Sphere
+      drawToySphere(ctx, e.x, e.y, e.r, col, {
+        rimColor: rim,
+        lineWidth: lw,
+        shine: 0.74,
+        bottomBounce: true,
+      });
+
+      // Archetype surface details
+      if (e.type === 'gummyBear') {
+        ctx.fillStyle = isHurt ? '#f8fafc' : shadeColor(e.bellyColor, 0.25);
+        ctx.beginPath();
+        ctx.ellipse(e.x, e.y + e.r * 0.25, e.r * 0.36, e.r * 0.24, 0, 0, TAU);
+        ctx.fill();
+      } else if (e.type === 'jawbreaker') {
+        const spots = ['#ffd166', '#ff70a6', '#ffffff'];
+        for (let sp = 0; sp < 4; sp++) {
+          const ang = e.id * 1.3 + sp * 1.55;
+          ctx.fillStyle = isHurt ? '#e2e8f0' : spots[sp % spots.length];
+          ctx.beginPath();
+          ctx.arc(e.x + Math.cos(ang) * e.r * 0.5, e.y + Math.sin(ang) * e.r * 0.45 + e.r * 0.12, e.r * 0.12, 0, TAU);
+          ctx.fill();
+        }
+      } else if (e.isBoss) {
+        ctx.fillStyle = isHurt ? '#f8fafc' : 'rgba(255, 209, 102, 0.36)';
+        ctx.beginPath();
+        ctx.ellipse(e.x, e.y + e.r * 0.34, e.r * 0.5, e.r * 0.36, 0, 0, TAU);
+        ctx.fill();
+
+        // Boss Golden Crown
+        const crY = e.y - e.r * 0.92;
+        const crW = e.r * 0.55;
+        const cg = ctx.createLinearGradient(e.x - crW, crY - 14, e.x + crW, crY + 6);
+        cg.addColorStop(0, '#fff3b0');
+        cg.addColorStop(0.5, '#ffd166');
+        cg.addColorStop(1, '#d97706');
+        ctx.fillStyle = cg;
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 1.6;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(e.x - crW, crY + 4);
+        ctx.lineTo(e.x - crW * 1.05, crY - 12);
+        ctx.lineTo(e.x - crW * 0.4, crY - 4);
+        ctx.lineTo(e.x, crY - 16);
+        ctx.lineTo(e.x + crW * 0.4, crY - 4);
+        ctx.lineTo(e.x + crW * 1.05, crY - 12);
+        ctx.lineTo(e.x + crW, crY + 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Expressive Toy Eyes
+      const lookX = clamp((this.player.x - e.x) / 90, -0.5, 0.5);
+      const lookY = clamp((this.player.y - e.y) / 90, -0.35, 0.35);
+      drawToyEyes(ctx, e.x, e.y - e.r * 0.14, Math.max(2.2, e.r * 0.22), {
+        spacing: e.r * 0.64,
+        style: isHurt ? 'dizzy' : (e.isBoss || e.type === 'jawbreaker') ? 'angry' : 'bright',
+        lookX,
+        lookY,
+        ink: '#0f172a',
+      });
     }
 
-    // 4. Projectiles (Darts)
+    // 4. Projectiles (3D Candy Darts)
     for (const pr of this.projectiles) {
-      ctx.fillStyle = '#ff70a6';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(pr.x, pr.y, pr.r, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToySphere(ctx, pr.x, pr.y, pr.r, '#ff70a6', {
+        rimColor: toyRim('#ff70a6', 0.56),
+        lineWidth: 1.2,
+        shine: 0.8,
+        bottomBounce: false,
+      });
     }
 
-    // 5. Pop-Rock Lob Arc & Shadows
+    // 5. Pop-Rock Lob Arc, Target Ring & Shadows
     for (const rock of this.popRocks) {
       const k = rock.t / rock.dur;
       const arcH = Math.sin(k * Math.PI) * 55;
       const curX = rock.x + (rock.tx - rock.x) * k;
       const curY = rock.y + (rock.ty - rock.y) * k - arcH;
 
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      // Subtle blast preview ring
+      ctx.strokeStyle = `rgba(255, 209, 102, ${0.22 + k * 0.25})`;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.ellipse(rock.x + (rock.tx - rock.x) * k, rock.y + (rock.ty - rock.y) * k, 8, 4, 0, 0, TAU);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(curX, curY, 7, 0, TAU);
-      ctx.fill();
+      ctx.arc(rock.tx, rock.ty, rock.radius * (0.4 + k * 0.6), 0, TAU);
       ctx.stroke();
+
+      drawToyShadow(ctx, rock.x + (rock.tx - rock.x) * k, rock.y + (rock.ty - rock.y) * k, 8, 4, 0.28);
+      drawToySphere(ctx, curX, curY, 7.5, '#ffd166', {
+        rimColor: '#92400e',
+        lineWidth: 1.3,
+        shine: 0.8,
+      });
     }
 
     // 6. Bubblegum Orbit Shields
@@ -1118,13 +1240,11 @@ export class BeanSurvivors extends Game {
         const orbX = this.player.x + Math.cos(orbAng) * orbit.radius;
         const orbY = this.player.y + Math.sin(orbAng) * orbit.radius;
 
-        ctx.fillStyle = '#ff007f';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(orbX, orbY, 9, 0, TAU);
-        ctx.fill();
-        ctx.stroke();
+        drawToySphere(ctx, orbX, orbY, 9.5, '#ff2d95', {
+          rimColor: toyRim('#ff2d95', 0.52),
+          lineWidth: 1.5,
+          shine: 0.85,
+        });
       }
     }
 
@@ -1188,71 +1308,134 @@ export class BeanSurvivors extends Game {
       ctx.restore();
     }
 
-    // 7. Hero Bean Mascot
+    // 7. Hero Bean Mascot & Grounding Shadow
     const p = this.player;
     const hurtSquash = p.hurtTimer > 0 ? 0.8 : 1.0;
+    const isMoving = Math.hypot(p.vx, p.vy) > 10;
+    drawToyShadow(ctx, p.x, p.y + p.r * 1.12, p.r * 0.95, p.r * 0.36, 0.32);
     drawBean(ctx, p.x, p.y, p.r * 1.35, {
       color: p.hurtTimer > 0 ? '#ff4d6d' : '#3dffa2',
       bellyColor: '#b7efc5',
-      eyes: this.dead ? 'cross' : p.hurtTimer > 0 ? 'squish' : 'happy',
+      dir: p.facing || 1,
+      walkT: isMoving ? this.waveTime * 1.6 : 0,
+      eyes: this.dead ? 'squish' : p.hurtTimer > 0 ? 'squish' : 'happy',
       hat: this.pLevel > 1 ? 'crown' : null,
       squash: hurtSquash,
+      dead: !!this.dead,
     });
 
-    // 8. Player Health Bar (Right beneath the player bean)
-    const hpW = 38;
-    const hpH = 5;
-    const hpRatio = p.hp / p.maxHp;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(p.x - hpW / 2, p.y + p.r + 6, hpW, hpH);
-    ctx.fillStyle = hpRatio > 0.4 ? '#3dffa2' : '#ef233c';
-    ctx.fillRect(p.x - hpW / 2, p.y + p.r + 6, hpW * hpRatio, hpH);
-    ctx.strokeStyle = '#000';
+    // 8. Player Health Pill Bar (Right beneath the player bean)
+    const hpW = 40;
+    const hpH = 6;
+    const hpX = p.x - hpW / 2;
+    const hpY = p.y + p.r + 6;
+    const hpRatio = clamp(p.hp / p.maxHp, 0, 1);
+
+    ctx.fillStyle = '#0f172a';
+    traceRoundRect(ctx, hpX - 1.5, hpY - 1.5, hpW + 3, hpH + 3, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1.2;
-    ctx.strokeRect(p.x - hpW / 2, p.y + p.r + 6, hpW, hpH);
+    ctx.stroke();
+
+    if (hpRatio > 0) {
+      const hpCol = hpRatio > 0.4 ? '#3dffa2' : '#ef233c';
+      const hg = ctx.createLinearGradient(hpX, hpY, hpX, hpY + hpH);
+      hg.addColorStop(0, shadeColor(hpCol, 0.35));
+      hg.addColorStop(1, shadeColor(hpCol, -0.15));
+      ctx.fillStyle = hg;
+      traceRoundRect(ctx, hpX, hpY, Math.max(3, hpW * hpRatio), hpH, 3);
+      ctx.fill();
+    }
 
     // 9. In-Game XP Bar & Level Pill (Drawn just below top safe boundary)
-    const xpBarY = Game.SAFE_TOP + 12;
+    const xpBarY = Game.SAFE_TOP + 15;
     const xpRatio = clamp(this.xp / this.xpNext, 0, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(25, xpBarY, W - 50, 7);
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(25, xpBarY, (W - 50) * xpRatio, 7);
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(25, xpBarY, W - 50, 7);
+    drawToyBevelRect(ctx, 25, xpBarY, W - 50, 9, 4.5, '#0f172a', {
+      depth: 2,
+      rimColor: '#475569',
+      lineWidth: 1.4,
+      gloss: false,
+    });
+    if (xpRatio > 0) {
+      const fillW = Math.max(8, (W - 50) * xpRatio);
+      const xg = ctx.createLinearGradient(25, 0, 25 + fillW, 0);
+      xg.addColorStop(0, '#38bdf8');
+      xg.addColorStop(1, '#3dffa2');
+      ctx.fillStyle = xg;
+      traceRoundRect(ctx, 25, xpBarY, fillW, 9, 4.5);
+      ctx.fill();
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '800 13px Outfit, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      traceRoundRect(ctx, 27, xpBarY + 1.5, Math.max(2, fillW - 4), 2.5, 1.5);
+      ctx.fill();
+    }
+
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
     ctx.textAlign = 'left';
-    ctx.fillText(`LVL ${this.level}`, 25, xpBarY - 4);
+    ctx.strokeText(`LVL ${this.level}`, 25, xpBarY - 5);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`LVL ${this.level}`, 25, xpBarY - 5);
+
     ctx.textAlign = 'right';
-    ctx.fillText(`KILLS: ${this.killCount}`, W - 25, xpBarY - 4);
+    ctx.strokeText(`KILLS: ${this.killCount}`, W - 25, xpBarY - 5);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(`KILLS: ${this.killCount}`, W - 25, xpBarY - 5);
 
     // 10. Boss Health Bar (When Boss is active)
     if (this.boss && !this.boss.dead) {
       const bRatio = clamp(this.boss.hp / this.bossMaxHp, 0, 1);
-      const bBarY = Game.SAFE_TOP + 32;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(40, bBarY, W - 80, 10);
-      ctx.fillStyle = '#ef233c';
-      ctx.fillRect(40, bBarY, (W - 80) * bRatio, 10);
-      ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(40, bBarY, W - 80, 10);
+      const bBarY = Game.SAFE_TOP + 40;
+      drawToyBevelRect(ctx, 38, bBarY, W - 76, 12, 6, '#0f172a', {
+        depth: 2.5,
+        rimColor: '#ffd166',
+        lineWidth: 1.8,
+        gloss: false,
+      });
+      if (bRatio > 0) {
+        const bw = Math.max(10, (W - 76) * bRatio);
+        const bgGrad = ctx.createLinearGradient(38, bBarY, 38 + bw, bBarY + 12);
+        bgGrad.addColorStop(0, '#ff4d6d');
+        bgGrad.addColorStop(1, '#dc2626');
+        ctx.fillStyle = bgGrad;
+        traceRoundRect(ctx, 38, bBarY, bw, 12, 6);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
+        traceRoundRect(ctx, 40, bBarY + 1.5, Math.max(2, bw - 4), 3.5, 2);
+        ctx.fill();
+      }
 
-      ctx.fillStyle = '#ffd166';
-      ctx.font = '900 12px Outfit, system-ui, sans-serif';
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('👑 GUMMY BEHEMOTH 👑', W / 2, bBarY - 4);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      ctx.strokeText('👑 GUMMY BEHEMOTH 👑', W / 2, bBarY - 5);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('👑 GUMMY BEHEMOTH 👑', W / 2, bBarY - 5);
     }
 
-    // 11. Boss Alert Flash
+    // 11. Boss Alert Banner
     if (this.bossAlertTimer > 0) {
-      ctx.fillStyle = `rgba(239, 35, 60, ${0.45 * Math.sin(this.bossAlertTimer * 12)})`;
-      ctx.font = '900 24px Outfit, system-ui, sans-serif';
+      const pulseA = 0.55 + 0.45 * Math.abs(Math.sin(this.bossAlertTimer * 10));
+      ctx.save();
+      ctx.globalAlpha = pulseA;
+      const alertY = (Game.SAFE_TOP + Game.SAFE_BOTTOM) / 2 - 22;
+      drawToyPill(ctx, W / 2 - 140, alertY, 280, 44, '#ef233c', {
+        rimColor: '#ffd166',
+        lineWidth: 2.2,
+        gloss: true,
+      });
+      ctx.font = "700 20px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('⚠️ BOSS INCOMING! ⚠️', W / 2, (Game.SAFE_TOP + Game.SAFE_BOTTOM) / 2);
+      ctx.textBaseline = 'middle';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3.5;
+      ctx.strokeText('⚠️ BOSS INCOMING! ⚠️', W / 2, alertY + 22);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('⚠️ BOSS INCOMING! ⚠️', W / 2, alertY + 22);
+      ctx.restore();
     }
 
     // 12. Current weapon & passive loadout strip
@@ -1266,13 +1449,7 @@ export class BeanSurvivors extends Game {
   }
 
   roundedRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    traceRoundRect(ctx, x, y, w, h, r);
   }
 
   wrapText(ctx, text, maxW) {
@@ -1294,30 +1471,29 @@ export class BeanSurvivors extends Game {
 
   // Compact row at the bottom of the arena showing owned weapons + passives with levels
   drawLoadout(ctx) {
-    const y = Game.SAFE_BOTTOM - 14;
+    const y = Game.SAFE_BOTTOM - 16;
     let x = 24;
     ctx.save();
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
 
     const drawItem = (icon, level, color, size) => {
-      ctx.font = `${size}px system-ui, sans-serif`;
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.beginPath();
-      ctx.arc(x, y, size * 0.78, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.8;
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
+      drawToySphere(ctx, x, y, size * 0.82, '#1e293b', {
+        rimColor: color,
+        lineWidth: 1.8,
+        shine: 0.3,
+        bottomBounce: false,
+      });
+      ctx.font = `${size}px 'Fredoka', 'Outfit', sans-serif`;
+      ctx.fillStyle = '#ffffff';
       ctx.fillText(icon, x, y + 1);
-      ctx.font = '900 10px Outfit, system-ui, sans-serif';
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2.5;
+      ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.8;
       ctx.strokeText(String(level), x + size * 0.7, y + size * 0.65);
+      ctx.fillStyle = '#ffd166';
       ctx.fillText(String(level), x + size * 0.7, y + size * 0.65);
-      x += size * 1.85;
+      x += size * 1.9;
     };
 
     for (const id of Object.keys(this.weapons)) {
@@ -1345,11 +1521,15 @@ export class BeanSurvivors extends Game {
     const top = c.rects[0].y;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
+    ctx.font = "700 30px 'Fredoka', 'Outfit', sans-serif";
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4.5;
+    ctx.strokeText('⭐ LEVEL UP! ⭐', W / 2, top - 46);
     ctx.fillStyle = '#ffd166';
-    ctx.font = '900 30px Outfit, system-ui, sans-serif';
     ctx.fillText('⭐ LEVEL UP! ⭐', W / 2, top - 46);
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.font = '700 13px Outfit, system-ui, sans-serif';
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.font = "600 13px 'Fredoka', 'Outfit', sans-serif";
     const more = this.pendingLevels > 0 ? `  (+${this.pendingLevels} more)` : '';
     ctx.fillText(`Level ${this.level} · tap a card (or ↑ ↓ + Enter)${more}`, W / 2, top - 22);
 
@@ -1368,40 +1548,48 @@ export class BeanSurvivors extends Game {
         ctx.translate(-cx, -cy);
       }
 
-      // Card body
-      this.roundedRect(ctx, r.x, r.y, r.w, r.h, 16);
-      ctx.fillStyle = hot ? 'rgba(52, 36, 98, 0.98)' : 'rgba(27, 19, 54, 0.97)';
-      ctx.fill();
-      ctx.lineWidth = hot ? 4 : 2.5;
-      ctx.strokeStyle = info.color;
-      ctx.shadowColor = info.color;
-      ctx.shadowBlur = hot ? 16 : 6;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      // 3D Toy Bevel Upgrade Card
+      drawToyBevelRect(ctx, r.x, r.y, r.w, r.h, 16, hot ? '#342462' : '#1b1336', {
+        depth: hot ? 5 : 3.5,
+        rimColor: info.color,
+        lineWidth: hot ? 3 : 2,
+        gloss: false,
+      });
 
-      // Icon plate
-      this.roundedRect(ctx, r.x + 12, cy - 35, 70, 70, 14);
-      ctx.fillStyle = 'rgba(255,255,255,0.09)';
+      // Subtle upper specular highlight inside card
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      traceRoundRect(ctx, r.x + 3, r.y + 2, r.w - 6, r.h * 0.28, 13);
       ctx.fill();
+
+      // Beveled Icon Plate
+      drawToyBevelRect(ctx, r.x + 12, cy - 35, 70, 70, 14, '#2a1f4d', {
+        depth: 2.5,
+        rimColor: info.color,
+        lineWidth: 1.6,
+        gloss: true,
+      });
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '40px system-ui, sans-serif';
-      ctx.fillStyle = '#fff';
+      ctx.font = '38px system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
       ctx.fillText(info.icon, r.x + 47, cy + 2);
 
       const tx = r.x + 96;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
+      ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      ctx.strokeText(info.name, tx, r.y + 32);
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 18px Outfit, system-ui, sans-serif';
       ctx.fillText(info.name, tx, r.y + 32);
 
       ctx.fillStyle = info.isNew ? '#ffd166' : info.color;
-      ctx.font = '900 11px Outfit, system-ui, sans-serif';
+      ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(info.tag, tx, r.y + 52);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.82)';
-      ctx.font = '600 13px Outfit, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';
+      ctx.font = "600 13px 'Fredoka', 'Outfit', sans-serif";
       const lines = this.wrapText(ctx, info.desc, r.w - 96 - 16);
       lines.slice(0, 3).forEach((ln, li) => ctx.fillText(ln, tx, r.y + 74 + li * 16));
 

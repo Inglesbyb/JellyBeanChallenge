@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#05050c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Jelly Bean: 60s Challenge — The Arcade Gauntlet</title>
-    <meta name="description" content="Jelly Bean: 60s Challenge. 20 arcade mini-games, 60 seconds each. Survive the clock with Captain Bean to freeze progress and conquer the gauntlet." />
+    <meta name="description" content="Jelly Bean: 60s Challenge. Start with 20 arcade mini-games, 60 seconds each. Earn normalized Reel Points to unlock new 5-game mystery packs!" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
     <link rel="apple-touch-icon" href="/icon-512.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app">
@@ -24,7 +24,6 @@
         <!-- HUD -->
         <div id="hud" class="hidden">
           <div class="hud-top">
-            <div class="pips" id="pips"></div>
             <div class="daily-hud-badge hidden" id="dailyHudBadge">📅 DAILY 1/10</div>
             <div class="score-pill"><span class="bean-ico">🫘</span><span id="score">0</span><small>PTS</small></div>
             <button class="hud-btn" id="btnPause" aria-label="Pause game" title="Pause Game">⏸</button>
@@ -35,101 +34,142 @@
           </div>
           <div class="welcome" id="welcome"></div>
           <div class="prestige-badge hidden" id="prestigeBadge" aria-live="polite"></div>
-          <div class="bottom">
-            <div class="info">
-              <div class="info-title" id="infoTitle"></div>
-              <div class="info-hint" id="infoHint"></div>
-            </div>
-            <div class="actions">
-              <button class="rbtn" id="btnLike" aria-label="Like this game"><span class="ico">♥</span><span class="cnt" id="likeCount">0</span></button>
-              <button class="rbtn" id="btnMute" aria-label="Toggle sound"><span class="ico" id="muteIco">🔊</span></button>
-            </div>
-          </div>
         </div>
 
         <div id="banner" class="banner">
           <div class="banner-title"></div>
           <div class="banner-sub"></div>
         </div>
+        <div id="cueFlash" class="cue-flash" aria-live="polite">
+          <div class="riw-pill" id="riwPill">PRESTIGE 1</div>
+          <div class="riw-game" id="riwGame">🎮 Game Title</div>
+          <div class="riw-cue" id="riwCue">ACTION CUE!</div>
+          <div class="riw-sub" id="riwSub"></div>
+          <div class="riw-deltas" id="riwDeltas"></div>
+        </div>
 
-        <!-- Menu -->
-        <section id="menu" class="overlay">
-          <div class="menu-inner">
-            <div class="eyebrow">60-SECOND SURVIVAL GAUNTLET</div>
-            <h1 class="logo">JELLY BEAN<br /><span class="logo-sub">60s CHALLENGE</span></h1>
-            <p class="tagline">20 arcade games. 60 seconds each.<br />Survive the clock to freeze your progress — die and you're eliminated!</p>
-            <div class="game-icons" id="menuIcons"></div>
-            <ul class="rules">
-              <li><b>⏱</b><span>Every game lasts <em>60 seconds</em>. Survive the countdown to freeze progress and advance.</span></li>
-              <li><b>💀</b><span>Die and that game is <em>ELIMINATED</em> for the duration of the run.</span></li>
-              <li><b>🔁</b><span>Loop back through surviving games with saved progress until <em>no games remain</em>!</span></li>
+        <!-- Menu (Mario-Style Toy Courtyard Plaza) -->
+        <section id="menu" class="overlay plaza-theme">
+          <div class="plaza-backdrop" aria-hidden="true"></div>
+          <canvas id="plazaCanvas" width="450" height="800" aria-label="Interactive Bean Courtyard"></canvas>
+
+          <div class="menu-inner plaza-lobby">
+            <!-- Top Resource Bar -->
+            <header class="home-top-bar plaza-top-bar">
+              <button type="button" class="home-profile-chip plaza-pill" id="btnOpenProfile" aria-label="Open Player Profile">
+                <span class="home-avatar-ring" id="menuPlayerAvatar">
+                  <img src="/assets/lobby/avatar-bean.png" alt="Bean Avatar" class="home-avatar-img" />
+                </span>
+                <span class="home-profile-meta">
+                  <span class="home-player-name" id="menuPlayerName">Bean #429</span>
+                  <span class="home-rank-badge" id="menuPlayerRankChip">Sprout</span>
+                </span>
+              </button>
+
+              <div class="home-res-group">
+                <button type="button" class="home-res-pill plaza-pill stars" id="btnPlazaStars" aria-label="Open World 1 Map">
+                  <span class="hrp-ico">⭐</span>
+                  <span class="hrp-val" id="menuStarsVal">0/15</span>
+                </button>
+                <button type="button" class="home-res-pill plaza-pill rp" id="btnRpPill" aria-label="View Reel Points and Vault">
+                  <span class="hrp-ico">💎</span>
+                  <span class="hrp-val" id="menuRpVal">0</span>
+                </button>
+                <button type="button" class="home-res-pill plaza-pill games" id="btnGamesPill" aria-label="Unlocked Mini-Games">
+                  <span class="hrp-ico">🎮</span>
+                  <span class="hrp-val" id="menuGamesVal">20/25</span>
+                </button>
+                <button type="button" class="home-info-btn plaza-pill" id="btnHowToPlay" aria-label="How to Play" title="How to Play">i</button>
+              </div>
+            </header>
+
+            <!-- Chunky Arcade Logo in Sky -->
+            <div class="plaza-title-wrap">
+              <h1 class="logo plaza-logo">JELLY BEAN<br /><span class="logo-sub">60s CHALLENGE</span></h1>
+            </div>
+
+            <!-- Interactive Diorama Hotspots (synced 1:1 with 450x800 plaza-bg.jpg) -->
+            <div class="plaza-stage-hits" aria-label="Plaza Landmarks">
+              <!-- Emerald Arch: World 1 Overworld -->
+              <button type="button" class="plaza-landmark lm-world1" id="btnPlazaWorld1" aria-label="Enter World 1 Map">
+                <span class="plaza-sign sign-green">WORLD 1</span>
+                <span class="plaza-sign-sub" id="plazaWorldSub">1-1 · 4 REELS</span>
+              </button>
+
+              <!-- Floating Pink Mystery Cube: Daily Challenge -->
+              <button type="button" class="plaza-landmark lm-daily" id="btnPlazaDaily" aria-label="Play Daily Gauntlet">
+                <span class="plaza-sign sign-gold">DAILY <span id="plazaDailyBadge"></span></span>
+              </button>
+
+              <!-- Striped Wardrobe Tent: Bean Closet -->
+              <button type="button" class="plaza-landmark lm-closet" id="btnOpenCloset" aria-label="Open Bean Closet">
+                <span class="plaza-sign sign-cyan">CLOSET</span>
+              </button>
+
+              <!-- Sapphire Treasure Chest: Packs Vault -->
+              <button type="button" class="plaza-landmark lm-vault" id="btnOpenVault" aria-label="Open Vault and Mystery Packs">
+                <span class="plaza-sign sign-blue">VAULT</span>
+                <span class="pack-dot hidden" id="menuPackDot">!</span>
+              </button>
+
+              <!-- Center Golden Stone Pedestal: Tap Hero Bean -->
+              <button type="button" class="plaza-bean-hit" id="homeBeanBtn" aria-label="Tap your Jelly Bean">
+                <span class="sr-only">Tap Jelly Bean</span>
+              </button>
+            </div>
+
+            <!-- Bottom Turquoise Sea Action Area -->
+            <div class="plaza-bottom-deck">
+              <!-- Sleek Next Pack Milestone Strip -->
+              <div class="pack-progress-card plaza-vault-strip" id="packProgressCard" role="button" tabindex="0" aria-label="Open Mystery Packs Progress">
+                <span class="pvs-title" id="packCardTitle">🎁 ARCADE VAULT I</span>
+                <div class="pack-bar-bg">
+                  <div class="pack-bar-fill" id="packCardBarFill" style="width: 0%;"></div>
+                </div>
+                <span class="pvs-pct" id="packCardPct">0%</span>
+                <span class="pvs-pts" id="packCardPts">0 / 25,000 RP</span>
+              </div>
+
+              <!-- Primary CTA Row: World 1 Map + Quick Endless -->
+              <div class="plaza-cta-row">
+                <button type="button" class="btn plaza-world-btn" id="btnEnterWorld1">
+                  <span class="pwb-main">🗺️ WORLD 1 MAP</span>
+                  <span class="pwb-sub" id="btnEnterWorld1Sub">NEXT: 1-1 SNACK STREET</span>
+                </button>
+                <button type="button" class="btn plaza-endless-btn" id="btnPlay" title="Classic Endless Gauntlet across all unlocked reels">
+                  <span>♾️ ENDLESS</span>
+                  <small id="btnEndlessSub">20 REELS</small>
+                </button>
+              </div>
+
+              <!-- Bottom Toy Pill Nav -->
+              <nav class="plaza-bottom-nav" aria-label="Quick Plaza Actions">
+                <button type="button" class="pnav-btn" id="btnOpenPacks"><span>📦</span><small>Packs</small></button>
+                <button type="button" class="pnav-btn" id="btnOpenQuestsPlaza"><span>📜</span><small>Quests</small><span class="nav-dot hidden" id="plazaQuestDot">!</span></button>
+                <button type="button" class="pnav-btn active" id="btnNavHome"><span>🏝️</span><small>Plaza</small></button>
+                <button type="button" class="pnav-btn" id="btnNavDaily"><span>🎲</span><small>Daily</small></button>
+                <button type="button" class="pnav-btn" id="btnMenuSettings"><span>⚙️</span><small>Menu</small></button>
+              </nav>
+            </div>
+          </div>
+        </section>
+
+        <!-- How To Play Modal -->
+        <section id="howToModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="howToTitle">
+          <div class="settings-card howto-card">
+            <div class="settings-header">
+              <div class="settings-title-group">
+                <div class="eyebrow">ARCADE RULES</div>
+                <h2 class="settings-title" id="howToTitle">HOW TO PLAY</h2>
+              </div>
+              <button class="modal-close" id="btnHowToClose" aria-label="Close how to play">✕</button>
+            </div>
+            <ul class="rules howto-rules">
+              <li><b>⏱</b><span><em>60s per game</em> — survive the clock to advance</span></li>
+              <li><b>💀</b><span><em>Die = game cut</em> — survivors keep rolling</span></li>
+              <li><b>🎁</b><span><em>Earn Reel Points (RP)</em> — unlock 5-game mystery packs &amp; Closet drip</span></li>
             </ul>
-
-            <!-- Mode Switcher (TICKET-04) -->
-            <div class="menu-mode-switcher">
-              <button type="button" class="mode-tab active" id="tabModeStandard" data-mode="standard">⚔️ GAUNTLET</button>
-              <button type="button" class="mode-tab" id="tabModeDaily" data-mode="daily">📅 DAILY SEED <span class="daily-tab-streak" id="menuDailyStreakTag">🔥 0</span></button>
-            </div>
-
-            <!-- Standard Mode Content -->
-            <div id="standardMenuContent" class="mode-content">
-              <div class="player-pill" id="btnOpenProfile" role="button" aria-label="Open Player Profile" tabindex="0">
-                <div class="player-avatar-badge" id="menuPlayerAvatar">🫘</div>
-                <div class="player-info">
-                  <div class="player-name-row">
-                    <span class="player-name" id="menuPlayerName">Bean #429</span>
-                    <span class="player-rank-chip" id="menuPlayerRankChip">🌱 Sprout</span>
-                  </div>
-                  <div class="player-stats-mini" id="menuPlayerMiniStats">0 Lifetime PTS · Max Cycle 1</div>
-                </div>
-                <span class="player-pill-ico">⚙️</span>
-              </div>
-              <button class="btn" id="btnPlay">START RUN</button>
-              <button class="btn ghost hidden" id="btnContinue">CONTINUE RUN</button>
-              <button class="link hidden" id="btnNew">Start fresh run</button>
-            </div>
-
-            <!-- Daily Mode Content -->
-            <div id="dailyMenuContent" class="mode-content hidden">
-              <div class="daily-hero-card">
-                <div class="dh-top">
-                  <div class="dh-date-box">
-                    <span class="dh-badge">GLOBAL SEED</span>
-                    <span class="dh-date-str" id="dailyDateStr">NOV 02, 2026</span>
-                  </div>
-                  <div class="dh-streak-chip" id="dailyHeroStreakChip">🔥 0 STREAK</div>
-                </div>
-
-                <div class="dh-status-banner" id="dailyStatusBanner">
-                  <div class="dh-status-icon" id="dailyStatusIcon">🎯</div>
-                  <div class="dh-status-text">
-                    <div class="dh-status-title" id="dailyStatusTitle">10-Stage Seeded Gauntlet</div>
-                    <div class="dh-status-desc" id="dailyStatusDesc">Survive 10 curated games to claim today's medal!</div>
-                  </div>
-                </div>
-
-                <!-- Medal Targets Indicator -->
-                <div class="dh-targets-row">
-                  <div class="dh-target-badge" title="Bronze Medal">🥉 15K</div>
-                  <div class="dh-target-badge" title="Silver Medal">🥈 35K</div>
-                  <div class="dh-target-badge" title="Gold Medal">🥇 60K</div>
-                </div>
-
-                <!-- 10-Game Seed Preview -->
-                <div class="dh-preview-header">
-                  <span>TODAY'S 10-GAME SEQUENCE</span>
-                  <span class="dh-timer" id="dailyResetTimer">⏳ Resets in 08h 15m</span>
-                </div>
-                <div class="daily-preview-icons" id="dailyPreviewIcons"></div>
-
-                <button class="btn daily-play-btn" id="btnStartDaily">PLAY TODAY'S GAUNTLET ▶</button>
-              </div>
-            </div>
-
-            <div class="menu-sub-row">
-              <button class="menu-sub-btn" id="btnOpenCloset" aria-label="Captain Bean Mascot Closet">🎩 CLOSET</button>
-              <button class="menu-sub-btn" id="btnMenuSettings" aria-label="Game Settings">⚙️ SETTINGS</button>
-            </div>
+            <button class="btn" id="btnHowToDone">GOT IT ✓</button>
           </div>
         </section>
 
@@ -144,7 +184,28 @@
               <div class="mult-val" id="sumMult">×1.0</div>
               <div class="mult-sub" id="sumSub"></div>
             </div>
+            <div class="summary-pack-box" id="summaryPackBox">
+              <div class="spb-top">
+                <span id="sumPackTitle">🎁 MYSTERY PACK I</span>
+                <span id="sumPackPts">0 / 25,000 RP</span>
+              </div>
+              <div class="pack-bar-bg">
+                <div class="pack-bar-fill" id="sumPackBarFill" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="summary-world-box hidden" id="summaryWorldBox">
+              <div class="swb-head">
+                <span id="swbNodeTitle">WORLD 1 · 1-1 SNACK STREET</span>
+                <span id="swbNodeGoal">0 / 4,000 PTS</span>
+              </div>
+              <div class="swb-stars" id="swbStars">☆☆☆</div>
+              <div class="pack-bar-bg">
+                <div class="pack-bar-fill" id="swbBarFill" style="width: 0%;"></div>
+              </div>
+              <div class="swb-unlock hidden" id="swbUnlockBanner"></div>
+            </div>
             <button class="btn" id="btnNext">KEEP GOING →</button>
+            <button class="btn ghost hidden" id="btnRetryWorldNode">🔄 RETRY NODE</button>
             <button class="btn ghost share-btn" id="btnShareRun">📸 SHARE RUN POSTER</button>
             <p class="foot" id="sumFoot">Survive cycles and keep your streak alive.</p>
           </div>
@@ -220,6 +281,7 @@
 
             <!-- Modal Action Buttons -->
             <div class="settings-actions">
+              <button class="btn ghost hidden" id="btnOpenAdminFromSettings">🛠️ ADMIN LAUNCHER</button>
               <button class="btn" id="btnResume">RESUME RUN ▶</button>
               <button class="btn ghost danger" id="btnAbandon">ABANDON RUN ✕</button>
             </div>
@@ -427,6 +489,172 @@
 
             <!-- Live Toast Feedback -->
             <div class="share-toast hidden" id="shareToast">Card downloaded to device!</div>
+          </div>
+        </section>
+
+        <!-- Game Packs Vault Modal -->
+        <section id="packsModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="packsTitle">
+          <div class="packs-card">
+            <div class="profile-header">
+              <div class="profile-title-group">
+                <div class="eyebrow">PROGRESSION VAULT</div>
+                <h2 class="profile-title" id="packsTitle">GAME PACKS</h2>
+              </div>
+              <button class="modal-close" id="btnPacksClose" aria-label="Close packs vault">✕</button>
+            </div>
+
+            <div class="packs-balance-pill" id="packsBalancePill">🌟 0 REEL PTS · 20/25 GAMES UNLOCKED</div>
+            <div class="packs-list" id="packsList"></div>
+
+            <button class="btn" id="btnPacksDone">DONE ✓</button>
+          </div>
+        </section>
+
+        <!-- Mystery Pack Unlock & Reveal Modal -->
+        <section id="packRevealModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="packRevealTitle">
+          <div class="pack-reveal-card">
+            <div class="eyebrow" id="packRevealEyebrow">MYSTERY PACK UNLOCKED!</div>
+            <h2 class="pack-reveal-title" id="packRevealTitle">ARCADE VAULT I</h2>
+            <p class="pack-reveal-sub" id="packRevealSub">Tap each mystery card to reveal your 5 new reel games!</p>
+
+            <div class="pack-reveal-grid" id="packRevealGrid"></div>
+
+            <button class="btn" id="btnPackRevealAction">REVEAL ALL ✨</button>
+          </div>
+        </section>
+
+        <!-- World 1 Mario-Style Diorama Overworld Map -->
+        <section id="worldMapOverlay" class="overlay hidden world-map-theme" aria-label="World 1 Overworld Map">
+          <div class="wm-backdrop" aria-hidden="true"></div>
+          <canvas id="worldMapCanvas" width="450" height="800" aria-hidden="true"></canvas>
+
+          <!-- Interactive Diorama Nodes & Collectible Pins -->
+          <div class="wm-pins-layer" id="wmPinsLayer">
+            <button type="button" class="wm-node-btn" data-node="1-1" style="left: 40.9%; top: 79.5%;" aria-label="Stage 1-1 Snack Street">
+              <span class="wm-node-tag"><b class="wnt-code">1-1</b><span class="wnt-stars">☆☆☆</span></span>
+            </button>
+            <button type="button" class="wm-node-btn" data-node="1-2" style="left: 67.6%; top: 65.5%;" aria-label="Stage 1-2 Harbor Drop">
+              <span class="wm-node-tag"><b class="wnt-code">1-2</b><span class="wnt-stars">🔒</span></span>
+            </button>
+            <button type="button" class="wm-node-btn" data-node="1-3" style="left: 31.6%; top: 52.8%;" aria-label="Stage 1-3 Brick District">
+              <span class="wm-node-tag"><b class="wnt-code">1-3</b><span class="wnt-stars">🔒</span></span>
+            </button>
+            <button type="button" class="wm-node-btn" data-node="1-4" style="left: 66.0%; top: 44.5%;" aria-label="Stage 1-4 Skyline Siege">
+              <span class="wm-node-tag"><b class="wnt-code">1-4</b><span class="wnt-stars">🔒</span></span>
+            </button>
+            <button type="button" class="wm-node-btn" data-node="1-5" style="left: 54.0%; top: 25.5%;" aria-label="Stage 1-5 Apex Spire">
+              <span class="wm-node-tag"><b class="wnt-code">1-5</b><span class="wnt-stars">🔒</span></span>
+            </button>
+
+            <button type="button" class="wm-portal-pin" id="btnWorld2Portal" style="left: 40.4%; top: 19.2%;" aria-label="World 2 Portal">
+              <span class="wm-portal-tag" id="wmPortalTag">W2 SOON</span>
+            </button>
+
+            <button type="button" class="wm-chest-pin" id="btnWorldChest" style="left: 84.9%; top: 69.5%;" aria-label="World 1 Star Chest">
+              <span class="wm-chest-ico" id="wmChestIco">🎁</span>
+              <span class="wm-chest-lbl" id="wmChestLbl">5⭐</span>
+            </button>
+          </div>
+
+          <!-- Top HUD & Bottom Selected Node Card -->
+          <div class="menu-inner wm-hud">
+            <div class="wm-top-row">
+              <div class="wm-title-col">
+                <div class="wm-title-banner">WORLD <span>1</span></div>
+                <div class="wm-counters">
+                  <div class="wm-counter"><span class="wmc-ico">🫘</span><span class="wmc-val" id="wmReelsVal">4/20</span></div>
+                  <div class="wm-counter"><span class="wmc-ico">⭐</span><span class="wmc-val" id="wmStarsVal">0/15</span></div>
+                  <div class="wm-counter"><span class="wmc-ico">💎</span><span class="wmc-val" id="wmRpVal">0</span></div>
+                  <div class="wm-counter"><span class="wmc-ico">🔥</span><span class="wmc-val" id="wmBoostVal">×1.0</span></div>
+                </div>
+              </div>
+
+              <div class="wm-top-actions">
+                <button type="button" class="wm-pill-btn" id="btnWorldBackPlaza">🏠 Plaza</button>
+                <button type="button" class="wm-pill-btn" id="btnWorldOpenQuests">📜 Quests <span class="wm-q-dot hidden" id="worldQuestDot">!</span></button>
+                <button type="button" class="wm-pill-btn" id="btnWorldPlayDaily">🎲 Daily</button>
+                <button type="button" class="wm-pill-btn endless" id="btnWorldPlayEndless">♾️ Endless</button>
+              </div>
+            </div>
+
+            <div class="wm-bottom-dock" id="wmBottomDock">
+              <div class="wbd-info">
+                <div class="wbd-head">
+                  <span class="wbd-code" id="wmSelCode">1-1</span>
+                  <span class="wbd-title" id="wmSelTitle">Snack Street</span>
+                  <span class="wbd-reels" id="wmSelReels">4 REELS</span>
+                  <span class="wbd-stars" id="wmSelStars">☆☆☆</span>
+                </div>
+                <div class="wbd-icons" id="wmSelIcons">🌀 🍬 🏰 ⚓</div>
+                <div class="wbd-meta">
+                  <span class="wbd-thresh" id="wmSelThresh">1⭐ 4,000 · 2⭐ 6,000 · 3⭐ 9,500</span>
+                  <span class="wbd-best" id="wmSelBest">BEST: 0</span>
+                </div>
+              </div>
+              <button type="button" class="btn wm-play-btn" id="btnPlayWorldNode">PLAY ▶</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- World 1 Quests & Star Chests Modal -->
+        <section id="questsModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="questsTitle">
+          <div class="packs-card quests-card">
+            <div class="profile-header">
+              <div class="profile-title-group">
+                <div class="eyebrow" id="questsSetEyebrow">SET 1 · PERMANENT BOOST</div>
+                <h2 class="profile-title" id="questsTitle">BEAN QUESTS</h2>
+              </div>
+              <button class="modal-close" id="btnQuestsClose" aria-label="Close quests">✕</button>
+            </div>
+
+            <div class="quests-boost-banner" id="questsBoostBanner">
+              <span class="qbb-left">⚡ QUEST MASTERY MULTIPLIER</span>
+              <span class="qbb-val" id="questsBoostVal">×1.0</span>
+            </div>
+
+            <div class="quests-list" id="questsList"></div>
+
+            <div class="quests-chests-head">🎁 WORLD 1 STAR CHESTS (<span id="questsStarsCount">0/15 ⭐</span>)</div>
+            <div class="quests-chests-row" id="worldChestsRow"></div>
+
+            <button class="btn" id="btnQuestsDone">BACK TO MAP ✓</button>
+          </div>
+        </section>
+
+        <!-- Floating Admin Mode Quick Dock (Hidden unless Admin Mode / Dev active) -->
+        <div class="admin-dock hidden" id="adminDock">
+          <button type="button" class="admin-pill" id="btnAdminPrevQuick" aria-label="Previous Game" title="Previous Game ([)">⏮</button>
+          <button type="button" class="admin-pill" id="btnAdminPill" aria-label="Open Admin Mode">🛠️ ADMIN</button>
+          <button type="button" class="admin-pill" id="btnAdminNextQuick" aria-label="Next Game" title="Next Game (])">⏭</button>
+        </div>
+
+        <!-- Admin Playtester Modal (Browse & Launch Individual Games) -->
+        <section id="adminModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="adminTitle">
+          <div class="admin-card">
+            <div class="profile-header">
+              <div class="profile-title-group">
+                <div class="eyebrow">DEV PLAYTESTER · SHIFT+A · [ / ]</div>
+                <h2 class="profile-title" id="adminTitle">ADMIN LAUNCHER</h2>
+              </div>
+              <button class="modal-close" id="btnAdminClose" aria-label="Close admin mode">✕</button>
+            </div>
+
+            <div class="admin-stepper">
+              <button type="button" class="admin-step-btn" id="btnAdminPrev">⏮ PREV</button>
+              <div class="admin-now-label" id="adminNowLabel">#01 · Void Eater</div>
+              <button type="button" class="admin-step-btn" id="btnAdminNext">NEXT ⏭</button>
+            </div>
+
+            <div class="admin-controls-grid">
+              <button type="button" class="admin-ctrl-btn" id="btnAdminTogglePacks">🔓 UNLOCK ALL</button>
+              <button type="button" class="admin-ctrl-btn" id="btnAdminAddRP">⚡ +10K RP</button>
+              <button type="button" class="admin-ctrl-btn" id="btnAdminToggleTimer">⏱️ TIMER: 60s</button>
+              <button type="button" class="admin-ctrl-btn" id="btnAdminRevive">❤️ REVIVE ALL</button>
+              <button type="button" class="admin-ctrl-btn" id="btnAdminPrestige">★ PRESTIGE +1</button>
+              <button type="button" class="admin-ctrl-btn" id="btnAdminUnlockWorld">🗺️ UNLOCK W1</button>
+            </div>
+
+            <div class="admin-game-list" id="adminGameList"></div>
           </div>
         </section>
       </main>

@@ -1,6 +1,17 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  drawToyEyes,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -106,17 +117,23 @@ export class AgeOfBeans extends Game {
     icon: '⚔️',
     hint: 'SPAWN Jellybean Warriors · DEFEND your fortress · EVOLVE through 5 ERAS!',
     baseLikes: 14200,
+    isPrestige: true,
+    parScore60s: 7800,
     roundLen: 360,
+    cue: 'SPAWN ARMY, CRUSH BASE!',
+    prestigeCue: 'TOUGHER UNITS · FASTER AI!',
+    scaling: {
+      enemyHpMult:    { base: 1.0, rate: 0.18, cap: 1.90, mode: 'up',   label: 'Enemy HP' },
+      aiThinkScale:   { base: 1.0, rate: 0.18, floor: 0.52, mode: 'down', label: 'AI Tempo' },
+    },
   };
 
   init(saved, score = 0) {
     this.meta = AgeOfBeans.meta;
     this.fx = new FX();
     this.score = score;
-    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
     this.pLevel = Math.max(1, this.prestige || 1);
-    // Enemy units gain +25% HP and the AI director thinks faster per prestige level.
-    this.enemyHpMult = 1 + 0.25 * (this.pLevel - 1);
+    this.enemyHpMult = this.diff.enemyHpMult ?? 1;
 
     // Faction Progression (Player = Left / Cyan Team, Enemy = Right / Magenta Team)
     this.playerEra = clamp(saved?.playerEra || 0, 0, ERAS.length - 1);
@@ -998,7 +1015,7 @@ export class AgeOfBeans extends Game {
   updateAiDirector(dt) {
     this.aiThinkTimer -= dt;
     if (this.aiThinkTimer > 0) return;
-    this.aiThinkTimer = (1.2 + Math.random() * 0.8) / (1 + 0.2 * (this.pLevel - 1));
+    this.aiThinkTimer = (1.2 + Math.random() * 0.8) * (this.diff.aiThinkScale ?? 1);
 
     const eEra = this.enemyEra;
     const eraDef = ERAS[eEra];
@@ -1172,12 +1189,21 @@ export class AgeOfBeans extends Game {
     ctx.fillRect(0, 0, this.W, GROUND_Y);
 
     // Soft celestial sun / glowing candy energy orb
-    const sunGlow = ctx.createRadialGradient(this.W * 0.78, 85, 4, this.W * 0.78, 85, 130);
-    sunGlow.addColorStop(0, 'rgba(255, 240, 180, 0.6)');
-    sunGlow.addColorStop(0.4, 'rgba(255, 210, 110, 0.22)');
+    const sx = this.W * 0.78;
+    const sy = 85;
+    const sunGlow = ctx.createRadialGradient(sx, sy, 4, sx, sy, 130);
+    sunGlow.addColorStop(0, 'rgba(255, 240, 180, 0.75)');
+    sunGlow.addColorStop(0.4, 'rgba(255, 210, 110, 0.25)');
     sunGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
     ctx.fillStyle = sunGlow;
     ctx.fillRect(0, 0, this.W, GROUND_Y);
+
+    drawToySphere(ctx, sx, sy, 22, '#fde047', {
+      rimColor: '#ca8a04',
+      lineWidth: 1.2,
+      shine: 0.65,
+      bottomBounce: false,
+    });
   }
 
   renderParallaxBackground(ctx) {
@@ -1189,16 +1215,40 @@ export class AgeOfBeans extends Game {
       const cx = ((c.x - this.camX * 0.08) % wrapW + wrapW) % wrapW - 90;
 
       if (c.type === 'zeppelin') {
-        // Candy Airship
-        ctx.fillStyle = '#ff006e';
+        // 3D Candy Airship
+        const zg = ctx.createRadialGradient(cx - 7 * c.scale, c.y - 4 * c.scale, 2, cx, c.y, 26 * c.scale);
+        zg.addColorStop(0, '#ff758f');
+        zg.addColorStop(0.55, '#ff006e');
+        zg.addColorStop(1, '#9d174d');
+        ctx.fillStyle = zg;
+        ctx.strokeStyle = toyRim('#ff006e', 0.55);
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.ellipse(cx, c.y, 24 * c.scale, 11 * c.scale, 0, 0, TAU);
         ctx.fill();
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(cx - 7 * c.scale, c.y + 7 * c.scale, 14 * c.scale, 4 * c.scale);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
+        ctx.beginPath();
+        ctx.ellipse(cx - 6 * c.scale, c.y - 5 * c.scale, 10 * c.scale, 3 * c.scale, -0.15, 0, TAU);
+        ctx.fill();
+
+        drawToyBevelRect(ctx, cx - 7 * c.scale, c.y + 7 * c.scale, 14 * c.scale, 5 * c.scale, 2 * c.scale, '#ffd166', {
+          depth: 1,
+          rimColor: '#92400e',
+          lineWidth: 1,
+          gloss: false,
+        });
       } else {
-        // Puffy Marshmallow Cloud
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        // Puffy 3D Marshmallow Cloud
+        ctx.fillStyle = 'rgba(219, 234, 254, 0.72)';
+        ctx.beginPath();
+        ctx.arc(cx, c.y + 3 * c.scale, 18 * c.scale, 0, TAU);
+        ctx.arc(cx + 16 * c.scale, c.y - 4 * c.scale, 22 * c.scale, 0, TAU);
+        ctx.arc(cx + 36 * c.scale, c.y + 3 * c.scale, 16 * c.scale, 0, TAU);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
         ctx.beginPath();
         ctx.arc(cx, c.y, 18 * c.scale, 0, TAU);
         ctx.arc(cx + 16 * c.scale, c.y - 7 * c.scale, 22 * c.scale, 0, TAU);
@@ -1210,7 +1260,10 @@ export class AgeOfBeans extends Game {
 
     // --- Layer 2: Distant Pastel Horizons & Royal Liver Clock Tower (Speed 0.16) ---
     ctx.save();
-    ctx.fillStyle = 'rgba(28, 20, 52, 0.42)';
+    const farGrad = ctx.createLinearGradient(0, GROUND_Y - 190, 0, GROUND_Y);
+    farGrad.addColorStop(0, 'rgba(67, 56, 120, 0.52)');
+    farGrad.addColorStop(1, 'rgba(28, 20, 52, 0.42)');
+    ctx.fillStyle = farGrad;
     ctx.beginPath();
     ctx.moveTo(-20, GROUND_Y);
     const farOffset = (this.camX * 0.16) % 400;
@@ -1226,27 +1279,24 @@ export class AgeOfBeans extends Game {
     // Iconic Royal Liver Clock Tower Silhouette
     const tWrap = 650;
     const towerScreenX = ((680 - this.camX * 0.18) % tWrap + tWrap) % tWrap - 80;
-    ctx.fillStyle = 'rgba(38, 28, 68, 0.65)';
-    // Twin clock towers and central hall
+    ctx.fillStyle = 'rgba(46, 35, 82, 0.72)';
     ctx.fillRect(towerScreenX, GROUND_Y - 210, 24, 210);
     ctx.fillRect(towerScreenX + 36, GROUND_Y - 210, 24, 210);
     ctx.fillRect(towerScreenX - 6, GROUND_Y - 140, 72, 140);
-    // Domes
     ctx.beginPath();
     ctx.arc(towerScreenX + 12, GROUND_Y - 218, 12, 0, TAU);
     ctx.arc(towerScreenX + 48, GROUND_Y - 218, 12, 0, TAU);
     ctx.fill();
-    // Glowing Clock dials
-    ctx.fillStyle = '#ffd166';
-    ctx.beginPath();
-    ctx.arc(towerScreenX + 12, GROUND_Y - 180, 6, 0, TAU);
-    ctx.arc(towerScreenX + 48, GROUND_Y - 180, 6, 0, TAU);
-    ctx.fill();
+    drawToySphere(ctx, towerScreenX + 12, GROUND_Y - 180, 6, '#ffd166', { rimColor: '#92400e', lineWidth: 1, bottomBounce: false });
+    drawToySphere(ctx, towerScreenX + 48, GROUND_Y - 180, 6, '#ffd166', { rimColor: '#92400e', lineWidth: 1, bottomBounce: false });
     ctx.restore();
 
     // --- Layer 3: Midground Marzipan Hills & Swirled Lollipop Trees (Speed 0.38) ---
     ctx.save();
-    ctx.fillStyle = 'rgba(44, 32, 74, 0.62)';
+    const hillGrad = ctx.createLinearGradient(0, GROUND_Y - 110, 0, GROUND_Y);
+    hillGrad.addColorStop(0, 'rgba(67, 48, 112, 0.72)');
+    hillGrad.addColorStop(1, 'rgba(30, 22, 54, 0.68)');
+    ctx.fillStyle = hillGrad;
     ctx.beginPath();
     ctx.moveTo(-20, GROUND_Y);
     const midOffset = (this.camX * 0.38) % 320;
@@ -1258,38 +1308,38 @@ export class AgeOfBeans extends Game {
     ctx.lineTo(this.W + 30, GROUND_Y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(196, 181, 253, 0.25)';
+    ctx.lineWidth = 1.8;
     ctx.stroke();
 
-    // Spiral Lollipop Trees along Midground
+    // Spiral 3D Vinyl Lollipop Trees along Midground
     for (let i = 0; i < 4; i++) {
       const treeWrap = this.W + 80;
       const treeScreenX = (((i * 155 + 30) - (this.camX * 0.38)) % treeWrap + treeWrap) % treeWrap - 40;
       const treeY = GROUND_Y - 55 - Math.sin((treeScreenX + midOffset) * 0.016 + 1.2) * 20;
 
-      // White candy stick
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(treeScreenX - 3, treeY, 6, 55);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(treeScreenX - 3, treeY, 6, 55);
+      // White candy stick with soft slate rim
+      drawToyBevelRect(ctx, treeScreenX - 3, treeY, 6, 55, 3, '#f8fafc', {
+        depth: 0,
+        rimColor: '#64748b',
+        lineWidth: 1.2,
+        gloss: false,
+      });
 
-      // Giant Swirled Lollipop head
-      const isPink = i % 2 === 0;
-      ctx.fillStyle = isPink ? '#ff006e' : '#ffd166';
-      ctx.beginPath();
-      ctx.arc(treeScreenX, treeY, 18, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.8;
-      ctx.stroke();
+      // Giant Swirled 3D Lollipop head
+      const headCol = i % 2 === 0 ? '#ff006e' : '#ffd166';
+      drawToySphere(ctx, treeScreenX, treeY, 18, headCol, {
+        rimColor: toyRim(headCol, 0.56),
+        lineWidth: 1.6,
+        shine: 0.55,
+      });
 
       // White spiral icing
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.88)';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
-      ctx.arc(treeScreenX, treeY, 12, 0.3, Math.PI + 0.3);
+      ctx.arc(treeScreenX, treeY, 11.5, 0.3, Math.PI + 0.3);
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(treeScreenX, treeY, 5, 0.8, Math.PI + 0.8);
@@ -1298,12 +1348,17 @@ export class AgeOfBeans extends Game {
       // Candy canes planted along hills
       const caneX = treeScreenX + 32;
       const caneY = treeY + 15;
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#991b1b';
+      ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(caneX, caneY + 28);
       ctx.lineTo(caneX, caneY);
       ctx.arc(caneX - 6, caneY, 6, 0, Math.PI, true);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 3;
       ctx.stroke();
     }
     ctx.restore();
@@ -1315,13 +1370,13 @@ export class AgeOfBeans extends Game {
     // Confectionery Biscuit & Chocolate Bedrock
     const groundGrad = ctx.createLinearGradient(0, GROUND_Y, 0, this.H);
     groundGrad.addColorStop(0, groundColor);
-    groundGrad.addColorStop(0.2, '#382216');
+    groundGrad.addColorStop(0.22, shadeColor(groundColor, -0.45));
     groundGrad.addColorStop(1, '#1a0e08');
     ctx.fillStyle = groundGrad;
     ctx.fillRect(0, GROUND_Y, WORLD_W, this.H - GROUND_Y);
 
     // Biscuit wafer grid pattern
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.strokeStyle = 'rgba(20, 10, 5, 0.22)';
     ctx.lineWidth = 1.5;
     for (let x = 0; x < WORLD_W; x += 32) {
       ctx.beginPath();
@@ -1334,8 +1389,12 @@ export class AgeOfBeans extends Game {
       ctx.stroke();
     }
 
-    // Thick marshmallow frosting glaze with voluptuous drips
-    ctx.fillStyle = '#ffffff';
+    // Thick marshmallow frosting glaze with glossy 3D cream shading
+    const frostGrad = ctx.createLinearGradient(0, GROUND_Y - 2, 0, GROUND_Y + 18);
+    frostGrad.addColorStop(0, '#ffffff');
+    frostGrad.addColorStop(0.65, '#f1f5f9');
+    frostGrad.addColorStop(1, '#cbd5e1');
+    ctx.fillStyle = frostGrad;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
     for (let x = 0; x <= WORLD_W; x += 36) {
@@ -1347,29 +1406,35 @@ export class AgeOfBeans extends Game {
     ctx.lineTo(WORLD_W, GROUND_Y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = toyRim('#cbd5e1', 0.45);
+    ctx.lineWidth = 2.0;
     ctx.stroke();
 
-    // Frosted line edge
-    ctx.fillStyle = '#ffd166';
-    ctx.fillRect(0, GROUND_Y - 2, WORLD_W, 3);
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, GROUND_Y - 2, WORLD_W, 3);
+    // Golden wafer trim edge
+    const trimGrad = ctx.createLinearGradient(0, GROUND_Y - 3, 0, GROUND_Y + 2);
+    trimGrad.addColorStop(0, '#fef08a');
+    trimGrad.addColorStop(1, '#f59e0b');
+    ctx.fillStyle = trimGrad;
+    ctx.fillRect(0, GROUND_Y - 2.5, WORLD_W, 4);
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y + 1.5);
+    ctx.lineTo(WORLD_W, GROUND_Y + 1.5);
+    ctx.stroke();
 
-    // Colorful candy sprinkles on the frosting
+    // Glossy 3D candy sprinkles on the frosting
     const sprinkleColors = ['#ff006e', '#00f5d4', '#ffd166', '#8338ec', '#3a86ff'];
     for (let x = 15; x < WORLD_W; x += 40) {
       const color = sprinkleColors[(x * 7) % sprinkleColors.length];
-      ctx.fillStyle = color;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1.5;
       ctx.save();
-      ctx.translate(x, GROUND_Y + 6);
+      ctx.translate(x, GROUND_Y + 6.5);
       ctx.rotate((x % 9) * 0.3);
-      ctx.fillRect(-3, -1.5, 6, 3);
-      ctx.strokeRect(-3, -1.5, 6, 3);
+      drawToyPill(ctx, -3.5, -2, 7, 4, color, {
+        rimColor: toyRim(color, 0.52),
+        lineWidth: 0.85,
+        gloss: true,
+      });
       ctx.restore();
     }
   }
@@ -1390,20 +1455,24 @@ export class AgeOfBeans extends Game {
     const isPlayer = team === 'player';
     const topY = groundY - h;
 
+    // Grounding base shadow
+    drawToyShadow(ctx, x + w * 0.5, groundY + 3, w * 0.56, 9, 0.3);
+
     if (era === 0) {
       // --- Era 0: Prehistoric Sugar-Geode Cave ---
-      // Luminous high-contrast candy geode formation (never blends with background)
+      const baseCol = isPlayer ? '#0096c7' : '#d90429';
+      const rim = toyRim(baseCol, 0.64);
       const caveGrad = ctx.createLinearGradient(x, topY, x + w, groundY);
       if (isPlayer) {
-        caveGrad.addColorStop(0, '#00f5d4'); // Bright electric cyan crystal spire
-        caveGrad.addColorStop(0.3, '#00b4d8');
-        caveGrad.addColorStop(0.7, '#0077b6');
-        caveGrad.addColorStop(1, '#03045e');
+        caveGrad.addColorStop(0, '#67e8f9');
+        caveGrad.addColorStop(0.32, '#00b4d8');
+        caveGrad.addColorStop(0.72, '#0077b6');
+        caveGrad.addColorStop(1, '#0c4a6e');
       } else {
-        caveGrad.addColorStop(0, '#ff0055'); // Fiery ruby crystal spire
-        caveGrad.addColorStop(0.3, '#d90429');
-        caveGrad.addColorStop(0.7, '#9d0208');
-        caveGrad.addColorStop(1, '#370617');
+        caveGrad.addColorStop(0, '#ff758f');
+        caveGrad.addColorStop(0.32, '#e11d48');
+        caveGrad.addColorStop(0.72, '#9f1239');
+        caveGrad.addColorStop(1, '#4c0519');
       }
       ctx.fillStyle = caveGrad;
       ctx.beginPath();
@@ -1417,36 +1486,33 @@ export class AgeOfBeans extends Game {
       ctx.closePath();
       ctx.fill();
 
-      // Bold cartoon outline around the entire fortress silhouette
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5.5;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.4;
       ctx.lineJoin = 'round';
       ctx.stroke();
 
-      // Sharp crystal facets with cartoon bevels
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
+      // Crystal facet crease & specular shine
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(x + 35, topY - 15);
       ctx.lineTo(x + 50, topY + 50);
       ctx.lineTo(x + 95, topY - 20);
       ctx.stroke();
 
-      // Specular shine line along facet
-      ctx.strokeStyle = isPlayer ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 200, 220, 0.75)';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = isPlayer ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 220, 230, 0.75)';
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.moveTo(x + 37, topY - 10);
       ctx.lineTo(x + 48, topY + 40);
       ctx.stroke();
 
-      // Glowing sugar crystal clusters protruding from the spire
+      // Glowing 3D sugar crystal clusters protruding from spire
       const geodeColors = isPlayer ? ['#00f5d4', '#ffd166', '#70e000', '#ffffff'] : ['#ff006e', '#ff758f', '#ffd166', '#ffbe0b'];
       for (let i = 0; i < 5; i++) {
         const gx = x + 16 + i * 22;
         const gy = topY + 12 + (i % 2) * 16;
         const cColor = geodeColors[i % geodeColors.length];
-        // Crystal Glow
         const cg = ctx.createRadialGradient(gx + 8, gy + 8, 2, gx + 8, gy + 8, 18);
         cg.addColorStop(0, cColor);
         cg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -1455,10 +1521,12 @@ export class AgeOfBeans extends Game {
         ctx.arc(gx + 8, gy + 8, 18, 0, TAU);
         ctx.fill();
 
-        // Crystal Prism with thick black outline
-        ctx.fillStyle = cColor;
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2.8;
+        const pGrad = ctx.createLinearGradient(gx, gy - 10, gx + 16, gy + 22);
+        pGrad.addColorStop(0, shadeColor(cColor, 0.45));
+        pGrad.addColorStop(1, shadeColor(cColor, -0.2));
+        ctx.fillStyle = pGrad;
+        ctx.strokeStyle = toyRim(cColor, 0.56);
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(gx + 8, gy - 10);
         ctx.lineTo(gx + 16, gy + 10);
@@ -1469,44 +1537,42 @@ export class AgeOfBeans extends Game {
         ctx.stroke();
       }
 
-      // Sugar Stalactite Cave Entrance with thick black outline
-      ctx.fillStyle = '#050508';
+      // Sugar Stalactite Cave Entrance
       const gateX = isPlayer ? (x + w - 48) : x + 8;
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
-      ctx.arc(gateX + 20, groundY - 30, 20, Math.PI, 0);
-      ctx.rect(gateX, groundY - 30, 40, 30);
+      ctx.roundRect(gateX, groundY - 50, 40, 50, [20, 20, 0, 0]);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
       ctx.stroke();
 
-      // Glowing Amber Crystal Torch by entrance with black outline
+      // Glowing Amber Crystal Torch by entrance
       const torchX = isPlayer ? (gateX - 8) : (gateX + 48);
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath();
-      ctx.arc(torchX, groundY - 40, 6 + Math.sin(this.time * 8) * 1.5, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
+      drawToySphere(ctx, torchX, groundY - 40, 6 + Math.sin(this.time * 8) * 1.5, '#ffd166', {
+        rimColor: '#92400e',
+        lineWidth: 1.4,
+        shine: 0.78,
+      });
 
     } else if (era === 1) {
       // --- Era 1: Royal Gingerbread & Wafer Keep ---
+      const keepCol = isPlayer ? '#a47148' : '#8b5a2b';
+      const rim = toyRim(keepCol, 0.64);
       const keepGrad = ctx.createLinearGradient(x, topY, x + w, groundY);
-      keepGrad.addColorStop(0, isPlayer ? '#9c6644' : '#7f4f24');
-      keepGrad.addColorStop(1, '#4a2810');
+      keepGrad.addColorStop(0, shadeColor(keepCol, 0.22));
+      keepGrad.addColorStop(0.55, keepCol);
+      keepGrad.addColorStop(1, shadeColor(keepCol, -0.4));
       ctx.fillStyle = keepGrad;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.roundRect(x, topY, w, h, [14, 14, 0, 0]);
       ctx.fill();
-
-      // Thick black cartoon outline around keep
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5.5;
       ctx.stroke();
 
       // White icing brick mortar lines
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
       ctx.lineWidth = 2;
       for (let ly = topY + 24; ly < groundY - 20; ly += 24) {
         ctx.beginPath();
@@ -1515,180 +1581,196 @@ export class AgeOfBeans extends Game {
         ctx.stroke();
       }
 
-      // Peppermint-striped crenellations with thick black outline
+      // 3D Beveled Peppermint-striped crenellations
       for (let bx = 0; bx < w; bx += 22) {
-        ctx.fillStyle = (bx % 44 === 0) ? '#d90429' : '#ffffff';
-        ctx.fillRect(x + bx, topY - 14, 14, 14);
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x + bx, topY - 14, 14, 14);
+        const bCol = (bx % 44 === 0) ? '#e11d48' : '#f8fafc';
+        drawToyBevelRect(ctx, x + bx, topY - 14, 14, 14, 3, bCol, {
+          depth: 2,
+          rimColor: toyRim(bCol, 0.56),
+          lineWidth: 1.4,
+          gloss: true,
+        });
       }
 
       // Royal Swallowtail Pennant Flag
-      ctx.fillStyle = isPlayer ? '#4cc9f0' : '#f72585';
+      const flagCol = isPlayer ? '#38bdf8' : '#f43f5e';
       const flagX = isPlayer ? x + w - 10 : x + 10;
+      ctx.fillStyle = flagCol;
+      ctx.strokeStyle = toyRim(flagCol, 0.58);
+      ctx.lineWidth = 1.6;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(flagX, topY - 32);
       ctx.lineTo(flagX + (isPlayer ? 22 : -22), topY - 24);
       ctx.lineTo(flagX, topY - 16);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.8;
       ctx.stroke();
 
-      // Wafer Drawbridge Portal with thick black outline
-      ctx.fillStyle = '#1a0d00';
+      // Wafer Drawbridge Portal
       const gateX = isPlayer ? (x + w - 40) : x + 6;
+      ctx.fillStyle = '#1e1005';
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
       ctx.roundRect(gateX, groundY - 55, 36, 55, [16, 16, 0, 0]);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
       ctx.stroke();
 
     } else if (era === 2) {
       // --- Era 2: Marzipan Citadel (Albert Dock Sugar-Brick) ---
+      const brickCol = isPlayer ? '#c12f3d' : '#961c28';
+      const rim = toyRim(brickCol, 0.64);
       const brickGrad = ctx.createLinearGradient(x, topY, x + w, groundY);
-      brickGrad.addColorStop(0, isPlayer ? '#b02a37' : '#821822');
-      brickGrad.addColorStop(1, '#440810');
+      brickGrad.addColorStop(0, shadeColor(brickCol, 0.22));
+      brickGrad.addColorStop(0.55, brickCol);
+      brickGrad.addColorStop(1, shadeColor(brickCol, -0.45));
       ctx.fillStyle = brickGrad;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.roundRect(x, topY, w, h, [12, 12, 0, 0]);
       ctx.fill();
-
-      // Thick black cartoon outline
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5.5;
       ctx.stroke();
 
-      // Marzipan Neoclassical Columns with black borders
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x + 10, topY + 18, 12, h - 30);
-      ctx.fillRect(x + w - 22, topY + 18, 12, h - 30);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x + 10, topY + 18, 12, h - 30);
-      ctx.strokeRect(x + w - 22, topY + 18, 12, h - 30);
+      // 3D Beveled Marzipan Neoclassical Columns
+      drawToyBevelRect(ctx, x + 10, topY + 18, 12, h - 30, 3, '#f8fafc', {
+        depth: 0,
+        rimColor: '#64748b',
+        lineWidth: 1.5,
+      });
+      drawToyBevelRect(ctx, x + w - 22, topY + 18, 12, h - 30, 3, '#f8fafc', {
+        depth: 0,
+        rimColor: '#64748b',
+        lineWidth: 1.5,
+      });
 
-      // Verdigris Copper Clock Tower Domes
-      ctx.fillStyle = '#4cc9f0';
+      // Verdigris Copper Clock Tower Dome
+      const dg = ctx.createRadialGradient(x + w / 2 - 4, topY - 16, 2, x + w / 2, topY - 10, 18);
+      dg.addColorStop(0, '#bae6fd');
+      dg.addColorStop(0.5, '#38bdf8');
+      dg.addColorStop(1, '#0284c7');
+      ctx.fillStyle = dg;
+      ctx.strokeStyle = '#075985';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.arc(x + w / 2, topY - 10, 16, Math.PI, 0);
+      ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
       ctx.stroke();
 
       // Golden Clock Dial
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath();
-      ctx.arc(x + w / 2, topY + 22, 11, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.8;
-      ctx.stroke();
-      ctx.fillStyle = '#0b090a';
+      drawToySphere(ctx, x + w / 2, topY + 22, 11, '#ffd166', {
+        rimColor: '#92400e',
+        lineWidth: 1.6,
+        shine: 0.65,
+      });
+      ctx.fillStyle = '#0f172a';
       ctx.fillRect(x + w / 2 - 1.5, topY + 14, 3, 8);
 
       // Gate
-      ctx.fillStyle = '#10002b';
       const gateX = isPlayer ? (x + w - 40) : x + 6;
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
       ctx.roundRect(gateX, groundY - 55, 36, 55, [18, 18, 0, 0]);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
       ctx.stroke();
 
     } else if (era === 3) {
       // --- Era 3: Reinforced Jawbreaker Bunker ---
+      const steelCol = isPlayer ? '#486581' : '#475569';
+      const rim = toyRim(steelCol, 0.64);
       const steelGrad = ctx.createLinearGradient(x, topY, x + w, groundY);
-      steelGrad.addColorStop(0, isPlayer ? '#486581' : '#475569');
-      steelGrad.addColorStop(1, '#102a43');
+      steelGrad.addColorStop(0, shadeColor(steelCol, 0.25));
+      steelGrad.addColorStop(0.55, steelCol);
+      steelGrad.addColorStop(1, '#1e293b');
       ctx.fillStyle = steelGrad;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.roundRect(x, topY, w, h, [10, 10, 0, 0]);
       ctx.fill();
-
-      // Thick black cartoon outline
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5.5;
       ctx.stroke();
 
-      // Steel Rivets
-      ctx.fillStyle = '#f1f5f9';
+      // 3D Steel Rivets
       for (let ry = topY + 14; ry < groundY; ry += 30) {
-        ctx.beginPath();
-        ctx.arc(x + 8, ry, 3, 0, TAU);
-        ctx.arc(x + w - 8, ry, 3, 0, TAU);
-        ctx.fill();
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        drawToySphere(ctx, x + 8, ry, 3.2, '#e2e8f0', { rimColor: '#334155', lineWidth: 1.0, bottomBounce: false });
+        drawToySphere(ctx, x + w - 8, ry, 3.2, '#e2e8f0', { rimColor: '#334155', lineWidth: 1.0, bottomBounce: false });
       }
 
       // Spinning Radar Lollipop Dish on Roof
       const dishX = isPlayer ? x + 25 : x + w - 25;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 3.0;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.arc(dishX, topY - 16, 12, 0.4, Math.PI - 0.4);
       ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(dishX - 2, topY - 10, 4, 10);
-      ctx.strokeRect(dishX - 2, topY - 10, 4, 10);
+      drawToyBevelRect(ctx, dishX - 2.5, topY - 10, 5, 10, 2, '#f8fafc', {
+        depth: 0,
+        rimColor: '#475569',
+        lineWidth: 1.2,
+        gloss: false,
+      });
 
       // Slit armored vision port
-      ctx.fillStyle = '#00f5d4';
-      ctx.fillRect(x + 30, topY + 35, w - 60, 8);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.8;
-      ctx.strokeRect(x + 30, topY + 35, w - 60, 8);
+      drawToyBevelRect(ctx, x + 30, topY + 35, w - 60, 8, 3, '#00f5d4', {
+        depth: 1.5,
+        rimColor: '#0e7490',
+        lineWidth: 1.4,
+        gloss: true,
+      });
 
       // Gate
-      ctx.fillStyle = '#020617';
       const gateX = isPlayer ? (x + w - 40) : x + 6;
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
       ctx.roundRect(gateX, groundY - 55, 36, 55, [8, 8, 0, 0]);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
       ctx.stroke();
 
     } else {
       // --- Era 4: Cyber-Jelly Energy Spire ---
+      const spireCol = isPlayer ? '#0284c7' : '#be123c';
+      const rim = toyRim(spireCol, 0.66);
       const spireGrad = ctx.createLinearGradient(x, topY, x + w, groundY);
-      spireGrad.addColorStop(0, isPlayer ? '#0077b6' : '#9d0208');
-      spireGrad.addColorStop(0.5, isPlayer ? '#023e8a' : '#6a040f');
-      spireGrad.addColorStop(1, '#000814');
+      spireGrad.addColorStop(0, shadeColor(spireCol, 0.28));
+      spireGrad.addColorStop(0.5, spireCol);
+      spireGrad.addColorStop(1, '#0f172a');
       ctx.fillStyle = spireGrad;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.roundRect(x, topY, w, h, [20, 20, 0, 0]);
       ctx.fill();
-
-      // Thick black cartoon outline
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5.5;
       ctx.stroke();
 
       // Pulsing Quantum Jelly Core
       const corePulse = Math.sin(this.time * 5) * 4;
-      const coreGrad = ctx.createRadialGradient(x + w / 2, topY + 50, 4, x + w / 2, topY + 50, 26 + corePulse);
+      const coreCol = isPlayer ? '#00f5d4' : '#ff006e';
+      const coreGrad = ctx.createRadialGradient(x + w / 2, topY + 50, 4, x + w / 2, topY + 50, 28 + corePulse);
       coreGrad.addColorStop(0, '#ffffff');
-      coreGrad.addColorStop(0.5, isPlayer ? '#00f5d4' : '#ff006e');
+      coreGrad.addColorStop(0.5, coreCol);
       coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = coreGrad;
       ctx.beginPath();
-      ctx.arc(x + w / 2, topY + 50, 26 + corePulse, 0, TAU);
+      ctx.arc(x + w / 2, topY + 50, 28 + corePulse, 0, TAU);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+
+      drawToySphere(ctx, x + w / 2, topY + 50, 14 + corePulse * 0.35, coreCol, {
+        rimColor: toyRim(coreCol, 0.5),
+        lineWidth: 1.6,
+        shine: 0.85,
+      });
 
       // Fiber-optic neon circuit traces
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = coreCol;
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(x + 12, groundY - 10);
       ctx.lineTo(x + 22, topY + 80);
@@ -1698,51 +1780,55 @@ export class AgeOfBeans extends Game {
       // Energy Shield Gate
       ctx.fillStyle = isPlayer ? 'rgba(0, 245, 212, 0.4)' : 'rgba(255, 0, 110, 0.4)';
       const gateX = isPlayer ? (x + w - 40) : x + 6;
+      ctx.strokeStyle = coreCol;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
       ctx.roundRect(gateX, groundY - 55, 36, 55, [14, 14, 0, 0]);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
       ctx.stroke();
     }
 
-    // --- Premium Cartoon Fortress Health Bar ---
+    // --- 3D Toy Fortress Health Bar ---
     const barW = 88;
     const barH = 11;
     const barX = x + (w - barW) / 2;
     const barY = topY - 26;
 
-    // Solid cartoon pill container with thick black border
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.roundRect(barX - 4, barY - 4, barW + 8, barH + 8, 8);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, barX - 4, barY - 4, barW + 8, barH + 8, 8, '#0f172a', {
+      depth: 2.5,
+      rimColor: isPlayer ? '#38bdf8' : '#f43f5e',
+      lineWidth: 1.8,
+      gloss: false,
+    });
 
     const hpRatio = clamp(hp / maxHp, 0, 1);
-    const hpGrad = ctx.createLinearGradient(barX, 0, barX + barW * hpRatio, 0);
-    if (isPlayer) {
-      hpGrad.addColorStop(0, '#00f5d4');
-      hpGrad.addColorStop(1, '#06d6a0');
-    } else {
-      hpGrad.addColorStop(0, '#ff0055');
-      hpGrad.addColorStop(1, '#f72585');
-    }
-    ctx.fillStyle = hpGrad;
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW * hpRatio, barH, 4);
-    ctx.fill();
+    if (hpRatio > 0) {
+      const fillW = Math.max(6, barW * hpRatio);
+      const hpGrad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
+      if (isPlayer) {
+        hpGrad.addColorStop(0, '#00f5d4');
+        hpGrad.addColorStop(1, '#06d6a0');
+      } else {
+        hpGrad.addColorStop(0, '#ff4d6d');
+        hpGrad.addColorStop(1, '#f72585');
+      }
+      ctx.fillStyle = hpGrad;
+      traceRoundRect(ctx, barX, barY, fillW, barH, 4);
+      ctx.fill();
 
-    // Text Label with black shadow/outline
-    ctx.font = '900 10px Outfit, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      traceRoundRect(ctx, barX + 1.5, barY + 1.5, Math.max(2, fillW - 3), 3.5, 2);
+      ctx.fill();
+    }
+
+    // Text Label with clean slate outline
+    ctx.font = "700 10.5px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.strokeStyle = '#000000';
+    ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 3;
-    ctx.strokeText(`${Math.ceil(hp)} / ${maxHp}`, barX + barW / 2, barY - 4);
+    ctx.strokeText(`${Math.ceil(hp)} / ${maxHp}`, barX + barW / 2, barY - 6);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${Math.ceil(hp)} / ${maxHp}`, barX + barW / 2, barY - 4);
+    ctx.fillText(`${Math.ceil(hp)} / ${maxHp}`, barX + barW / 2, barY - 6);
 
     ctx.restore();
   }
@@ -1768,76 +1854,29 @@ export class AgeOfBeans extends Game {
     ctx.translate(x, y);
     ctx.scale(dir, 1);
 
-    // Swivel Turret Hub with specular highlight & bold black cartoon stroke
-    const hubGrad = ctx.createRadialGradient(-2, -2, 2, 0, 0, 10);
-    hubGrad.addColorStop(0, '#cbd5e1');
-    hubGrad.addColorStop(1, '#475569');
-    ctx.fillStyle = hubGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, 10, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
+    // 3D Swivel Turret Hub
+    drawToySphere(ctx, 0, 0, 10, '#94a3b8', {
+      rimColor: '#334155',
+      lineWidth: 1.6,
+      shine: 0.72,
+    });
 
-    // Era-Specific Candy Barrel with bold black cartoon strokes
+    // Era-Specific 3D Candy Barrel
     if (era === 0) {
-      // Mammoth bone slingshot
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(0, -3, 16, 6);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(0, -3, 16, 6);
-
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath();
-      ctx.arc(16, 0, 4.5, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, 0, -3.5, 16, 7, 3, '#f8fafc', { depth: 1.5, rimColor: '#64748b', lineWidth: 1.3 });
+      drawToySphere(ctx, 16, 0, 4.5, '#ffd166', { rimColor: '#92400e', lineWidth: 1.2 });
     } else if (era === 1) {
-      // Polished brass ballista
-      ctx.fillStyle = '#ffd166';
-      ctx.fillRect(0, -4, 22, 8);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(0, -4, 22, 8);
-
-      ctx.fillStyle = '#d90429';
-      ctx.fillRect(18, -6, 5, 12);
-      ctx.strokeRect(18, -6, 5, 12);
+      drawToyBevelRect(ctx, 0, -4, 22, 8, 3, '#ffd166', { depth: 1.5, rimColor: '#92400e', lineWidth: 1.3 });
+      drawToyBevelRect(ctx, 18, -6, 5, 12, 2, '#e11d48', { depth: 1, rimColor: '#881337', lineWidth: 1.2 });
     } else if (era === 2) {
-      // Albert dock heavy bombard
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(0, -6, 24, 12);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(0, -6, 24, 12);
-
-      ctx.fillStyle = '#ffd166';
-      ctx.fillRect(16, -7, 6, 14);
-      ctx.strokeRect(16, -7, 6, 14);
+      drawToyBevelRect(ctx, 0, -6, 24, 12, 4, '#334155', { depth: 2, rimColor: '#0f172a', lineWidth: 1.4 });
+      drawToyBevelRect(ctx, 16, -7, 6, 14, 2.5, '#ffd166', { depth: 1.5, rimColor: '#92400e', lineWidth: 1.3 });
     } else if (era === 3) {
-      // Twin flak autocannon
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(0, -6, 26, 4.5);
-      ctx.fillRect(0, 2, 26, 4.5);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.8;
-      ctx.strokeRect(0, -6, 26, 4.5);
-      ctx.strokeRect(0, 2, 26, 4.5);
+      drawToyBevelRect(ctx, 0, -6, 26, 4.5, 2, '#64748b', { depth: 1, rimColor: '#1e293b', lineWidth: 1.2 });
+      drawToyBevelRect(ctx, 0, 2, 26, 4.5, 2, '#64748b', { depth: 1, rimColor: '#1e293b', lineWidth: 1.2 });
     } else {
-      // Quantum Ion Ray Emitter
-      ctx.fillStyle = '#00f5d4';
-      ctx.fillRect(0, -4, 24, 8);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(0, -4, 24, 8);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(24, 0, 5, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, 0, -4, 24, 8, 3.5, '#00f5d4', { depth: 1.5, rimColor: '#0e7490', lineWidth: 1.4 });
+      drawToySphere(ctx, 24, 0, 5, '#ffffff', { rimColor: '#0e7490', lineWidth: 1.3 });
     }
 
     ctx.restore();
@@ -1865,26 +1904,18 @@ export class AgeOfBeans extends Game {
       ctx.translate(u.x, u.y);
       ctx.scale(u.dir * popScale, popScale * (1.0 - deathProgress * 0.3));
 
-      // Pop jelly ghost bubble
-      ctx.fillStyle = isPlayer ? '#38bdf8' : '#f72585';
-      ctx.beginPath();
-      ctx.arc(0, -u.size * 0.8, u.size * 0.5, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
+      const popCol = isPlayer ? '#38bdf8' : '#f72585';
+      drawToySphere(ctx, 0, -u.size * 0.8, u.size * 0.5, popCol, {
+        rimColor: toyRim(popCol, 0.55),
+        lineWidth: toyLineW(u.size, 0.045, 1.0, 2.0),
+        shine: 0.72,
+      });
 
-      // Dizzy eyes 'X X'
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      for (const ex of [-6, 6]) {
-        ctx.beginPath();
-        ctx.moveTo(ex - 3, -u.size * 0.8 - 3);
-        ctx.lineTo(ex + 3, -u.size * 0.8 + 3);
-        ctx.moveTo(ex + 3, -u.size * 0.8 - 3);
-        ctx.lineTo(ex - 3, -u.size * 0.8 + 3);
-        ctx.stroke();
-      }
+      drawToyEyes(ctx, 0, -u.size * 0.8, Math.max(2.4, u.size * 0.14), {
+        spacing: u.size * 0.36,
+        style: 'dizzy',
+        ink: '#0f172a',
+      });
       ctx.restore();
       return;
     }
@@ -1903,12 +1934,12 @@ export class AgeOfBeans extends Game {
 
     if (isWindup) {
       const p = u.attackTime / Math.min(0.24, u.cd * 0.30);
-      bodyAngle = -0.22 * Math.sin(p * Math.PI * 0.5); // Lean back in anticipation
-      bodySquashX = 0.86; // Stretch tall
+      bodyAngle = -0.22 * Math.sin(p * Math.PI * 0.5);
+      bodySquashX = 0.86;
       bodySquashY = 1.22;
     } else if (isStrike) {
-      bodyAngle = 0.32; // Aggressive forward lean
-      bodySquashX = 1.28; // Heavy impact squash
+      bodyAngle = 0.32;
+      bodySquashX = 1.28;
       bodySquashY = 0.78;
     } else if (isRecover) {
       const recP = clamp((u.attackTime - 0.4) / (u.cd - 0.4), 0, 1);
@@ -1922,14 +1953,15 @@ export class AgeOfBeans extends Game {
       bodyAngle = Math.sin(u.walkT * 10) * 0.08;
     }
 
-    // Apply victim recoil squash & knockback
     bodySquashX *= (2 - u.recoilSquash);
     bodySquashY *= u.recoilSquash;
 
-    // Hit-stop shudder jitter
     const shudderX = u.shudderT > 0 ? (Math.random() - 0.5) * 6 : 0;
     const finalX = u.x + (u.lungeX + u.recoilX) * u.dir + shudderX;
     const finalY = u.y - walkBounce;
+
+    // Grounding vinyl diorama shadow
+    drawToyShadow(ctx, finalX, GROUND_Y + 2, u.size * (u.tier === 2 ? 0.92 : 0.56), 5.5, 0.28);
 
     ctx.translate(finalX, finalY);
     ctx.scale(u.dir, 1);
@@ -1940,118 +1972,90 @@ export class AgeOfBeans extends Game {
       this.drawUnitMount(ctx, u, isPlayer);
     }
 
-    // --- JELLYBEAN BODY Silhouettes ---
+    // --- 3D VINYL JELLYBEAN BODY ---
     const size = u.size;
     const bw = size * 0.78 * bodySquashX;
     const bh = size * 1.15 * bodySquashY;
     const by = -size * 0.95;
+    const baseCol = isPlayer ? '#00b4d8' : '#f72585';
+    const rim = toyRim(baseCol, 0.6);
+    const lw = toyLineW(size, 0.042, 0.9, 2.0);
 
-    // Candy Color Gradient (Translucent Gummy look)
-    const bodyGrad = ctx.createLinearGradient(-bw / 2, by - bh / 2, bw / 2, by + bh / 2);
+    // Attached stubby feet for ground units
+    if (u.tier < 2) {
+      const footSwing = isWalking ? Math.sin(u.walkT * 10) * 4 : 0;
+      const footCol = isPlayer ? '#0284c7' : '#be185d';
+      drawToyBevelRect(ctx, -bw * 0.34 + footSwing, by + bh * 0.42, bw * 0.26, 7, 3.5, footCol, {
+        depth: 1,
+        rimColor: rim,
+        lineWidth: lw * 0.85,
+        gloss: false,
+      });
+      drawToyBevelRect(ctx, bw * 0.08 - footSwing, by + bh * 0.42, bw * 0.26, 7, 3.5, footCol, {
+        depth: 1,
+        rimColor: rim,
+        lineWidth: lw * 0.85,
+        gloss: false,
+      });
+    }
+
+    const bodyGrad = ctx.createRadialGradient(-bw * 0.22, by - bh * 0.28, bw * 0.08, 0, by, bh * 0.75);
     if (isPlayer) {
-      bodyGrad.addColorStop(0, '#25e6ff');
-      bodyGrad.addColorStop(0.55, '#0096c7');
+      bodyGrad.addColorStop(0, '#7df9ff');
+      bodyGrad.addColorStop(0.4, '#00b4d8');
       bodyGrad.addColorStop(1, '#023e8a');
     } else {
-      bodyGrad.addColorStop(0, '#ff758f');
-      bodyGrad.addColorStop(0.55, '#f72585');
+      bodyGrad.addColorStop(0, '#ff8fab');
+      bodyGrad.addColorStop(0.4, '#f72585');
       bodyGrad.addColorStop(1, '#7209b7');
     }
 
-    // Pill Body Outline with thick black cartoon stroke
     ctx.fillStyle = bodyGrad;
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.roundRect(-bw / 2, by - bh / 2, bw, bh, bw / 2);
     ctx.fill();
     ctx.stroke();
 
-    // 1. Signature "Bloons Specular Crescent" Forehead Highlight
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    // Soft glossy forehead & belly reflections
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
     ctx.beginPath();
-    ctx.ellipse(-bw * 0.15, by - bh * 0.28, bw * 0.26, bh * 0.12, -0.3, 0, TAU);
+    ctx.ellipse(-bw * 0.14, by - bh * 0.28, bw * 0.26, bh * 0.11, -0.3, 0, TAU);
     ctx.fill();
 
-    // Lower belly gloss sheen
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
     ctx.beginPath();
-    ctx.ellipse(-bw * 0.1, by + bh * 0.15, bw * 0.20, bh * 0.08, -0.2, 0, TAU);
+    ctx.ellipse(-bw * 0.08, by + bh * 0.18, bw * 0.20, bh * 0.08, -0.2, 0, TAU);
     ctx.fill();
 
-    // 2. Animated Expressive Eyes (Combat Glare / Pain Squint / Blinking)
+    // 2. Expressive Toy Eyes (Combat Glare / Pain Squint / Blinking)
     const eyeY = by - bh * 0.08;
+    const isBlinking = (u.blinkT % 3.6) < 0.15;
 
     if (u.hitFlash > 0.15) {
-      // Cartoon Pain Squint '> <'
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(-bw * 0.22, eyeY - 4);
-      ctx.lineTo(-bw * 0.06, eyeY);
-      ctx.lineTo(-bw * 0.22, eyeY + 4);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(bw * 0.22, eyeY - 4);
-      ctx.lineTo(bw * 0.06, eyeY);
-      ctx.lineTo(bw * 0.22, eyeY + 4);
-      ctx.stroke();
-    } else if (isWindup || isStrike) {
-      // Fierce Battle Glare with angled eyebrows
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.ellipse(-bw * 0.12, eyeY, bw * 0.11, bh * 0.11, 0, 0, TAU);
-      ctx.ellipse(bw * 0.14, eyeY, bw * 0.11, bh * 0.11, 0, 0, TAU);
-      ctx.fill();
-
-      // Sharp focused pupils
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(-bw * 0.07, eyeY, bw * 0.055, 0, TAU);
-      ctx.arc(bw * 0.19, eyeY, bw * 0.055, 0, TAU);
-      ctx.fill();
-
-      // Angled eyebrows
+      drawToyEyes(ctx, bw * 0.03, eyeY, Math.max(2.2, bw * 0.11), {
+        spacing: bw * 0.30,
+        style: 'dizzy',
+        ink: '#0f172a',
+      });
+    } else if (isBlinking && !isWindup && !isStrike) {
       ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(-bw * 0.24, eyeY - 7);
-      ctx.lineTo(-bw * 0.04, eyeY - 3);
-      ctx.moveTo(bw * 0.24, eyeY - 3);
-      ctx.lineTo(bw * 0.04, eyeY - 7);
+      ctx.moveTo(-bw * 0.18, eyeY);
+      ctx.lineTo(-bw * 0.04, eyeY);
+      ctx.moveTo(bw * 0.08, eyeY);
+      ctx.lineTo(bw * 0.22, eyeY);
       ctx.stroke();
     } else {
-      const isBlinking = (u.blinkT % 3.6) < 0.15;
-      if (isBlinking) {
-        // Closed Eye Lines
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-bw * 0.18, eyeY);
-        ctx.lineTo(-bw * 0.04, eyeY);
-        ctx.moveTo(bw * 0.08, eyeY);
-        ctx.lineTo(bw * 0.22, eyeY);
-        ctx.stroke();
-      } else {
-        // Big Glossy Ovals with Specular Catchlight
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.ellipse(-bw * 0.12, eyeY, bw * 0.11, bh * 0.13, 0, 0, TAU);
-        ctx.ellipse(bw * 0.14, eyeY, bw * 0.11, bh * 0.13, 0, 0, TAU);
-        ctx.fill();
-
-        ctx.fillStyle = '#0f172a';
-        ctx.beginPath();
-        ctx.arc(-bw * 0.10, eyeY, bw * 0.06, 0, TAU);
-        ctx.arc(bw * 0.16, eyeY, bw * 0.06, 0, TAU);
-        ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(-bw * 0.12, eyeY - 2, 1.5, 0, TAU);
-        ctx.arc(bw * 0.14, eyeY - 2, 1.5, 0, TAU);
-        ctx.fill();
-      }
+      drawToyEyes(ctx, bw * 0.03, eyeY, Math.max(2.4, bw * 0.105), {
+        spacing: bw * 0.30,
+        style: (isWindup || isStrike) ? 'angry' : 'bright',
+        lookX: 0.38,
+        ink: '#0f172a',
+      });
     }
 
     // --- COSTUMES & HATS ---
@@ -2068,21 +2072,26 @@ export class AgeOfBeans extends Game {
       ctx.fill();
     }
 
-    // --- FLOATING HEALTH BAR ---
-    ctx.scale(u.dir, 1); // Reset dir for text
+    // --- FLOATING HEALTH PILL ---
+    ctx.scale(u.dir, 1); // Reset dir for text/bar orientation
     const barW = size * 1.35;
     const barH = 5;
     const barX = -barW / 2;
     const barY = by - bh * 0.72;
 
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
-    ctx.roundRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3, 3);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    traceRoundRect(ctx, barX - 1.5, barY - 1.5, barW + 3, barH + 3, 4);
     ctx.fill();
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     const hpRatio = clamp(u.hp / u.maxHp, 0, 1);
-    ctx.fillStyle = isPlayer ? '#10b981' : '#f72585';
-    ctx.roundRect(barX, barY, barW * hpRatio, barH, 2);
-    ctx.fill();
+    if (hpRatio > 0) {
+      ctx.fillStyle = isPlayer ? '#10b981' : '#f72585';
+      traceRoundRect(ctx, barX, barY, Math.max(2, barW * hpRatio), barH, 2.5);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -2093,7 +2102,7 @@ export class AgeOfBeans extends Game {
     const isStrike = u.attackPhase === 'strike';
 
     if (era === 0) {
-      // Adorable Chubby Gummy T-Rex Mount with Animated Chomp Bite
+      // Adorable Chubby 3D Gummy T-Rex Mount with Animated Chomp Bite
       ctx.save();
       ctx.translate(-6, 0);
 
@@ -2102,25 +2111,27 @@ export class AgeOfBeans extends Game {
       let jawAngle = 0;
 
       if (isWindup) {
-        dinoAngle = -0.25; // Rears back in anticipation!
+        dinoAngle = -0.25;
         dinoLungeX = -8;
-        jawAngle = 0.55; // Jaws drop wide open!
+        jawAngle = 0.55;
       } else if (isStrike) {
-        dinoAngle = 0.32; // Violent forward bite snap!
+        dinoAngle = 0.32;
         dinoLungeX = 18;
-        jawAngle = 0; // Jaws clamp shut!
+        jawAngle = 0;
       }
 
       ctx.translate(dinoLungeX, 0);
       ctx.rotate(dinoAngle);
 
+      const dinoRim = toyRim('#40916c', 0.62);
       const dinoGrad = ctx.createLinearGradient(-26, -35, 26, 0);
-      dinoGrad.addColorStop(0, '#52b788');
+      dinoGrad.addColorStop(0, '#74c69d');
       dinoGrad.addColorStop(0.5, '#40916c');
       dinoGrad.addColorStop(1, '#1b4332');
       ctx.fillStyle = dinoGrad;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.8;
+      ctx.strokeStyle = dinoRim;
+      ctx.lineWidth = 2.0;
+      ctx.lineJoin = 'round';
 
       // Chubby Dino Body
       ctx.beginPath();
@@ -2144,19 +2155,18 @@ export class AgeOfBeans extends Game {
       ctx.fill();
       ctx.stroke();
 
-      // Lower Jaw (Drops open during windup, snaps shut on strike!)
+      // Lower Jaw
       ctx.save();
       ctx.translate(16, -18);
       ctx.rotate(jawAngle);
       ctx.fillStyle = dinoGrad;
+      ctx.strokeStyle = dinoRim;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.roundRect(0, 0, 18, 7, [0, 6, 6, 0]);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
       ctx.stroke();
 
-      // White Sugar Teeth in open/shut jaw
       ctx.fillStyle = '#ffffff';
       for (let tx = 4; tx < 16; tx += 4) {
         ctx.beginPath();
@@ -2167,47 +2177,32 @@ export class AgeOfBeans extends Game {
       }
       ctx.restore();
 
-      // Bloons Specular Highlight on Dino Forehead & Back
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      // Specular Highlights on Dino Forehead & Back
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.58)';
       ctx.beginPath();
-      ctx.ellipse(20, -28, 8, 3.5, -0.2, 0, TAU);
+      ctx.ellipse(20, -28, 8, 3.2, -0.2, 0, TAU);
       ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(-4, -26, 10, 4, 0, 0, TAU);
+      ctx.ellipse(-4, -26, 10, 3.8, 0, 0, TAU);
       ctx.fill();
 
-      // Big Googly Dino Eye (Glaring forward during attack)
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(22, -26, 5.5, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.arc(isWindup ? 22 : 24, -26, 3, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(24.5, -27.5, 1.2, 0, TAU);
-      ctx.fill();
+      // Expressive Dino Toy Eye
+      drawToyEyes(ctx, 22, -26, 4.4, {
+        spacing: 0,
+        style: (isWindup || isStrike) ? 'angry' : 'bright',
+        lookX: isWindup ? 0.15 : 0.45,
+        ink: '#0f172a',
+      });
 
       // Stumpy Dino Legs (Bouncy trot)
       const legBob = Math.sin(u.walkT * 12) * 5;
-      ctx.fillStyle = '#2d6a4f';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.8;
-      ctx.beginPath();
-      ctx.roundRect(-8, -8, 8, 12 + legBob, 4);
-      ctx.roundRect(8, -8, 8, 12 - legBob, 4);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, -8, -8, 8, 12 + legBob, 4, '#2d6a4f', { depth: 1, rimColor: dinoRim, lineWidth: 1.5, gloss: false });
+      drawToyBevelRect(ctx, 8, -8, 8, 12 - legBob, 4, '#2d6a4f', { depth: 1, rimColor: dinoRim, lineWidth: 1.5, gloss: false });
 
       // Tiny arms
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = dinoRim;
+      ctx.lineWidth = 3.0;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(14, -16);
       ctx.lineTo(isStrike ? 24 : 20, isStrike ? -14 : -12);
@@ -2215,29 +2210,30 @@ export class AgeOfBeans extends Game {
 
       ctx.restore();
     } else if (era === 1) {
-      // Caramel Jousting Steed (Rears up on hind legs during attack)
+      // Caramel Jousting Steed
       ctx.save();
       ctx.translate(-6, 0);
 
       let steedAngle = 0;
       let steedLungeX = 0;
       if (isWindup) {
-        steedAngle = -0.36; // Rears up majestically!
+        steedAngle = -0.36;
         steedLungeX = -8;
       } else if (isStrike) {
-        steedAngle = 0.24; // Stomps down hard!
+        steedAngle = 0.24;
         steedLungeX = 18;
       }
       ctx.translate(steedLungeX, 0);
       ctx.rotate(steedAngle);
 
+      const steedRim = toyRim('#b08968', 0.62);
       const steedGrad = ctx.createLinearGradient(-24, -30, 24, 0);
-      steedGrad.addColorStop(0, '#ddb892');
+      steedGrad.addColorStop(0, '#eddcd2');
       steedGrad.addColorStop(0.5, '#b08968');
       steedGrad.addColorStop(1, '#7f5539');
       ctx.fillStyle = steedGrad;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.8;
+      ctx.strokeStyle = steedRim;
+      ctx.lineWidth = 2.0;
 
       // Steed Body
       ctx.beginPath();
@@ -2246,94 +2242,82 @@ export class AgeOfBeans extends Game {
       ctx.stroke();
 
       // Royal Barding Blanket
-      ctx.fillStyle = isPlayer ? '#2563eb' : '#d90429';
-      ctx.fillRect(-14, -20, 28, 14);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(-14, -20, 28, 14);
+      drawToyBevelRect(ctx, -14, -20, 28, 14, 4, isPlayer ? '#2563eb' : '#e11d48', {
+        depth: 1.5,
+        rimColor: isPlayer ? '#1e3a8a' : '#881337',
+        lineWidth: 1.5,
+      });
 
-      // Horse Head & Mane
+      // Horse Head
       ctx.fillStyle = steedGrad;
+      ctx.strokeStyle = steedRim;
+      ctx.lineWidth = 1.9;
       ctx.beginPath();
       ctx.ellipse(22, -25, 13, 9, 0.3, 0, TAU);
       ctx.fill();
       ctx.stroke();
 
-      // Mane
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(16, -30, 6, 0, TAU);
-      ctx.arc(10, -26, 6, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      // Glossy Mane puffs
+      drawToySphere(ctx, 16, -30, 6, '#ffffff', { rimColor: '#94a3b8', lineWidth: 1.2, bottomBounce: false });
+      drawToySphere(ctx, 10, -26, 6, '#ffffff', { rimColor: '#94a3b8', lineWidth: 1.2, bottomBounce: false });
 
+      drawToyEyes(ctx, 25, -26, 3.2, { spacing: 0, style: (isWindup || isStrike) ? 'angry' : 'bright', lookX: 0.4 });
       ctx.restore();
     } else if (era === 2) {
-      // Brass Truffle Cannon Carriage (Hard kickback recoil on strike)
+      // Brass Truffle Cannon Carriage
       ctx.save();
       const recoilX = isStrike ? -14 : (isWindup ? 4 : 0);
       ctx.translate(2 + recoilX, -6);
-      ctx.fillStyle = '#2b1b17';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
+      drawToySphere(ctx, 8, -12, 16, '#3b231c', { rimColor: '#1a0e08', lineWidth: 1.8 });
+      drawToySphere(ctx, 4, 4, 12, '#ffd166', { rimColor: '#92400e', lineWidth: 1.8 });
+      ctx.fillStyle = '#92400e';
       ctx.beginPath();
-      ctx.arc(8, -12, 16, 0, TAU);
+      ctx.arc(4, 4, 4, 0, TAU);
       ctx.fill();
-      ctx.stroke();
-
-      // Chocolate Spoke Wheel
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath();
-      ctx.arc(4, 4, 12, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
       ctx.restore();
     } else if (era === 3) {
-      // Chunky Bubblegum Tank (Barrel recoil & chassis tilt)
+      // Chunky 3D Bubblegum Tank
       ctx.save();
       const tankRecoilX = isStrike ? -12 : (isWindup ? 4 : 0);
       ctx.translate(tankRecoilX, -8);
-      ctx.fillStyle = isPlayer ? '#38bdf8' : '#f72585';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.roundRect(-28, -16, 56, 20, 8);
-      ctx.fill();
-      ctx.stroke();
+      const tankCol = isPlayer ? '#38bdf8' : '#f72585';
+      drawToyBevelRect(ctx, -28, -16, 56, 20, 8, tankCol, {
+        depth: 2.5,
+        rimColor: toyRim(tankCol, 0.58),
+        lineWidth: 1.8,
+      });
 
       // Heavy Treads
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.roundRect(-30, 0, 60, 10, 5);
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
+      drawToyPill(ctx, -30, 0, 60, 10, '#334155', {
+        rimColor: '#0f172a',
+        lineWidth: 1.7,
+        gloss: false,
+      });
 
-      // Long Cannon Barrel (recoils inward on strike)
+      // Long Cannon Barrel
       const barrelRecoil = isStrike ? -8 : 0;
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillRect(10 + barrelRecoil, -12, 28, 6.5);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(10 + barrelRecoil, -12, 28, 6.5);
+      drawToyBevelRect(ctx, 10 + barrelRecoil, -12, 28, 6.5, 3, '#cbd5e1', {
+        depth: 1.5,
+        rimColor: '#334155',
+        lineWidth: 1.5,
+      });
       ctx.restore();
     } else {
-      // Hover Titan Grav-Pads (Lunge jets)
+      // Hover Titan Grav-Pads
       ctx.save();
       const titanLungeX = isStrike ? 16 : (isWindup ? -6 : 0);
       ctx.translate(titanLungeX, 2);
-      ctx.fillStyle = 'rgba(0, 245, 212, 0.45)';
+      ctx.fillStyle = 'rgba(0, 245, 212, 0.52)';
+      ctx.strokeStyle = '#0e7490';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.ellipse(0, 0, 30, 8, 0, 0, TAU);
       ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3.5;
       ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(-6, -2, 14, 3, 0, 0, TAU);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -2342,51 +2326,62 @@ export class AgeOfBeans extends Game {
     const era = u.era;
 
     if (era === 0) {
-      // Tiger/Leopard pelt sash across chest
-      ctx.fillStyle = '#f77f00';
-      ctx.fillRect(-bw * 0.35, by - bh * 0.1, bw * 0.7, 5);
+      drawToyPill(ctx, -bw * 0.35, by - bh * 0.1, bw * 0.7, 5.5, '#f77f00', {
+        rimColor: '#9a3412',
+        lineWidth: 1.0,
+      });
     } else if (era === 1) {
       if (u.tier === 0) {
-        // Silver Knight Helmet Crest
-        ctx.fillStyle = '#cbd5e1';
-        ctx.beginPath();
-        ctx.roundRect(-bw * 0.4, by - bh * 0.55, bw * 0.8, bh * 0.35, [6, 6, 0, 0]);
-        ctx.fill();
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(-bw * 0.1, by - bh * 0.7, bw * 0.2, 8);
+        drawToyBevelRect(ctx, -bw * 0.4, by - bh * 0.55, bw * 0.8, bh * 0.35, 6, '#cbd5e1', {
+          depth: 1.5,
+          rimColor: '#475569',
+          lineWidth: 1.4,
+        });
+        drawToyBevelRect(ctx, -bw * 0.1, by - bh * 0.7, bw * 0.2, 8, 2, '#ffd166', {
+          depth: 0,
+          rimColor: '#92400e',
+          lineWidth: 1.1,
+        });
       } else if (u.tier === 1) {
-        // Robin Hood Cap with Red Feather
         ctx.fillStyle = '#2d6a4f';
+        ctx.strokeStyle = '#14532d';
+        ctx.lineWidth = 1.4;
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(-bw * 0.4, by - bh * 0.35);
         ctx.lineTo(bw * 0.4, by - bh * 0.35);
         ctx.lineTo(-bw * 0.1, by - bh * 0.6);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(bw * 0.1, by - bh * 0.6, 3, 8);
+        ctx.stroke();
+        drawToyPill(ctx, bw * 0.08, by - bh * 0.62, 3.5, 9, '#ef4444', { rimColor: '#991b1b', lineWidth: 0.9 });
       }
     } else if (era === 2) {
-      // Cavalier Plumed Hat
-      ctx.fillStyle = '#1e1b4b';
+      ctx.fillStyle = '#312e81';
+      ctx.strokeStyle = '#1e1b4b';
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.ellipse(0, by - bh * 0.45, bw * 0.6, bh * 0.15, 0, 0, TAU);
       ctx.fill();
-      // White Cotton-Candy Feather Plume
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(bw * 0.25, by - bh * 0.6, 7, 0, TAU);
-      ctx.fill();
+      ctx.stroke();
+      drawToySphere(ctx, bw * 0.25, by - bh * 0.6, 6.5, '#ffffff', { rimColor: '#94a3b8', lineWidth: 1.1, bottomBounce: false });
     } else if (era === 3) {
-      // Camo Combat Helmet
-      ctx.fillStyle = '#4a5759';
+      const hg = ctx.createLinearGradient(0, by - bh * 0.6, 0, by - bh * 0.3);
+      hg.addColorStop(0, '#64748b');
+      hg.addColorStop(1, '#334155');
+      ctx.fillStyle = hg;
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(0, by - bh * 0.35, bw * 0.48, Math.PI, 0);
+      ctx.closePath();
       ctx.fill();
+      ctx.stroke();
     } else {
-      // Cyber Neon Visor
-      ctx.fillStyle = '#00f5d4';
-      ctx.fillRect(-bw * 0.3, by - bh * 0.15, bw * 0.6, 5);
+      drawToyPill(ctx, -bw * 0.32, by - bh * 0.16, bw * 0.64, 6, '#00f5d4', {
+        rimColor: '#0e7490',
+        lineWidth: 1.1,
+      });
     }
   }
 
@@ -2402,14 +2397,13 @@ export class AgeOfBeans extends Game {
     let weaponSlideY = 0;
 
     if (tier === 0) {
-      // Melee Weapon: Big overhead smash, thrust, or slash
       if (isWindup) {
         const p = u.attackTime / Math.min(0.24, u.cd * 0.30);
-        swingAngle = -1.35 * Math.sin(p * Math.PI * 0.5); // Reaches high overhead
+        swingAngle = -1.35 * Math.sin(p * Math.PI * 0.5);
         weaponSlideX = -4;
         weaponSlideY = -6;
       } else if (isStrike) {
-        swingAngle = 1.35; // Sweeps down violently
+        swingAngle = 1.35;
         weaponSlideX = 12;
         weaponSlideY = 4;
       } else if (isRecover) {
@@ -2420,12 +2414,11 @@ export class AgeOfBeans extends Game {
         swingAngle = Math.sin(u.walkT * 10) * 0.12;
       }
     } else if (tier === 1) {
-      // Ranged Weapon: Aim, pull-back & kickback recoil
       if (isWindup) {
-        weaponSlideX = -8; // Pulled taut toward cheek
+        weaponSlideX = -8;
         swingAngle = -0.12;
       } else if (isStrike) {
-        weaponSlideX = 12; // Forward snap / kickback recoil
+        weaponSlideX = 12;
         swingAngle = 0.22;
       } else {
         weaponSlideX = 0;
@@ -2438,60 +2431,29 @@ export class AgeOfBeans extends Game {
     ctx.rotate(swingAngle);
 
     if (tier === 0) {
-      // Melee Weapon
       if (era === 0) {
-        // Mammoth Bone Club with glowing amber resin tip
-        ctx.fillStyle = '#f8fafc';
-        ctx.fillRect(0, -6, 22, 6);
-        ctx.fillStyle = '#d97706';
-        ctx.beginPath();
-        ctx.arc(22, -3, 8, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#ffd166';
-        ctx.beginPath();
-        ctx.arc(20, -4, 3, 0, TAU);
-        ctx.fill();
+        drawToyBevelRect(ctx, 0, -6, 22, 6, 3, '#f8fafc', { depth: 1, rimColor: '#64748b', lineWidth: 1.2 });
+        drawToySphere(ctx, 22, -3, 8, '#d97706', { rimColor: '#78350f', lineWidth: 1.4 });
       } else if (era === 1) {
-        // Sugar Knight Broadsword & Royal Shield
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillRect(0, -4, 26, 5);
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(-2, -8, 5, 13);
-        // Crimson pommel gem
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(-4, -1.5, 3.5, 0, TAU);
-        ctx.fill();
+        drawToyBevelRect(ctx, 0, -4, 26, 5, 2, '#e2e8f0', { depth: 0, rimColor: '#475569', lineWidth: 1.2 });
+        drawToyBevelRect(ctx, -2, -8, 5, 13, 2, '#ffd166', { depth: 0, rimColor: '#92400e', lineWidth: 1.2 });
+        drawToySphere(ctx, -4, -1.5, 3.5, '#ef4444', { rimColor: '#991b1b', lineWidth: 1.0, bottomBounce: false });
       } else if (era === 2) {
-        // Silver Fencing Rapier with gold basket hilt
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillRect(0, -2, 30, 3);
-        ctx.fillStyle = '#ffd166';
-        ctx.beginPath();
-        ctx.arc(0, -0.5, 6, 0, TAU);
-        ctx.fill();
+        drawToyBevelRect(ctx, 0, -2, 30, 3.5, 1.5, '#e2e8f0', { depth: 0, rimColor: '#475569', lineWidth: 1.0 });
+        drawToySphere(ctx, 0, -0.5, 6, '#ffd166', { rimColor: '#92400e', lineWidth: 1.2 });
       } else if (era === 3) {
-        // Tactical Combat Knife / Baton
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(0, -5, 24, 6);
-        ctx.fillStyle = '#38bdf8';
-        ctx.fillRect(20, -5, 4, 6);
+        drawToyBevelRect(ctx, 0, -5, 24, 6, 2.5, '#334155', { depth: 1, rimColor: '#0f172a', lineWidth: 1.2 });
+        drawToyBevelRect(ctx, 20, -5, 4, 6, 1.5, '#38bdf8', { depth: 0, rimColor: '#0369a1', lineWidth: 1.0 });
       } else {
-        // Dual Plasma Energy Katana with glowing cyan blade
-        ctx.fillStyle = '#00f5d4';
-        ctx.fillRect(0, -3.5, 30, 5);
+        drawToyPill(ctx, 0, -4, 30, 5.5, '#00f5d4', { rimColor: '#0e7490', lineWidth: 1.1 });
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, -2, 28, 2);
+        ctx.fillRect(2, -2, 24, 1.8);
       }
     } else if (tier === 1) {
-      // Ranged Weapon
       if (era === 0) {
-        // Forked Slingshot with stretched rubber band
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(0, -6, 14, 4);
-        ctx.fillRect(10, -12, 4, 16);
+        drawToyBevelRect(ctx, 0, -6, 14, 4, 1.5, '#92400e', { depth: 0, rimColor: '#451a03', lineWidth: 1.1 });
+        drawToyBevelRect(ctx, 10, -12, 4, 16, 1.5, '#92400e', { depth: 0, rimColor: '#451a03', lineWidth: 1.1 });
 
-        // Stretched elastic band
         const pullX = isWindup ? -12 : 2;
         ctx.strokeStyle = '#ffd166';
         ctx.lineWidth = 2;
@@ -2501,23 +2463,18 @@ export class AgeOfBeans extends Game {
         ctx.lineTo(12, 4);
         ctx.stroke();
 
-        // Pebble in pouch during windup
         if (isWindup) {
-          ctx.fillStyle = '#94a3b8';
-          ctx.beginPath();
-          ctx.arc(pullX, -4, 4, 0, TAU);
-          ctx.fill();
+          drawToySphere(ctx, pullX, -4, 4, '#94a3b8', { rimColor: '#334155', lineWidth: 1.0, bottomBounce: false });
         }
       } else if (era === 1) {
-        // Peppermint Recurve Bow with drawn bowstring
         const bowBend = isWindup ? 14 : 9;
-        ctx.strokeStyle = '#d90429';
+        ctx.strokeStyle = '#e11d48';
         ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.arc(6, 0, bowBend, -Math.PI / 2, Math.PI / 2);
         ctx.stroke();
 
-        // White bowstring
         const stringPull = isWindup ? -12 : 6;
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
@@ -2527,7 +2484,6 @@ export class AgeOfBeans extends Game {
         ctx.lineTo(6, bowBend);
         ctx.stroke();
 
-        // Arrow nocked during windup
         if (isWindup) {
           ctx.fillStyle = '#ffd166';
           ctx.fillRect(stringPull, -1.5, 20, 3);
@@ -2535,17 +2491,11 @@ export class AgeOfBeans extends Game {
           ctx.fillRect(stringPull + 16, -2.5, 4, 5);
         }
       } else if (era === 2) {
-        // Brass Blunderbuss
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(0, -5, 22, 5);
-        ctx.fillStyle = '#d97706';
-        ctx.fillRect(18, -8, 6, 11);
+        drawToyBevelRect(ctx, 0, -5, 22, 5, 2, '#ffd166', { depth: 0, rimColor: '#92400e', lineWidth: 1.2 });
+        drawToyBevelRect(ctx, 18, -8, 6, 11, 2, '#f59e0b', { depth: 0, rimColor: '#92400e', lineWidth: 1.2 });
       } else if (era === 3) {
-        // Ghillie Sniper Rifle with Target Laser
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(0, -4, 28, 5);
+        drawToyBevelRect(ctx, 0, -4, 28, 5, 2, '#475569', { depth: 0, rimColor: '#0f172a', lineWidth: 1.2 });
         if (isWindup) {
-          // Red targeting laser line locks on!
           ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
           ctx.lineWidth = 1.5;
           ctx.beginPath();
@@ -2554,11 +2504,8 @@ export class AgeOfBeans extends Game {
           ctx.stroke();
         }
       } else {
-        // Particle Energy Blaster
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, -5, 22, 7);
-        ctx.fillStyle = '#00f5d4';
-        ctx.fillRect(20, -4, 7, 5);
+        drawToyBevelRect(ctx, 0, -5, 22, 7, 2.5, '#f8fafc', { depth: 0, rimColor: '#475569', lineWidth: 1.2 });
+        drawToyBevelRect(ctx, 20, -4, 7, 5, 2, '#00f5d4', { depth: 0, rimColor: '#0e7490', lineWidth: 1.0 });
       }
     }
 
@@ -2574,7 +2521,7 @@ export class AgeOfBeans extends Game {
       const isPlayer = p.team === 'player';
 
       if (p.type === 'laser') {
-        // Blinding dual-core laser beam
+        ctx.lineCap = 'round';
         ctx.strokeStyle = isPlayer ? '#00f5d4' : '#ff006e';
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -2586,35 +2533,21 @@ export class AgeOfBeans extends Game {
         ctx.lineWidth = 2;
         ctx.stroke();
       } else if (p.type === 'arrow') {
-        // Peppermint arrow with sugar trail
         const angle = Math.atan2(p.vy, p.vx);
         ctx.translate(p.x, p.y);
         ctx.rotate(angle);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-10, -1.5, 20, 3);
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(-10, -2.5, 4, 5);
+        drawToyPill(ctx, -10, -2, 20, 4, '#ffffff', { rimColor: '#64748b', lineWidth: 0.9, gloss: false });
+        drawToyBevelRect(ctx, 6, -3, 6, 6, 2, '#ef4444', { depth: 0, rimColor: '#991b1b', lineWidth: 0.9, gloss: false });
       } else if (p.type === 'cannonball' || p.type === 'tank_shell') {
-        // Chocolate Truffle Bomb
-        ctx.fillStyle = '#2b1b17';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 7, 0, TAU);
-        ctx.fill();
-        // Sizzling Sparkler Fuse
-        ctx.fillStyle = '#ffd166';
-        ctx.beginPath();
-        ctx.arc(p.x - 3, p.y - 3, 2.5, 0, TAU);
-        ctx.fill();
+        drawToySphere(ctx, p.x, p.y, 7.5, '#3b231c', { rimColor: '#1a0e08', lineWidth: 1.4, shine: 0.65 });
+        drawToySphere(ctx, p.x - 3, p.y - 3, 2.8, '#ffd166', { rimColor: '#d97706', lineWidth: 0.8, bottomBounce: false });
       } else {
-        // Rotating Rainbow Jawbreaker Pebble
-        ctx.fillStyle = isPlayer ? '#ffd166' : '#ff006e';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 4.5, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(p.x - 1.5, p.y - 1.5, 1.5, 0, TAU);
-        ctx.fill();
+        drawToySphere(ctx, p.x, p.y, 5, isPlayer ? '#ffd166' : '#ff006e', {
+          rimColor: toyRim(isPlayer ? '#ffd166' : '#ff006e', 0.55),
+          lineWidth: 1.2,
+          shine: 0.82,
+          bottomBounce: false,
+        });
       }
       ctx.restore();
     }
@@ -2623,7 +2556,6 @@ export class AgeOfBeans extends Game {
   renderSpecialAttacksWorld(ctx) {
     for (const s of this.activeSpecials) {
       if (s.delay > 0) {
-        // Incoming Projectile in Sky
         const t = clamp(1.0 - (s.delay / 0.8), 0, 1);
         const curX = s.startX + (s.targetX - s.startX) * t;
         const curY = s.startY + (GROUND_Y - s.startY) * t;
@@ -2631,19 +2563,19 @@ export class AgeOfBeans extends Game {
         ctx.save();
         try {
           if (s.era === 0) {
-            // Fiery Sugar Asteroid
-            ctx.fillStyle = '#f72585';
-            ctx.beginPath();
-            ctx.arc(curX, curY, 14, 0, TAU);
-            ctx.fill();
-            ctx.fillStyle = '#ffd166';
-            ctx.beginPath();
-            ctx.arc(curX - 3, curY - 3, 7, 0, TAU);
-            ctx.fill();
+            drawToySphere(ctx, curX, curY, 14, '#f72585', {
+              rimColor: '#881337',
+              lineWidth: 1.8,
+              shine: 0.72,
+            });
+            drawToySphere(ctx, curX - 3, curY - 3, 6.5, '#ffd166', {
+              rimColor: '#b45309',
+              lineWidth: 1.0,
+              bottomBounce: false,
+            });
           } else if (s.era === 4) {
-            // Orbital Ion Beam Targeting Reticle
             ctx.strokeStyle = '#00f5d4';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2.4;
             ctx.beginPath();
             ctx.arc(s.targetX, GROUND_Y - 10, 25, 0, TAU);
             ctx.stroke();
@@ -2739,20 +2671,16 @@ export class AgeOfBeans extends Game {
     const rh = 26;
 
     ctx.save();
-    // Glassmorphism Container with subtle cyan/magenta inner tint
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(rx, ry, rw, rh, 7);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, rx, ry, rw, rh, 8, '#0f172a', {
+      depth: 2,
+      rimColor: '#38bdf8',
+      lineWidth: 1.6,
+      gloss: false,
+    });
 
     // Base Blips
-    ctx.fillStyle = '#00f5d4';
-    ctx.fillRect(rx + 5, ry + 5, 6, rh - 10);
-    ctx.fillStyle = '#ff006e';
-    ctx.fillRect(rx + rw - 11, ry + 5, 6, rh - 10);
+    drawToyPill(ctx, rx + 5, ry + 5, 6, rh - 10, '#00f5d4', { rimColor: '#0e7490', lineWidth: 0.8, gloss: false });
+    drawToyPill(ctx, rx + rw - 11, ry + 5, 6, rh - 10, '#ff006e', { rimColor: '#881337', lineWidth: 0.8, gloss: false });
 
     // Units on Mini-Radar
     for (const u of this.units) {
@@ -2769,39 +2697,39 @@ export class AgeOfBeans extends Game {
     const camW = (this.W / WORLD_W) * rw;
     ctx.strokeStyle = '#ffd166';
     ctx.lineWidth = 2;
-    ctx.strokeRect(rx + camLeftRatio * rw, ry + 2, camW, rh - 4);
+    traceRoundRect(ctx, rx + camLeftRatio * rw, ry + 2, camW, rh - 4, 4);
+    ctx.stroke();
 
     ctx.restore();
   }
 
   renderTopHud(ctx) {
     ctx.save();
-    ctx.font = 'bold 14px sans-serif';
+    ctx.font = "700 13.5px 'Fredoka', 'Outfit', sans-serif";
 
-    // Gold Box at y = 78
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 209, 102, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(14, 78, 92, 26, 6);
-    ctx.fill();
-    ctx.stroke();
+    // Gold Box at y = 98
+    drawToyBevelRect(ctx, 14, 98, 92, 26, 8, '#0f172a', {
+      depth: 2,
+      rimColor: '#ffd166',
+      lineWidth: 1.6,
+      gloss: false,
+    });
 
     ctx.fillStyle = '#ffd166';
     ctx.textAlign = 'left';
-    ctx.fillText(`💰 ${Math.floor(this.playerGold)}`, 22, 96);
+    ctx.fillText(`💰 ${Math.floor(this.playerGold)}`, 22, 115.5);
 
-    // XP Box at y = 78
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = 'rgba(6, 214, 160, 0.4)';
-    ctx.beginPath();
-    ctx.roundRect(this.W - 108, 78, 94, 26, 6);
-    ctx.fill();
-    ctx.stroke();
+    // XP Box at y = 98
+    drawToyBevelRect(ctx, this.W - 108, 98, 94, 26, 8, '#0f172a', {
+      depth: 2,
+      rimColor: '#06d6a0',
+      lineWidth: 1.6,
+      gloss: false,
+    });
 
     ctx.fillStyle = '#06d6a0';
     ctx.textAlign = 'right';
-    ctx.fillText(`⭐ ${Math.floor(this.playerXp)}`, this.W - 20, 96);
+    ctx.fillText(`⭐ ${Math.floor(this.playerXp)}`, this.W - 20, 115.5);
 
     ctx.restore();
   }
@@ -2814,35 +2742,35 @@ export class AgeOfBeans extends Game {
     const bw = 90;
     const bh = 34;
 
-    // 3D Cartoon Drop Shadow
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.roundRect(bx, by + 3.5, bw, bh, 10);
-    ctx.fill();
-
-    // Body
     const hpRatio = clamp(this.playerBaseHp / (this.playerBaseMaxHp || 500), 0, 1);
     const isLow = hpRatio < 0.3;
     const underAttack = (this.playerBaseFlashTimer || 0) > 0;
+    const cardCol = underAttack ? '#ef4444' : '#0ea5e9';
 
-    ctx.fillStyle = underAttack ? '#ef4444' : '#0ea5e9';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, 10);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, bx, by, bw, bh, 10, cardCol, {
+      depth: 3,
+      rimColor: toyRim(cardCol, 0.58),
+      lineWidth: 1.8,
+      gloss: true,
+    });
 
-    // Title + Mini Health Bar
-    ctx.font = 'bold 10px sans-serif';
+    // Title + Mini Health Pill
+    ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.4;
+    ctx.strokeText('🏰 BASE', bx + 6, by + 13);
     ctx.fillText('🏰 BASE', bx + 6, by + 13);
 
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(bx + 6, by + 18, bw - 12, 8);
-    ctx.fillStyle = isLow ? '#ef4444' : '#10b981';
-    ctx.fillRect(bx + 7, by + 19, (bw - 14) * hpRatio, 6);
+    ctx.fillStyle = '#0f172a';
+    traceRoundRect(ctx, bx + 6, by + 18, bw - 12, 8, 4);
+    ctx.fill();
+    if (hpRatio > 0) {
+      ctx.fillStyle = isLow ? '#ef4444' : '#10b981';
+      traceRoundRect(ctx, bx + 7, by + 19, Math.max(4, (bw - 14) * hpRatio), 6, 3);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -2853,15 +2781,15 @@ export class AgeOfBeans extends Game {
 
     ctx.save();
 
-    // Chunky Toy Tray Background with bold 3.5px black border
+    // Chunky Toy Tray Background with subtle top highlight bevel
     const bgGrad = ctx.createLinearGradient(0, deckY, 0, this.H);
     bgGrad.addColorStop(0, '#1e293b');
     bgGrad.addColorStop(1, '#0f172a');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, deckY, this.W, deckH);
 
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.moveTo(0, deckY);
     ctx.lineTo(this.W, deckY);
@@ -2885,26 +2813,21 @@ export class AgeOfBeans extends Game {
     const tabH = 34;
 
     const drawTab = (tx, active, label, icon) => {
-      // 3D Cartoon Drop Shadow
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(tx, y + 9, tabW, tabH, 8);
-      ctx.fill();
+      const col = active ? '#2563eb' : '#334155';
+      drawToyBevelRect(ctx, tx, y + 6, tabW, tabH, 9, col, {
+        depth: 2.5,
+        rimColor: active ? '#60a5fa' : '#1e293b',
+        lineWidth: 1.8,
+        gloss: active,
+      });
 
-      // Tab Face
-      ctx.fillStyle = active ? '#2563eb' : '#334155';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.roundRect(tx, y + 6, tabW, tabH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      // Label
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(`${icon} ${label}`, tx + tabW / 2, y + 28);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.6;
+      ctx.strokeText(`${icon} ${label}`, tx + tabW / 2, y + 27);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`${icon} ${label}`, tx + tabW / 2, y + 27);
     };
 
     // Tab 1: Units
@@ -2916,46 +2839,32 @@ export class AgeOfBeans extends Game {
     // Tab 3: Evolve Era
     const nextEraNeeded = ERAS[this.playerEra].evolveXp;
     const canEvolve = (this.playerEra < ERAS.length - 1) && (this.playerXp >= nextEraNeeded);
-    
-    // 3D Drop Shadow
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.roundRect(226, y + 9, 96, tabH, 8);
-    ctx.fill();
-
-    ctx.fillStyle = canEvolve ? '#10b981' : '#1e293b';
-    ctx.strokeStyle = canEvolve ? '#ffd166' : '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(226, y + 6, 96, tabH, 8);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, 226, y + 6, 96, tabH, 9, canEvolve ? '#10b981' : '#1e293b', {
+      depth: 2.5,
+      rimColor: canEvolve ? '#ffd166' : '#334155',
+      lineWidth: 1.8,
+      gloss: canEvolve,
+    });
 
     ctx.fillStyle = canEvolve ? '#ffffff' : '#94a3b8';
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+    ctx.textAlign = 'center';
     ctx.fillText(canEvolve ? '✨ EVOLVE!' : '🔒 EVOLVE', 226 + 48, y + 21);
-    ctx.font = '9px sans-serif';
+    ctx.font = "600 9px 'Fredoka', 'Outfit', sans-serif";
     ctx.fillText(`${Math.floor(this.playerXp)}/${nextEraNeeded}`, 226 + 48, y + 33);
 
     // Tab 4: Special Ability
     const sReady = this.playerSpecialCd <= 0;
     const sDef = ERAS[this.playerEra].special;
-
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.roundRect(330, y + 9, 106, tabH, 8);
-    ctx.fill();
-
-    ctx.fillStyle = sReady ? '#ef4444' : '#1e293b';
-    ctx.strokeStyle = sReady ? '#ffd166' : '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(330, y + 6, 106, tabH, 8);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, 330, y + 6, 106, tabH, 9, sReady ? '#ef4444' : '#1e293b', {
+      depth: 2.5,
+      rimColor: sReady ? '#ffd166' : '#334155',
+      lineWidth: 1.8,
+      gloss: sReady,
+    });
 
     ctx.fillStyle = sReady ? '#ffffff' : '#64748b';
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
     ctx.fillText(sReady ? `${sDef.icon} SUPER!` : `⏳ ${Math.ceil(this.playerSpecialCd)}s`, 330 + 53, y + 27);
   }
 
@@ -2971,71 +2880,46 @@ export class AgeOfBeans extends Game {
       const cardW = btnW - 8;
 
       ctx.save();
-
-      // 3D Cartoon Drop Shadow
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(bx, y + 7.5, cardW, btnH, 12);
-      ctx.fill();
-
-      // Card Face with 2.5px solid black border
-      const cardGrad = ctx.createLinearGradient(bx, y, bx, y + btnH);
-      if (canAfford) {
-        cardGrad.addColorStop(0, '#334155');
-        cardGrad.addColorStop(1, '#1e293b');
-      } else {
-        cardGrad.addColorStop(0, '#1e293b');
-        cardGrad.addColorStop(1, '#0f172a');
-      }
-      ctx.fillStyle = cardGrad;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, y + 4, cardW, btnH, 12);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, bx, y + 4, cardW, btnH, 12, canAfford ? '#2b3a52' : '#161e2e', {
+        depth: 3.5,
+        rimColor: canAfford ? '#38bdf8' : '#334155',
+        lineWidth: 1.8,
+        gloss: false,
+      });
 
       // Top Specular Highlight Curve
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.beginPath();
-      ctx.roundRect(bx + 2, y + 6, cardW - 4, (btnH - 8) * 0.38, [10, 10, 0, 0]);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      traceRoundRect(ctx, bx + 2, y + 6, cardW - 4, (btnH - 8) * 0.34, 10);
       ctx.fill();
 
       // Unit Icon
       const iconCenterX = bx + cardW / 2;
       const iconCenterY = y + 28;
 
-      ctx.font = '24px sans-serif';
+      ctx.font = '24px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(u.icon, iconCenterX, iconCenterY + 8);
 
       // Name
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillStyle = '#ffffff';
       ctx.fillText(u.name, iconCenterX, y + 52);
 
       // Stat Badges
-      ctx.font = '10px sans-serif';
+      ctx.font = "600 10px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(`HP ${u.hp} · ⚔️ ${u.dmg}`, iconCenterX, y + 67);
 
-      // Juicy Candy Gold Badge with 3D drop shadow
+      // Juicy Candy Gold Pill Badge
       const badgeY = y + 74;
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(iconCenterX - 34, badgeY + 1.5, 68, 18, 9);
-      ctx.fill();
+      drawToyPill(ctx, iconCenterX - 34, badgeY, 68, 18, canAfford ? '#fbbf24' : '#475569', {
+        rimColor: canAfford ? '#92400e' : '#334155',
+        lineWidth: 1.4,
+        gloss: canAfford,
+      });
 
-      ctx.fillStyle = canAfford ? '#fbbf24' : '#475569';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(iconCenterX - 34, badgeY, 68, 18, 9);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = canAfford ? '#000000' : '#94a3b8';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = canAfford ? '#0f172a' : '#cbd5e1';
+      ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
       ctx.fillText(`💰 ${u.cost}`, iconCenterX, badgeY + 13);
 
       ctx.restore();
@@ -3044,21 +2928,24 @@ export class AgeOfBeans extends Game {
     // Training Queue Progress Bar
     if (this.playerQueue.length > 0) {
       ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'left';
       ctx.fillText(`TRAINING (${this.playerQueue.length}/5):`, 20, y + 120);
 
       const qBarW = this.W - 175;
       const ratio = clamp(this.playerQueueTimer / this.playerQueue[0].buildTime, 0, 1);
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(150, y + 112, qBarW, 11, 5);
-      ctx.fill();
+      drawToyBevelRect(ctx, 150, y + 112, qBarW, 11, 5.5, '#0f172a', {
+        depth: 1.5,
+        rimColor: '#334155',
+        lineWidth: 1.2,
+        gloss: false,
+      });
 
-      ctx.fillStyle = '#10b981';
-      ctx.beginPath();
-      ctx.roundRect(151, y + 113, (qBarW - 2) * ratio, 9, 4);
-      ctx.fill();
+      if (ratio > 0) {
+        ctx.fillStyle = '#10b981';
+        traceRoundRect(ctx, 151, y + 113, Math.max(6, (qBarW - 2) * ratio), 9, 4.5);
+        ctx.fill();
+      }
     }
   }
 
@@ -3072,50 +2959,44 @@ export class AgeOfBeans extends Game {
       const bx = 16 + i * slotW;
       const cardW = slotW - 8;
 
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(bx, y + 7.5, cardW, btnH, 12);
-      ctx.fill();
-
-      ctx.fillStyle = '#1e293b';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, y + 4, cardW, btnH, 12);
-      ctx.fill();
-      ctx.stroke();
+      drawToyBevelRect(ctx, bx, y + 4, cardW, btnH, 12, '#1e293b', {
+        depth: 3.5,
+        rimColor: slot.turretEra !== null ? '#10b981' : '#334155',
+        lineWidth: 1.8,
+        gloss: false,
+      });
 
       ctx.textAlign = 'center';
 
       if (!slot.unlocked) {
         const cost = (i === 1) ? 250 : 600;
-        ctx.font = '24px sans-serif';
+        ctx.font = '24px system-ui, sans-serif';
         ctx.fillText('🔒', bx + cardW / 2, y + 34);
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
         ctx.fillStyle = '#ffffff';
         ctx.fillText(`UNLOCK #${i + 1}`, bx + cardW / 2, y + 54);
         ctx.fillStyle = '#ffd166';
         ctx.fillText(`💰 ${cost}`, bx + cardW / 2, y + 78);
       } else if (slot.turretEra === null) {
-        ctx.font = '24px sans-serif';
+        ctx.font = '24px system-ui, sans-serif';
         ctx.fillText('➕', bx + cardW / 2, y + 34);
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
         ctx.fillStyle = '#ffffff';
         ctx.fillText(`BUILD ${eraTurret.name}`, bx + cardW / 2, y + 54);
         ctx.fillStyle = '#ffd166';
         ctx.fillText(`💰 ${eraTurret.cost}`, bx + cardW / 2, y + 78);
       } else {
         const tDef = ERAS[slot.turretEra].turret;
-        ctx.font = '24px sans-serif';
+        ctx.font = '24px system-ui, sans-serif';
         ctx.fillText('🏹', bx + cardW / 2, y + 34);
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
         ctx.fillStyle = '#10b981';
         ctx.fillText(tDef.name, bx + cardW / 2, y + 54);
-        ctx.font = '10px sans-serif';
+        ctx.font = "600 10px 'Fredoka', 'Outfit', sans-serif";
         ctx.fillStyle = '#94a3b8';
         ctx.fillText(`DMG: ${tDef.dmg}`, bx + cardW / 2, y + 68);
-        ctx.font = 'bold 10px sans-serif';
-        ctx.fillStyle = '#f59e0b';
+        ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
+        ctx.fillStyle = '#fbbf24';
         ctx.fillText('TAP TO SELL', bx + cardW / 2, y + 84);
       }
     }

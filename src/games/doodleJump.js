@@ -1,6 +1,16 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  drawToyEyes,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const GRAVITY = 1150;
@@ -20,6 +30,15 @@ export class DoodleJump extends Game {
     icon: '🦘',
     hint: 'A/D or DRAG to steer · BOUNCE on platforms · TAP to shoot monsters · grab Jetpacks!',
     baseLikes: 5840,
+    isPrestige: false,
+    parScore60s: 1800,
+    cue: 'BOUNCE HIGHER!',
+    prestigeCue: 'MORE MONSTERS · FASTER PLATFORMS!',
+    scaling: {
+      platSpeedMult: { base: 1.0, rate: 0.16, cap: 1.60, mode: 'up', label: 'Platform Speed' },
+      movingBonus:   { base: 0.0, rate: 0.18, cap: 0.20, mode: 'up', deltaFormat: 'abs', unit: '%', label: 'Moving Plats' },
+      monsterMult:   { base: 1.0, rate: 0.18, cap: 1.65, mode: 'up', label: 'Monsters' },
+    },
   };
 
   init(saved, score = 0) {
@@ -119,9 +138,9 @@ export class DoodleJump extends Game {
     let type = 'standard';
     let item = null;
 
-    if (roll < 0.22 + diff * 0.25) {
+    if (roll < 0.22 + diff * 0.25 + (this.diff.movingBonus || 0)) {
       type = 'moving';
-    } else if (roll < 0.35 + diff * 0.15) {
+    } else if (roll < 0.35 + diff * 0.15 + (this.diff.movingBonus || 0) * 0.5) {
       type = 'brittle';
     } else if (roll < 0.45 + diff * 0.1) {
       type = 'vanishing';
@@ -152,15 +171,15 @@ export class DoodleJump extends Game {
       broken: false,
       breakProgress: 0,
       squishT: 0,
-      vx: type === 'moving' ? (Math.random() < 0.5 ? 1 : -1) * rand(85, 140) : 0,
-      vy: type === 'vertical' ? (Math.random() < 0.5 ? 1 : -1) * rand(55, 95) : 0,
+      vx: type === 'moving' ? (Math.random() < 0.5 ? 1 : -1) * rand(85, 140) * (this.diff.platSpeedMult ?? 1) : 0,
+      vy: type === 'vertical' ? (Math.random() < 0.5 ? 1 : -1) * rand(55, 95) * (this.diff.platSpeedMult ?? 1) : 0,
       startY: y,
       rangeY: 50,
     };
     this.platforms.push(plat);
 
     // Chance to spawn Monster above platform
-    if (Math.random() < 0.11 + diff * 0.18 && y < this.H - 350) {
+    if (Math.random() < (0.11 + diff * 0.18) * (this.diff.monsterMult ?? 1) && y < this.H - 350) {
       const mx = clamp(px + pw / 2 + rand(-60, 60), 45, this.W - 45);
       const my = y - rand(60, 100);
       if (!this.monsters.some((m) => Math.hypot(m.x - mx, m.y - my) < 95)) {
@@ -170,7 +189,7 @@ export class DoodleJump extends Game {
           r: 24,
           type: Math.random() < 0.38 ? 'ufo' : 'goblin',
           color: Math.random() < 0.5 ? '#f43f5e' : '#8b5cf6',
-          vx: Math.random() < 0.5 ? 40 : -40,
+          vx: (Math.random() < 0.5 ? 40 : -40) * (this.diff.platSpeedMult ?? 1),
           hp: 1,
           rot: 0,
         });
@@ -178,7 +197,7 @@ export class DoodleJump extends Game {
     }
 
     // Occasional Cosmic Black Hole hazard
-    if (Math.random() < 0.04 + diff * 0.05 && y < -700) {
+    if (Math.random() < (0.04 + diff * 0.05) * (this.diff.monsterMult ?? 1) && y < -700) {
       const bx = rand(70, this.W - 70);
       const by = y - rand(75, 115);
       this.blackHoles.push({
@@ -637,18 +656,18 @@ export class DoodleJump extends Game {
       if (m.hp > 0) this.drawMonster(m, ctx);
     }
 
-    // 6. Projectiles
+    // 6. Projectiles (Glowing 3D Energy Orbs)
     for (const b of this.bullets) {
       ctx.save();
-      ctx.translate(b.x, b.y);
-      ctx.fillStyle = '#fde047';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 2.5;
+      ctx.fillStyle = 'rgba(253, 224, 71, 0.32)';
       ctx.beginPath();
-      ctx.arc(0, 0, 7, 0, TAU);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(-2, -2, 2.5, 0, TAU); ctx.fill();
+      ctx.arc(b.x, b.y, 11, 0, TAU);
+      ctx.fill();
+      drawToySphere(ctx, b.x, b.y, 7, '#fde047', {
+        rimColor: toyRim('#f59e0b', 0.56),
+        lineWidth: 1.3,
+        shine: 0.85,
+      });
       ctx.restore();
     }
 
@@ -659,7 +678,7 @@ export class DoodleJump extends Game {
     this.fx.render(ctx, 1);
     ctx.restore();
 
-    // 8. Polished Frosted HUD
+    // 8. Polished 3D Toy HUD
     this.renderHUD(ctx, W, H);
   }
 
@@ -677,14 +696,14 @@ export class DoodleJump extends Game {
       bg.addColorStop(1, '#facc15');
     } else if (progress < 0.75) {
       // Aurora Cloud Kingdom (Deep Indigo to Electric Cyan Ribbon)
-      bg.addColorStop(0, '#020617');
+      bg.addColorStop(0, '#070b1e');
       bg.addColorStop(0.35, '#1e1b4b');
       bg.addColorStop(0.7, '#0f766e');
       bg.addColorStop(1, '#06b6d4');
     } else {
       // Deep Cosmic Nebula & Velvet Void
-      bg.addColorStop(0, '#000000');
-      bg.addColorStop(0.4, '#090514');
+      bg.addColorStop(0, '#09061a');
+      bg.addColorStop(0.4, '#13092b');
       bg.addColorStop(0.7, '#2e1065');
       bg.addColorStop(1, '#0f172a');
     }
@@ -696,7 +715,7 @@ export class DoodleJump extends Game {
       const cityAlpha = Math.max(0, 1 - this.maxAltitude / 160);
       ctx.save();
       ctx.globalAlpha = cityAlpha * 0.45;
-      ctx.fillStyle = '#140924';
+      ctx.fillStyle = '#1e1338';
       ctx.beginPath();
       ctx.moveTo(0, H - 40);
       ctx.lineTo(35, H - 75);
@@ -717,11 +736,15 @@ export class DoodleJump extends Game {
       ctx.restore();
     }
 
-    // Drifting Fluffy Clouds
+    // Drifting Pillowy 3D Vinyl Clouds
     for (const c of this.clouds) {
       ctx.save();
       ctx.globalAlpha = c.alpha;
-      ctx.fillStyle = '#ffffff';
+      const cg = ctx.createLinearGradient(c.x, c.y - c.h * 0.6, c.x, c.y + c.h * 0.6);
+      cg.addColorStop(0, '#ffffff');
+      cg.addColorStop(0.7, '#f1f5f9');
+      cg.addColorStop(1, '#cbd5e1');
+      ctx.fillStyle = cg;
       ctx.beginPath();
       ctx.ellipse(c.x, c.y, c.w * 0.5, c.h * 0.5, 0, 0, TAU);
       ctx.ellipse(c.x - c.w * 0.25, c.y + 4, c.w * 0.35, c.h * 0.45, 0, 0, TAU);
@@ -753,29 +776,35 @@ export class DoodleJump extends Game {
     ctx.translate(0, b.y);
 
     // Decorative Festive Bunting Ribbon across the screen
-    ctx.strokeStyle = '#facc15';
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     ctx.setLineDash([8, 8]);
     ctx.beginPath();
     ctx.moveTo(0, 0); ctx.lineTo(this.W, 0);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Milestone Badge
-    const bw = 240;
-    const bh = 32;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect((this.W - bw) / 2, -bh / 2, bw, bh, 10);
-    ctx.fill(); ctx.stroke();
+    // 3D Toy Milestone Badge
+    const bw = 246;
+    const bh = 34;
+    drawToyBevelRect(ctx, (this.W - bw) / 2, -bh / 2, bw, bh, 12, '#0f172a', {
+      depth: 3,
+      rimColor: '#facc15',
+      lineWidth: 2,
+      gloss: false,
+    });
 
-    ctx.font = '900 13px Outfit, system-ui, sans-serif';
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
+    const titleStr = `🚩 ${b.title}`;
+    ctx.strokeText(titleStr, this.W / 2, 0);
     ctx.fillStyle = '#fde047';
-    ctx.fillText(`🚩 ${b.title}`, this.W / 2, 0);
+    ctx.fillText(titleStr, this.W / 2, 0);
 
     ctx.restore();
   }
@@ -790,88 +819,78 @@ export class DoodleJump extends Game {
 
     const squishScale = p.squishT > 0 ? 1 - p.squishT * 0.18 : 1;
     const py = p.y + (1 - squishScale) * p.h;
+    const ph = p.h * squishScale;
 
-    // Platform Drop Shadow
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
-    ctx.beginPath();
-    ctx.roundRect(p.x, py + 6, p.w, p.h, 9);
-    ctx.fill();
+    // Platform Soft Grounding Shadow
+    drawToyShadow(ctx, p.x + p.w * 0.5, py + ph + 5, p.w * 0.46, 5, 0.24);
 
-    // Platform Color Gradients
-    let g0 = '#22c55e', g1 = '#15803d'; // Green standard
+    // Platform Color Palette
+    let platCol = '#22c55e'; // Green standard
     if (p.type === 'moving') {
-      g0 = '#38bdf8'; g1 = '#0284c7'; // Blue moving
+      platCol = '#38bdf8'; // Blue moving
     } else if (p.type === 'brittle') {
-      g0 = '#d97706'; g1 = '#92400e'; // Brown gingerbread
+      platCol = '#d97706'; // Brown gingerbread
     } else if (p.type === 'vanishing') {
-      g0 = '#c084fc'; g1 = '#7e22ce'; // Purple amethyst
+      platCol = '#c084fc'; // Purple amethyst
     } else if (p.type === 'vertical') {
-      g0 = '#fde047'; g1 = '#ca8a04'; // Yellow honey
+      platCol = '#facc15'; // Yellow honey
     }
 
-    const pg = ctx.createLinearGradient(0, py, 0, py + p.h);
-    pg.addColorStop(0, g0);
-    pg.addColorStop(1, g1);
-
-    // Platform Body
-    ctx.fillStyle = pg;
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.roundRect(p.x, py, p.w, p.h * squishScale, 9);
-    ctx.fill(); ctx.stroke();
-
-    // 3D Top Gloss Specular Highlight
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.beginPath();
-    ctx.roundRect(p.x + 4, py + 2.5, p.w - 8, 4.5, 3);
-    ctx.fill();
+    // 3D Vinyl Toy Bevel Platform
+    drawToyBevelRect(ctx, p.x, py, p.w, ph, 9, platCol, {
+      depth: 4 * squishScale,
+      rimColor: toyRim(platCol, 0.58),
+      lineWidth: 1.5,
+      gloss: true,
+    });
 
     // Moving Platform Hover Thruster Glow
     if (p.type === 'moving') {
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.65)';
       ctx.beginPath();
-      ctx.arc(p.x + 12, py + p.h + 2, 4, 0, TAU);
-      ctx.arc(p.x + p.w - 12, py + p.h + 2, 4, 0, TAU);
+      ctx.arc(p.x + 12, py + ph + 3, 4, 0, TAU);
+      ctx.arc(p.x + p.w - 12, py + ph + 3, 4, 0, TAU);
       ctx.fill();
     }
 
-    // Brittle Gingerbread Cracking Lines
+    // Brittle Gingerbread Cracking Lines & 3D Chocolate Chips
     if (p.type === 'brittle') {
-      ctx.strokeStyle = '#451a03';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(p.x + p.w * 0.35, py);
-      ctx.lineTo(p.x + p.w * 0.48, py + p.h);
-      ctx.moveTo(p.x + p.w * 0.65, py);
-      ctx.lineTo(p.x + p.w * 0.52, py + p.h);
+      ctx.moveTo(p.x + p.w * 0.35, py + 1);
+      ctx.lineTo(p.x + p.w * 0.48, py + ph - 1);
+      ctx.moveTo(p.x + p.w * 0.65, py + 1);
+      ctx.lineTo(p.x + p.w * 0.52, py + ph - 1);
       ctx.stroke();
 
-      // Chocolate chips!
-      ctx.fillStyle = '#451a03';
-      ctx.beginPath();
-      ctx.arc(p.x + 14, py + 8, 3, 0, TAU);
-      ctx.arc(p.x + p.w - 16, py + 10, 3, 0, TAU);
-      ctx.fill();
+      drawToySphere(ctx, p.x + 14, py + ph * 0.48, 3, '#78350f', { rimColor: '#451a03', lineWidth: 0.8 });
+      drawToySphere(ctx, p.x + p.w - 16, py + ph * 0.54, 3, '#78350f', { rimColor: '#451a03', lineWidth: 0.8 });
     }
 
     // Standard Platform Cute Green Sprout Leaf
     if (p.type === 'standard') {
       ctx.fillStyle = '#86efac';
+      ctx.strokeStyle = toyRim('#22c55e', 0.55);
+      ctx.lineWidth = 1.1;
       ctx.beginPath();
-      ctx.ellipse(p.x + p.w - 8, py - 4, 4.5, 3, -0.4, 0, TAU);
+      ctx.ellipse(p.x + p.w - 8, py - 3.5, 4.8, 3, -0.4, 0, TAU);
       ctx.fill();
+      ctx.stroke();
     }
 
-    // Platform Items
+    // Platform Items (3D Vinyl Toy Pickups)
     if (p.item) {
       const ix = p.x + p.w / 2;
       const iy = py - 12;
 
       if (p.item === 'spring') {
         // 3D Coiled Steel Spring
-        ctx.strokeStyle = '#94a3b8';
-        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 3.2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(ix - 8, py);
         ctx.lineTo(ix + 8, py - 4);
@@ -879,83 +898,105 @@ export class DoodleJump extends Game {
         ctx.lineTo(ix + 8, py - 12);
         ctx.stroke();
 
-        // Red Launcher Cap
-        ctx.fillStyle = '#ef4444';
-        ctx.strokeStyle = '#140924';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(ix - 10, py - 16, 20, 5, 2);
-        ctx.fill(); ctx.stroke();
+        // 3D Red Launcher Cap
+        drawToyBevelRect(ctx, ix - 10, py - 17, 20, 6, 3, '#ef4444', {
+          depth: 1.5,
+          rimColor: toyRim('#ef4444', 0.56),
+          lineWidth: 1.2,
+        });
       } else if (p.item === 'trampoline') {
-        // Circus Trampoline
-        ctx.fillStyle = '#ef4444';
-        ctx.strokeStyle = '#140924';
+        // 3D Circus Trampoline
+        ctx.strokeStyle = '#94a3b8';
         ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.roundRect(ix - 16, py - 8, 32, 8, 4);
-        ctx.fill(); ctx.stroke();
+        ctx.moveTo(ix - 14, py); ctx.lineTo(ix - 10, py - 3);
+        ctx.moveTo(ix + 14, py); ctx.lineTo(ix + 10, py - 3);
+        ctx.stroke();
+
+        drawToyBevelRect(ctx, ix - 16, py - 9, 32, 8, 4, '#ef4444', {
+          depth: 2,
+          rimColor: toyRim('#ef4444', 0.56),
+          lineWidth: 1.3,
+        });
 
         // White stripes
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(ix - 8, py - 8, 5, 8);
-        ctx.fillRect(ix + 3, py - 8, 5, 8);
-
-        // Steel legs
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(ix - 14, py); ctx.lineTo(ix - 10, py);
-        ctx.moveTo(ix + 14, py); ctx.lineTo(ix + 10, py);
-        ctx.stroke();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        ctx.fillRect(ix - 8, py - 8, 5, 6);
+        ctx.fillRect(ix + 3, py - 8, 5, 6);
       } else if (p.item === 'jetpack') {
         // Dual Chrome Rocket Canisters
-        ctx.fillStyle = '#cbd5e1';
-        ctx.strokeStyle = '#140924';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(ix - 11, iy - 8, 10, 20, 3);
-        ctx.roundRect(ix + 1, iy - 8, 10, 20, 3);
-        ctx.fill(); ctx.stroke();
+        drawToyBevelRect(ctx, ix - 11, iy - 8, 10, 20, 4, '#cbd5e1', {
+          depth: 0,
+          rimColor: toyRim('#64748b', 0.55),
+          lineWidth: 1.2,
+        });
+        drawToyBevelRect(ctx, ix + 1, iy - 8, 10, 20, 4, '#cbd5e1', {
+          depth: 0,
+          rimColor: toyRim('#64748b', 0.55),
+          lineWidth: 1.2,
+        });
 
         // Red Nozzle Cones
         ctx.fillStyle = '#ef4444';
+        ctx.strokeStyle = toyRim('#ef4444', 0.56);
+        ctx.lineWidth = 1.1;
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(ix - 11, iy - 8); ctx.lineTo(ix - 6, iy - 16); ctx.lineTo(ix - 1, iy - 8);
-        ctx.moveTo(ix + 1, iy - 8); ctx.lineTo(ix + 6, iy - 16); ctx.lineTo(ix + 11, iy - 8);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ix + 1, iy - 8); ctx.lineTo(ix + 6, iy - 16); ctx.lineTo(ix + 11, iy - 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
 
         // Yellow Caution Stripes
         ctx.fillStyle = '#facc15';
-        ctx.fillRect(ix - 10, iy, 8, 3);
-        ctx.fillRect(ix + 2, iy, 8, 3);
+        ctx.fillRect(ix - 9.5, iy, 7, 3);
+        ctx.fillRect(ix + 2.5, iy, 7, 3);
       } else if (p.item === 'propeller') {
         // Multi-colored Helicopter Beanie
-        ctx.fillStyle = '#f43f5e';
+        const dg = ctx.createRadialGradient(ix - 3, iy - 4, 2, ix, iy, 10);
+        dg.addColorStop(0, '#fda4af');
+        dg.addColorStop(1, '#e11d48');
+        ctx.fillStyle = dg;
+        ctx.strokeStyle = toyRim('#f43f5e', 0.56);
+        ctx.lineWidth = 1.3;
         ctx.beginPath();
         ctx.arc(ix, iy, 9, Math.PI, 0);
+        ctx.closePath();
         ctx.fill();
-
-        // Brass Rotor & Blue Blades
-        ctx.fillStyle = '#facc15';
-        ctx.beginPath(); ctx.arc(ix, iy - 9, 3.5, 0, TAU); ctx.fill();
-
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(ix - 14, iy - 9); ctx.lineTo(ix + 14, iy - 9);
         ctx.stroke();
+
+        // Blue Propeller Blade & Brass Rotor
+        drawToyPill(ctx, ix - 14, iy - 11, 28, 4.5, '#38bdf8', {
+          rimColor: toyRim('#0284c7', 0.55),
+          lineWidth: 1.1,
+        });
+        drawToySphere(ctx, ix, iy - 9, 3.6, '#facc15', {
+          rimColor: toyRim('#ca8a04', 0.55),
+          lineWidth: 1.0,
+        });
       } else if (p.item === 'shield') {
-        // Shimmering Soap Bubble
+        // Shimmering 3D Soap Bubble
         const bg = ctx.createRadialGradient(ix - 3, iy - 3, 2, ix, iy, 12);
         bg.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
         bg.addColorStop(0.4, 'rgba(192, 132, 252, 0.45)');
         bg.addColorStop(1, 'rgba(56, 189, 248, 0.7)');
         ctx.fillStyle = bg;
         ctx.strokeStyle = '#c084fc';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.arc(ix, iy, 11, 0, TAU);
         ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+        ctx.beginPath();
+        ctx.ellipse(ix - 4, iy - 4, 3.5, 1.6, -0.6, 0, TAU);
+        ctx.fill();
       }
     }
 
@@ -967,7 +1008,7 @@ export class DoodleJump extends Game {
     ctx.translate(m.x, m.y);
 
     if (m.type === 'ufo') {
-      // Sleek Retro-Futuristic Flying Saucer
+      // Sleek Retro-Futuristic 3D Toy Flying Saucer
       // Tractor beam glow
       const tg = ctx.createLinearGradient(0, 0, 0, 50);
       tg.addColorStop(0, 'rgba(250, 204, 21, 0.35)');
@@ -979,42 +1020,68 @@ export class DoodleJump extends Game {
       ctx.fill();
 
       // Glowing Glass Cockpit Bubble
-      ctx.fillStyle = '#38bdf8';
+      const domeG = ctx.createRadialGradient(-4, -14, 2, 0, -7, 14);
+      domeG.addColorStop(0, 'rgba(224, 242, 254, 0.9)');
+      domeG.addColorStop(0.6, 'rgba(56, 189, 248, 0.65)');
+      domeG.addColorStop(1, 'rgba(2, 132, 199, 0.8)');
+      ctx.fillStyle = domeG;
+      ctx.strokeStyle = toyRim('#0284c7', 0.56);
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.arc(0, -7, 13, Math.PI, 0);
+      ctx.closePath();
       ctx.fill();
+      ctx.stroke();
 
-      // Little Alien Pilot inside
-      ctx.fillStyle = '#4ade80';
-      ctx.beginPath(); ctx.arc(0, -9, 6, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath(); ctx.arc(-2, -9, 1.8, 0, TAU); ctx.arc(2, -9, 1.8, 0, TAU); ctx.fill();
+      // Little 3D Vinyl Alien Pilot inside
+      drawToySphere(ctx, 0, -9, 6.5, '#4ade80', {
+        rimColor: toyRim('#16a34a', 0.56),
+        lineWidth: 1.0,
+      });
+      drawToyEyes(ctx, 0, -9.5, 1.7, { spacing: 4.2, style: 'bright' });
 
-      // Saucer Hull
-      ctx.fillStyle = '#64748b';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 3.5;
+      // 3D Metallic Saucer Hull
+      const hullG = ctx.createLinearGradient(0, -10, 0, 10);
+      hullG.addColorStop(0, '#cbd5e1');
+      hullG.addColorStop(0.5, '#64748b');
+      hullG.addColorStop(1, '#334155');
+      ctx.fillStyle = hullG;
+      ctx.strokeStyle = toyRim('#475569', 0.6);
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.ellipse(0, 0, 28, 10, 0, 0, TAU);
       ctx.fill(); ctx.stroke();
+
+      // Specular hull highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(-9, -4.5, 11, 2.5, -0.1, 0, TAU);
+      ctx.fill();
 
       // Pulsing Rainbow Running Lights
       const lights = ['#ef4444', '#facc15', '#22c55e', '#38bdf8'];
       for (let i = 0; i < 4; i++) {
         const lx = -18 + i * 12;
-        ctx.fillStyle = lights[(i + Math.floor(this.t * 6)) % lights.length];
-        ctx.beginPath();
-        ctx.arc(lx, 1, 3.2, 0, TAU);
-        ctx.fill();
+        const lCol = lights[(i + Math.floor(this.t * 6)) % lights.length];
+        drawToySphere(ctx, lx, 1.5, 3.2, lCol, {
+          rimColor: toyRim(lCol, 0.55),
+          lineWidth: 0.9,
+        });
       }
     } else {
-      // Animated Quayside Gargoyle / Flying Goblin
+      // Animated Quayside Gargoyle / Flying Goblin (3D Vinyl Toy Creature)
       const flap = Math.sin(this.t * 14) * 14;
+      const wingRim = toyRim('#475569', 0.56);
+      const bodyRim = toyRim(m.color, 0.58);
 
-      // Leathery Bat Wings with joint lines
-      ctx.fillStyle = '#475569';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 2.5;
+      // Leathery Bat Wings with smooth gradient
+      const wg = ctx.createLinearGradient(0, -18, 0, 10);
+      wg.addColorStop(0, '#64748b');
+      wg.addColorStop(1, '#334155');
+      ctx.fillStyle = wg;
+      ctx.strokeStyle = wingRim;
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-10, -4);
       ctx.quadraticCurveTo(-26, -24 + flap, -32, -8 + flap);
@@ -1027,41 +1094,48 @@ export class DoodleJump extends Game {
       ctx.quadraticCurveTo(20, 8, 10, 4);
       ctx.fill(); ctx.stroke();
 
-      // Fluffy Round Monster Body
-      ctx.fillStyle = m.color;
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(0, 0, m.r, 0, TAU);
-      ctx.fill(); ctx.stroke();
-
       // Pointy Ears
-      ctx.fillStyle = m.color;
+      ctx.fillStyle = shadeColor(m.color, 0.12);
+      ctx.strokeStyle = bodyRim;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(-16, -14); ctx.lineTo(-22, -26); ctx.lineTo(-10, -18);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(16, -14); ctx.lineTo(22, -26); ctx.lineTo(10, -18);
+      ctx.closePath();
       ctx.fill(); ctx.stroke();
 
-      // Googly Eyes tracking player
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(-8, -4, 8, 0, TAU);
-      ctx.arc(8, -4, 8, 0, TAU);
-      ctx.fill();
+      // 3D Vinyl Round Monster Body
+      drawToySphere(ctx, 0, 0, m.r, m.color, {
+        rimColor: bodyRim,
+        lineWidth: toyLineW(m.r * 2, 0.042, 1.0, 2.0),
+        shine: 0.65,
+      });
 
-      // Pupils looking down at player
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(-8, -2, 3.6, 0, TAU);
-      ctx.arc(8, -2, 3.6, 0, TAU);
-      ctx.fill();
+      // Crisp Toy Eyes tracking player
+      drawToyEyes(ctx, 0, -4, 5.2, {
+        spacing: 15,
+        style: 'angry',
+        lookX: m.vx >= 0 ? 0.35 : -0.35,
+        lookY: 0.35,
+        ink: '#0f172a',
+      });
 
       // Cute Vampire Fangs
       ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.1;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-7, 8); ctx.lineTo(-4, 15); ctx.lineTo(-1, 8);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(1, 8); ctx.lineTo(4, 15); ctx.lineTo(7, 8);
-      ctx.fill();
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
     }
 
     ctx.restore();
@@ -1074,7 +1148,7 @@ export class DoodleJump extends Game {
 
     // Dynamic Swirling Galaxy Accretion Disks
     const bg = ctx.createRadialGradient(0, 0, 4, 0, 0, bh.r * 2.2);
-    bg.addColorStop(0, '#000000');
+    bg.addColorStop(0, '#090418');
     bg.addColorStop(0.35, '#581c87');
     bg.addColorStop(0.7, '#a855f7');
     bg.addColorStop(1, 'rgba(168, 85, 247, 0)');
@@ -1086,16 +1160,17 @@ export class DoodleJump extends Game {
     // Swirling Spiral Arms
     ctx.strokeStyle = '#e9d5ff';
     ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
     for (let a = 0; a < TAU; a += TAU / 3) {
       ctx.beginPath();
       ctx.arc(0, 0, bh.r * 1.5, a, a + 1.2);
       ctx.stroke();
     }
 
-    // Absolute Event Horizon Core
-    ctx.fillStyle = '#000000';
+    // Event Horizon Core
+    ctx.fillStyle = '#090418';
     ctx.strokeStyle = '#c084fc';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.arc(0, 0, bh.r, 0, TAU);
     ctx.fill(); ctx.stroke();
@@ -1108,10 +1183,7 @@ export class DoodleJump extends Game {
     ctx.translate(this.x, this.y);
 
     // Soft Shadow cast onto nearest platform
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
-    ctx.beginPath();
-    ctx.ellipse(0, 24, 18, 5, 0, 0, TAU);
-    ctx.fill();
+    drawToyShadow(ctx, 0, 24, 18, 5, 0.24);
 
     // Bubble Shield Effect
     if (this.hasShield) {
@@ -1121,7 +1193,7 @@ export class DoodleJump extends Game {
       sg.addColorStop(1, 'rgba(56, 189, 248, 0.6)');
       ctx.fillStyle = sg;
       ctx.strokeStyle = '#c084fc';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.arc(0, 0, 34, 0, TAU);
       ctx.fill(); ctx.stroke();
@@ -1129,13 +1201,16 @@ export class DoodleJump extends Game {
 
     // Rocket Jetpack Attachment
     if (this.powerup === 'jetpack') {
-      ctx.fillStyle = '#cbd5e1';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.roundRect(-22, -12, 10, 30, 4);
-      ctx.roundRect(12, -12, 10, 30, 4);
-      ctx.fill(); ctx.stroke();
+      drawToyBevelRect(ctx, -22, -12, 10, 30, 4, '#cbd5e1', {
+        depth: 0,
+        rimColor: toyRim('#64748b', 0.56),
+        lineWidth: 1.4,
+      });
+      drawToyBevelRect(ctx, 12, -12, 10, 30, 4, '#cbd5e1', {
+        depth: 0,
+        rimColor: toyRim('#64748b', 0.56),
+        lineWidth: 1.4,
+      });
 
       // Roaring twin jet flames
       const flame = rand(18, 32);
@@ -1154,34 +1229,38 @@ export class DoodleJump extends Game {
 
     // Propeller Beanie Attachment
     if (this.powerup === 'propeller') {
-      const spin = Math.sin(this.t * 40) * 18;
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(-spin, -34); ctx.lineTo(spin, -34);
-      ctx.stroke();
-
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath(); ctx.arc(0, -30, 4.5, 0, TAU); ctx.fill();
+      const spin = Math.max(4, Math.abs(Math.sin(this.t * 40)) * 18);
+      drawToyPill(ctx, -spin, -36, spin * 2, 5, '#38bdf8', {
+        rimColor: toyRim('#0284c7', 0.55),
+        lineWidth: 1.1,
+      });
+      drawToySphere(ctx, 0, -30, 4.5, '#facc15', {
+        rimColor: toyRim('#ca8a04', 0.55),
+        lineWidth: 1.1,
+      });
     }
 
-    // Nose Blaster Snout with Recoil
+    // Nose Blaster Snout with Recoil (3D shaded)
     const recoil = this.recoilT > 0 ? -4 : 0;
     ctx.save();
     ctx.translate(0, recoil);
-    ctx.fillStyle = '#fb7185';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 2.5;
+    const snoutG = ctx.createRadialGradient(-3, -24, 1.5, 0, -22, 9);
+    snoutG.addColorStop(0, '#fda4af');
+    snoutG.addColorStop(0.5, '#fb7185');
+    snoutG.addColorStop(1, '#e11d48');
+    ctx.fillStyle = snoutG;
+    ctx.strokeStyle = toyRim('#fb7185', 0.58);
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.ellipse(0, -22, 8, 6, 0, 0, TAU);
     ctx.fill(); ctx.stroke();
     // Snout opening
-    ctx.fillStyle = '#be123c';
-    ctx.beginPath(); ctx.arc(0, -22, 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#9f1239';
+    ctx.beginPath(); ctx.arc(0, -22, 2.8, 0, TAU); ctx.fill();
     ctx.restore();
 
     // Doodler Jellybean Mascot
-    const eyeExpression = this.dead ? 'dizzy' : this.vy < -600 ? 'wink' : 'happy';
+    const eyeExpression = this.dead ? 'squish' : this.vy < -600 ? 'wink' : 'happy';
     drawBean(ctx, 0, 0, 30, {
       color: '#38bdf8',
       bellyColor: '#fda4af',
@@ -1189,73 +1268,78 @@ export class DoodleJump extends Game {
       squash: this.squash,
       hat: this.powerup ? 'none' : 'crown',
       eyes: eyeExpression,
+      dead: this.dead,
     });
 
-    // Cute Bouncing Shoes
-    ctx.fillStyle = '#facc15';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 2.5;
+    // Cute Bouncing 3D Vinyl Shoes
     const kick = Math.sin(this.t * 12) * 3;
-    ctx.beginPath();
-    ctx.roundRect(-14, 20 + kick, 10, 8, 3);
-    ctx.roundRect(4, 20 - kick, 10, 8, 3);
-    ctx.fill(); ctx.stroke();
+    drawToyBevelRect(ctx, -14, 20 + kick, 10, 8, 4, '#facc15', {
+      depth: 2,
+      rimColor: toyRim('#ca8a04', 0.55),
+      lineWidth: 1.2,
+    });
+    drawToyBevelRect(ctx, 4, 20 - kick, 10, 8, 4, '#facc15', {
+      depth: 2,
+      rimColor: toyRim('#ca8a04', 0.55),
+      lineWidth: 1.2,
+    });
 
     ctx.restore();
   }
 
-  /* ------------------------------------------------------------ Deluxe Frosted HUD */
+  /* ------------------------------------------------------------ Deluxe 3D Toy HUD */
   renderHUD(ctx, W, H) {
     const pillX = 14;
     const pillY = 105;
     const m = Math.round(this.maxAltitude);
 
     ctx.save();
-    // Frosted Glassmorphism Card
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(pillX, pillY, 235, 54, 14);
-    ctx.fill();
-    ctx.stroke();
+    ctx.lineJoin = 'round';
 
-    // Outer dark rim
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(pillX, pillY, 235, 54, 14);
-    ctx.stroke();
+    // 3D Toy Bevel HUD Card
+    drawToyBevelRect(ctx, pillX, pillY, 240, 56, 14, '#0f172a', {
+      depth: 3,
+      rimColor: '#38bdf8',
+      lineWidth: 2,
+      gloss: false,
+    });
+
+    ctx.textAlign = 'left';
+    ctx.strokeStyle = '#0f172a';
 
     // Title & Altitude
+    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 2.6;
+    const altTxt = `🦘 DOODLE JUMP · ${m}m`;
+    ctx.strokeText(altTxt, pillX + 14, pillY + 19);
     ctx.fillStyle = '#38bdf8';
-    ctx.font = '900 13px Outfit, system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`🦘 DOODLE JUMP · ${m}m`, pillX + 14, pillY + 18);
+    ctx.fillText(altTxt, pillX + 14, pillY + 19);
 
     // Score
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 2.2;
+    const scoreTxt = `SCORE: ${Math.round(this.score)} PTS`;
+    ctx.strokeText(scoreTxt, pillX + 14, pillY + 34);
     ctx.fillStyle = '#ffffff';
-    ctx.font = '800 11px Outfit, system-ui, sans-serif';
-    ctx.fillText(`SCORE: ${Math.round(this.score)} PTS`, pillX + 14, pillY + 33);
+    ctx.fillText(scoreTxt, pillX + 14, pillY + 34);
 
     // Status / Equipment Badge
+    ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
+    let statusTxt = '● TAP TO SHOOT MONSTERS';
+    let statusCol = '#4ade80';
     if (this.powerup === 'jetpack') {
-      ctx.fillStyle = '#f97316';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.fillText(`🚀 JETPACK ACTIVE! ${this.powerupTimer.toFixed(1)}s`, pillX + 14, pillY + 46);
+      statusTxt = `🚀 JETPACK ACTIVE! ${this.powerupTimer.toFixed(1)}s`;
+      statusCol = '#f97316';
     } else if (this.powerup === 'propeller') {
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.fillText(`🚁 PROPELLER ACTIVE! ${this.powerupTimer.toFixed(1)}s`, pillX + 14, pillY + 46);
+      statusTxt = `🚁 PROPELLER ACTIVE! ${this.powerupTimer.toFixed(1)}s`;
+      statusCol = '#38bdf8';
     } else if (this.hasShield) {
-      ctx.fillStyle = '#c084fc';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.fillText(`🛡️ BUBBLE SHIELD EQUIPPED`, pillX + 14, pillY + 46);
-    } else {
-      ctx.fillStyle = '#4ade80';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.fillText(`● TAP TO SHOOT MONSTERS`, pillX + 14, pillY + 46);
+      statusTxt = '🛡️ BUBBLE SHIELD EQUIPPED';
+      statusCol = '#c084fc';
     }
+    ctx.strokeText(statusTxt, pillX + 14, pillY + 48);
+    ctx.fillStyle = statusCol;
+    ctx.fillText(statusTxt, pillX + 14, pillY + 48);
 
     ctx.restore();
   }

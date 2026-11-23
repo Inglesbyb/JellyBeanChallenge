@@ -2,11 +2,23 @@ import Matter from 'matter-js';
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  drawToyEyes,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const { Engine, Composite, Bodies, Body, Events } = Matter;
 
 const L = 35;
 const R = 385;
+const MID = (L + R) / 2;
 const FLOOR = 700;
 const LINE = 228;
 const SPAWN_Y = 170;
@@ -48,15 +60,23 @@ export class FruitMerge extends Game {
     icon: '🍉',
     hint: 'DRAG to aim · RELEASE to drop · merge matching confectionery · shake to unjam!',
     baseLikes: 4120,
+    isPrestige: true,
+    parScore60s: 1600,
+    cue: 'DROP & MERGE SWEETS!',
+    prestigeCue: 'HEAVIER DROP · MORE PEGS!',
+    scaling: {
+      gravityY:      { base: 1.15, rate: 0.16, cap: 1.60, mode: 'up',   label: 'Drop Gravity' },
+      pegCount:      { base: 0,    rate: 0.32, cap: 3,    mode: 'up',   round: true, deltaFormat: 'abs', label: 'Jar Pegs' },
+      overflowGrace: { base: 3.0,  rate: 0.20, floor: 1.6, mode: 'down', label: 'Overflow Grace' },
+    },
   };
 
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
-    // Prestige rank (1 = first playthrough). Set by Reel.js before init().
     this.pLevel = Math.max(1, this.prestige || 1);
     this.engine = Engine.create({ positionIterations: 10, velocityIterations: 8 });
-    this.engine.gravity.y = 1.15 * (1 + 0.08 * (this.pLevel - 1));
+    this.engine.gravity.y = this.diff.gravityY ?? 1.15;
     this.acc = 0;
     this.mergeQ = [];
     this.overT = 0;
@@ -76,9 +96,9 @@ export class FruitMerge extends Game {
       Bodies.rectangle(R + 25, 380, 50, 800, wallOpts),
     ]);
 
-    // Prestige hazard: rock-candy pegs inside the jar (1 per level above 1, max 3).
+    // Prestige hazard: rock-candy pegs inside the jar (up to 3).
     const PEG_SLOTS = [{ x: 140, y: 560 }, { x: 280, y: 500 }, { x: 210, y: 620 }];
-    this.pegs = PEG_SLOTS.slice(0, Math.min(3, this.pLevel - 1)).map((p) => ({ ...p, r: 11 }));
+    this.pegs = PEG_SLOTS.slice(0, Math.min(3, this.diff.pegCount ?? 0)).map((p) => ({ ...p, r: 11 }));
     for (const p of this.pegs) {
       Composite.add(this.engine.world, Bodies.circle(p.x, p.y, p.r, { ...wallOpts, label: 'peg' }));
     }
@@ -291,7 +311,7 @@ export class FruitMerge extends Game {
     }
 
     this.overT = over ? this.overT + dt : Math.max(0, this.overT - dt * 2);
-    if (this.overT > Math.max(1.6, 3.0 - 0.4 * (this.pLevel - 1))) {
+    if (this.overT > (this.diff.overflowGrace ?? 3.0)) {
       if (this.die('Jar overflowed!')) {
         this.fx.shake(12, 0.45);
         this.sounds.hit();
@@ -380,39 +400,91 @@ export class FruitMerge extends Game {
     const ctx = this.ctx;
     const { W, H } = this;
     const off = this.fx.offset();
+    const jarMidX = (L + R) * 0.5;
 
-    // 1. Victorian Sweet Shop Interior Backdrop
+    // 1. Studio Diorama Sweet Shop Backdrop
     const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#1c0f2b');
-    bg.addColorStop(0.45, '#351242');
-    bg.addColorStop(1, '#1c0f2b');
+    bg.addColorStop(0, '#1e1136');
+    bg.addColorStop(0.48, '#381856');
+    bg.addColorStop(0.84, '#27123c');
+    bg.addColorStop(1, '#1a0c29');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
+
+    // Warm studio radial spotlight behind the glass jar
+    const spot = ctx.createRadialGradient(jarMidX, 420, 30, jarMidX, 420, 290);
+    spot.addColorStop(0, 'rgba(255, 182, 224, 0.22)');
+    spot.addColorStop(0.55, 'rgba(168, 85, 247, 0.10)');
+    spot.addColorStop(1, 'rgba(30, 17, 54, 0)');
+    ctx.fillStyle = spot;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle floating confectionery bokeh sparkles
+    ctx.save();
+    for (let i = 0; i < 16; i++) {
+      const bx = ((i * 73 + 29) % (W - 20)) + 10;
+      const by = ((i * 119 + Math.sin(this.time * 0.9 + i) * 14) % (FLOOR - 40)) + 20;
+      const br = 2 + (i % 3) * 1.4;
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 214, 165, 0.14)' : 'rgba(255, 173, 218, 0.14)';
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Sweet shop countertop surface under the jar
+    const shelfGrad = ctx.createLinearGradient(0, FLOOR + 6, 0, H);
+    shelfGrad.addColorStop(0, '#5c2b46');
+    shelfGrad.addColorStop(0.25, '#3b1830');
+    shelfGrad.addColorStop(1, '#1e0b1b');
+    ctx.fillStyle = shelfGrad;
+    ctx.fillRect(0, FLOOR + 6, W, H - (FLOOR + 6));
+    ctx.fillStyle = 'rgba(255, 220, 240, 0.16)';
+    ctx.fillRect(0, FLOOR + 6, W, 2.5);
 
     ctx.save();
     ctx.translate(off.x, off.y);
 
-    // 2. The Victorian Glass Sweet Jar
+    // 2. The 3D Acrylic & Brass Sweet Jar
     this.renderGlassJar(ctx, W);
 
     // 3. Danger Overflow Line
     const danger = this.overT > 0;
+    ctx.save();
     ctx.strokeStyle = danger
-      ? `rgba(255, 0, 84, ${0.7 + Math.sin(this.time * 16) * 0.3})`
-      : 'rgba(255, 255, 255, 0.3)';
+      ? `rgba(255, 77, 136, ${0.72 + Math.sin(this.time * 16) * 0.28})`
+      : 'rgba(255, 255, 255, 0.34)';
     ctx.lineWidth = danger ? 3.5 : 2;
+    ctx.lineCap = 'round';
     ctx.setLineDash([10, 8]);
     ctx.beginPath();
-    ctx.moveTo(L, LINE);
-    ctx.lineTo(R, LINE);
+    ctx.moveTo(L + 4, LINE);
+    ctx.lineTo(R - 4, LINE);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
 
     if (danger) {
-      ctx.fillStyle = '#ff0054';
-      ctx.font = '900 15px Outfit, system-ui, sans-serif';
+      const warnW = 198;
+      const warnH = 26;
+      const warnX = jarMidX - warnW / 2;
+      const warnY = LINE - 32;
+      drawToyPill(ctx, warnX, warnY, warnW, warnH, '#f43f5e', {
+        rimColor: toyRim('#f43f5e', 0.6),
+        lineWidth: 1.6,
+      });
+      ctx.save();
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText(`OVERFLOW IN ${Math.max(0, 3 - this.overT).toFixed(1)}s!`, W / 2, LINE - 12);
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      const msg = `OVERFLOW IN ${Math.max(0, 3 - this.overT).toFixed(1)}s!`;
+      ctx.strokeText(msg, jarMidX, warnY + warnH * 0.52);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(msg, jarMidX, warnY + warnH * 0.52);
+      ctx.restore();
     }
 
     // 4. Mascot Bean holding incoming fruit
@@ -421,14 +493,22 @@ export class FruitMerge extends Game {
       const isSpecial = this.cur < 0;
       const fR = isSpecial ? 22 : FR[this.cur].r;
 
-      // Dashed Aim Guide Line
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      // Dashed Aim Guide Line & ground landing bead
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.24)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
       ctx.setLineDash([4, 8]);
       ctx.beginPath();
       ctx.moveTo(this.aimX, SPAWN_Y + fR);
       ctx.lineTo(this.aimX, FLOOR);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.beginPath();
+      ctx.ellipse(this.aimX, FLOOR - 2, 6, 2.2, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
 
       // Captain Bean holding the fruit
       const beanY = SPAWN_Y - fR - 26;
@@ -444,7 +524,7 @@ export class FruitMerge extends Game {
       });
 
       // Drawn held fruit
-      this.drawVectorFruit(ctx, this.aimX, SPAWN_Y, this.cur, 0, ready ? 1 : 0.7, false);
+      this.drawVectorFruit(ctx, this.aimX, SPAWN_Y, this.cur, 0, ready ? 1 : 0.72, false);
     } else {
       drawBean(ctx, this.aimX, SPAWN_Y, 28, {
         color: '#ff70a6',
@@ -453,19 +533,16 @@ export class FruitMerge extends Game {
       });
     }
 
-    // 5. Render All Confectionery Fruits in the Jar
+    // 5. Render Rock-Candy Pegs & All Confectionery Fruits in the Jar
     for (const pg of this.pegs || []) {
-      const pgr = ctx.createRadialGradient(pg.x - 3, pg.y - 3, 2, pg.x, pg.y, pg.r);
-      pgr.addColorStop(0, '#ffe1f0');
-      pgr.addColorStop(1, '#f72585');
-      ctx.fillStyle = pgr;
-      ctx.strokeStyle = '#7a0f45';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(pg.x, pg.y, pg.r, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
+      drawToyShadow(ctx, pg.x, pg.y + pg.r * 0.45, pg.r * 0.9, pg.r * 0.38, 0.24);
+      drawToySphere(ctx, pg.x, pg.y, pg.r, '#f72585', {
+        rimColor: toyRim('#f72585', 0.56),
+        lineWidth: toyLineW(pg.r * 2, 0.048, 0.9, 1.8),
+        shine: 0.8,
+      });
     }
+
     for (const b of this.fruits) {
       let s = 1;
       if (b.pop) {
@@ -488,18 +565,55 @@ export class FruitMerge extends Game {
     this.renderShakerHUD(ctx, W, H);
   }
 
-  /* ------------------------------------------------------------ Victorian Glass Sweet Jar */
+  /* ------------------------------------------------------------ 3D Toy Acrylic Sweet Jar */
   renderGlassJar(ctx, W) {
-    // Glass interior ambient tint
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    this.rr(L - 4, 150, R - L + 8, FLOOR - 150 + 6, 22);
+    const jarX = L - 4;
+    const jarY = 150;
+    const jarW = R - L + 8;
+    const jarH = FLOOR - 150 + 6;
+    const midX = (L + R) * 0.5;
+
+    // Grounding shadow under jar base
+    drawToyShadow(ctx, midX, FLOOR + 12, jarW * 0.54, 11, 0.34);
+
+    // Wooden-gold diorama base coaster beneath the jar
+    drawToyBevelRect(ctx, L - 14, FLOOR + 2, (R - L) + 28, 15, 7, '#d97706', {
+      depth: 4,
+      rimColor: toyRim('#d97706', 0.58),
+      lineWidth: 1.6,
+    });
+
+    // Translucent frosted interior gradient
+    const glassBg = ctx.createLinearGradient(jarX, jarY, jarX + jarW, jarY + jarH);
+    glassBg.addColorStop(0, 'rgba(255, 255, 255, 0.11)');
+    glassBg.addColorStop(0.5, 'rgba(224, 242, 254, 0.05)');
+    glassBg.addColorStop(1, 'rgba(251, 207, 232, 0.10)');
+    ctx.fillStyle = glassBg;
+    traceRoundRect(ctx, jarX, jarY, jarW, jarH, 22);
     ctx.fill();
 
-    // Glass wall specular glow
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = 4;
-    ctx.shadowColor = 'rgba(255, 170, 220, 0.6)';
-    ctx.shadowBlur = 14;
+    // Left & right vertical glass specular studio highlights
+    ctx.save();
+    const leftHighlight = ctx.createLinearGradient(jarX + 6, 0, jarX + 26, 0);
+    leftHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.24)');
+    leftHighlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = leftHighlight;
+    traceRoundRect(ctx, jarX + 6, jarY + 12, 20, jarH - 28, 10);
+    ctx.fill();
+
+    const rightHighlight = ctx.createLinearGradient(jarX + jarW - 22, 0, jarX + jarW - 6, 0);
+    rightHighlight.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    rightHighlight.addColorStop(1, 'rgba(255, 255, 255, 0.18)');
+    ctx.fillStyle = rightHighlight;
+    traceRoundRect(ctx, jarX + jarW - 22, jarY + 12, 16, jarH - 28, 8);
+    ctx.fill();
+    ctx.restore();
+
+    // Outer soft rim & bright glass wall stroke
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 224, 245, 0.42)';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(L - 4, 150);
     ctx.lineTo(L - 4, FLOOR - 16);
@@ -508,19 +622,26 @@ export class FruitMerge extends Game {
     ctx.quadraticCurveTo(R + 4, FLOOR + 4, R + 4, FLOOR - 16);
     ctx.lineTo(R + 4, 150);
     ctx.stroke();
-    ctx.shadowBlur = 0;
 
-    // Brass jar mouth rim
-    ctx.fillStyle = '#ffd166';
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = 2.5;
-    ctx.fillRect(L - 10, 146, 12, 10);
-    ctx.strokeRect(L - 10, 146, 12, 10);
-    ctx.fillRect(R - 2, 146, 12, 10);
-    ctx.strokeRect(R - 2, 146, 12, 10);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+    ctx.lineWidth = 2.6;
+    ctx.stroke();
+    ctx.restore();
+
+    // 3D Rounded Brass Jar Mouth Rim Caps
+    drawToyBevelRect(ctx, L - 11, 145, 14, 11, 5, '#ffd166', {
+      depth: 2,
+      rimColor: toyRim('#d97706', 0.56),
+      lineWidth: 1.4,
+    });
+    drawToyBevelRect(ctx, R - 3, 145, 14, 11, 5, '#ffd166', {
+      depth: 2,
+      rimColor: toyRim('#d97706', 0.56),
+      lineWidth: 1.4,
+    });
   }
 
-  /* ------------------------------------------------------------ Custom Vector Confectionery Fruits (NO OS EMOJIS!) */
+  /* ------------------------------------------------------------ 3D Vinyl Toy Confectionery Fruits */
   drawVectorFruit(ctx, x, y, tier, angle, s = 1, isSquished = false, blinkTime = 0) {
     ctx.save();
     ctx.translate(x, y);
@@ -528,82 +649,200 @@ export class FruitMerge extends Game {
     // Special Item: Rainbow Swirl Joker Bean
     if (tier === -1) {
       const r = 22 * s;
+      const lw = toyLineW(r * 2, 0.044, 0.9, 2.0);
+      ctx.save();
       ctx.rotate(this.time * 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill(); ctx.stroke();
-
-      const swirlColors = ['#ff0054', '#ffd166', '#3dffa2', '#00b4d8', '#7209b7'];
+      const swirlColors = ['#ff3366', '#ffd166', '#3dffa2', '#38bdf8', '#a855f7'];
       for (let i = 0; i < 5; i++) {
         ctx.fillStyle = swirlColors[i];
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.arc(0, 0, r - 2, (i / 5) * TAU, ((i + 1) / 5) * TAU);
+        ctx.arc(0, 0, r, (i / 5) * TAU, ((i + 1) / 5) * TAU);
         ctx.closePath();
         ctx.fill();
       }
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.restore();
+
+      // Volumetric 3D studio shading overlay on pinwheel sphere
+      const sg = ctx.createRadialGradient(-r * 0.34, -r * 0.34, r * 0.08, 0, 0, r);
+      sg.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+      sg.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+      sg.addColorStop(1, 'rgba(15, 23, 42, 0.32)');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, TAU);
+      ctx.fill();
+
+      ctx.strokeStyle = toyRim('#a855f7', 0.58);
+      ctx.lineWidth = lw;
+      ctx.stroke();
+
+      // Glossy upper-left specular highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.68)';
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.32, -r * 0.35, r * 0.28, r * 0.14, -0.55, 0, TAU);
+      ctx.fill();
+
+      drawToySphere(ctx, 0, 0, Math.max(4, r * 0.3), '#ffd166', {
+        rimColor: toyRim('#d97706', 0.5),
+        lineWidth: toyLineW(r, 0.04, 0.7, 1.4),
+      });
       ctx.restore();
       return;
     }
 
-    // Special Item: Pop-Rock Bomb
+    // Special Item: Pop-Rock Bomb (3D Vinyl Toy Bomb)
     if (tier === -2) {
       const r = 22 * s;
-      ctx.fillStyle = '#140924';
-      ctx.strokeStyle = '#ff0054';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill(); ctx.stroke();
+      const lw = toyLineW(r * 2, 0.044, 0.9, 2.0);
+      drawToySphere(ctx, 0, 0, r, '#334155', {
+        rimColor: '#0f172a',
+        lineWidth: lw,
+        shine: 0.72,
+      });
 
-      // Glowing candy fuse spark
-      ctx.fillStyle = '#ffeaa7';
-      ctx.beginPath(); ctx.arc(r * 0.5, -r * 0.7, 4 + Math.sin(this.time * 20) * 2, 0, TAU); ctx.fill();
-      ctx.font = '800 13px Outfit, sans-serif';
-      ctx.fillStyle = '#ffbe0b';
-      ctx.textAlign = 'center';
-      ctx.fillText('💣', 0, 4);
+      // Cute fuse cap & spark
+      drawToyBevelRect(ctx, r * 0.25, -r * 1.05, r * 0.44, r * 0.28, 3, '#ffd166', {
+        depth: 1.5,
+        rimColor: toyRim('#d97706', 0.55),
+        lineWidth: 1.1,
+      });
+      ctx.strokeStyle = '#fb7185';
+      ctx.lineWidth = Math.max(2, r * 0.1);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(r * 0.48, -r * 1.02);
+      ctx.quadraticCurveTo(r * 0.72, -r * 1.32, r * 0.9, -r * 1.15);
+      ctx.stroke();
+
+      const sparkR = 3.6 + Math.sin(this.time * 20) * 1.6;
+      drawToySphere(ctx, r * 0.9, -r * 1.15, sparkR, '#fde047', {
+        rimColor: '#f97316',
+        lineWidth: 1,
+        shine: 0.9,
+      });
+
+      // Expressive mischievous eyes
+      drawToyEyes(ctx, 0, r * 0.05, Math.max(2, r * 0.16), {
+        spacing: r * 0.62,
+        style: 'angry',
+        lookX: 0.15,
+        ink: '#0f172a',
+      });
       ctx.restore();
       return;
     }
 
     const f = FR[tier];
     const r = f.r * s;
+    const rim = toyRim(f.c, 0.56);
+    const lw = toyLineW(r * 2, 0.04, 0.9, 2.2);
 
-    // 1. Confectionery Body Gradient
-    const bg = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
-    bg.addColorStop(0, '#ffffff');
-    bg.addColorStop(0.25, f.topC);
-    bg.addColorStop(0.85, f.c);
-    bg.addColorStop(1, '#140924');
+    // 1. Volumetric 3D Confectionery Body Gradient
+    const bg = ctx.createRadialGradient(-r * 0.34, -r * 0.34, r * 0.08, 0, 0, r);
+    bg.addColorStop(0, shadeColor(f.topC, 0.56));
+    bg.addColorStop(0.28, f.topC);
+    bg.addColorStop(0.78, f.c);
+    bg.addColorStop(1, shadeColor(f.c, -0.3));
 
     ctx.fillStyle = bg;
-    ctx.strokeStyle = '#140924';
-    ctx.lineWidth = Math.max(3, r * 0.09);
-
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, TAU);
     ctx.fill();
-    ctx.stroke();
 
-    // 2. Fruit-Specific Confectionery Features
+    // Warm lower bounce sheen
+    if (r >= 10) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.beginPath();
+      ctx.ellipse(r * 0.06, r * 0.62, r * 0.45, r * 0.14, 0, 0, TAU);
+      ctx.fill();
+    }
+
+    // 2. Fruit-Specific Confectionery Features (rotated with body angle)
+    ctx.save();
     ctx.rotate(angle);
 
     if (f.stripes) {
-      // Watermelon wavy dark green stripes
+      // Watermelon wavy dark green stripes clipped cleanly inside sphere
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r - lw * 0.4, 0, TAU);
+      ctx.clip();
       ctx.strokeStyle = '#1b4332';
-      ctx.lineWidth = Math.max(3.5, r * 0.12);
+      ctx.lineWidth = Math.max(3.5, r * 0.11);
+      ctx.lineCap = 'round';
       for (let a = -0.7; a <= 0.7; a += 0.45) {
         ctx.beginPath();
-        ctx.arc(0, 0, r * 0.88, a - 0.25, a + 0.25);
+        ctx.arc(0, 0, r * 0.86, a - 0.25, a + 0.25);
         ctx.stroke();
       }
+      ctx.restore();
+    } else if (f.mesh) {
+      // Honeydew subtle candy glaze lattice
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r - lw * 0.4, 0, TAU);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.lineWidth = Math.max(1.5, r * 0.03);
+      for (let k = -2; k <= 2; k++) {
+        ctx.beginPath();
+        ctx.arc(k * r * 0.38, 0, r * 0.9, -1.1, 1.1);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (f.slice) {
+      // Glazed Mandarin soft segment gleam
+      ctx.strokeStyle = 'rgba(255, 247, 237, 0.35)';
+      ctx.lineWidth = Math.max(1.4, r * 0.05);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.62, -0.8, 0.8);
+      ctx.stroke();
+    }
+
+    // Top stems, leaves & crowns
+    const leafCol = '#22c55e';
+    const leafRim = toyRim(leafCol, 0.56);
+    if (f.leaf || f.pear) {
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = Math.max(2, r * 0.09);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.85);
+      ctx.quadraticCurveTo(r * 0.12, -r * 1.15, r * 0.24, -r * 1.18);
+      ctx.stroke();
+
+      ctx.fillStyle = leafCol;
+      ctx.strokeStyle = leafRim;
+      ctx.lineWidth = Math.max(1, r * 0.05);
+      ctx.beginPath();
+      ctx.ellipse(r * 0.22, -r * 1.0, Math.max(4, r * 0.28), Math.max(2.4, r * 0.13), -0.45, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    } else if (f.stem) {
+      ctx.strokeStyle = '#4c1d95';
+      ctx.lineWidth = Math.max(2, r * 0.08);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.86);
+      ctx.quadraticCurveTo(-r * 0.1, -r * 1.12, r * 0.14, -r * 1.16);
+      ctx.stroke();
+    } else if (f.stick) {
+      // Candy Apple wooden stick
+      drawToyBevelRect(ctx, -r * 0.08, -r * 1.24, r * 0.16, r * 0.42, 3, '#d97706', {
+        depth: 0,
+        rimColor: '#78350f',
+        lineWidth: 1.2,
+      });
     } else if (f.crown) {
-      // Golden Pineapple green crown on top
-      ctx.fillStyle = '#38b000';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 2.5;
+      // Golden Pineapple 3D leafy crown
+      const cg = ctx.createLinearGradient(0, -r - 24, 0, -r + 4);
+      cg.addColorStop(0, '#4ade80');
+      cg.addColorStop(1, '#15803d');
+      ctx.fillStyle = cg;
+      ctx.strokeStyle = leafRim;
+      ctx.lineWidth = 1.6;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-14, -r + 4);
       ctx.lineTo(-20, -r - 18);
@@ -616,10 +855,10 @@ export class FruitMerge extends Game {
       ctx.fill();
       ctx.stroke();
     } else if (f.calyx) {
-      // Strawberry green top leaves
-      ctx.fillStyle = '#38b000';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 2;
+      // Strawberry green top calyx leaves
+      ctx.fillStyle = leafCol;
+      ctx.strokeStyle = leafRim;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.ellipse(0, -r + 3, 10, 4, 0, 0, TAU);
       ctx.ellipse(-7, -r + 5, 8, 3.5, -0.6, 0, TAU);
@@ -628,13 +867,20 @@ export class FruitMerge extends Game {
       ctx.stroke();
     } else if (f.king) {
       // Superlambanana Royal Golden Crown & Magenta Lamb Ears
+      const earRim = toyRim('#f72585', 0.56);
       ctx.fillStyle = '#f72585';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = earRim;
+      ctx.lineWidth = 1.8;
       ctx.beginPath(); ctx.ellipse(-r * 0.7, -r * 0.6, 16, 9, -0.7, 0, TAU); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.ellipse(r * 0.7, -r * 0.6, 16, 9, 0.7, 0, TAU); ctx.fill(); ctx.stroke();
 
-      ctx.fillStyle = '#ffd166';
+      const crownG = ctx.createLinearGradient(0, -r - 22, 0, -r + 6);
+      crownG.addColorStop(0, '#fff3b0');
+      crownG.addColorStop(0.5, '#ffd166');
+      crownG.addColorStop(1, '#d97706');
+      ctx.fillStyle = crownG;
+      ctx.strokeStyle = '#78350f';
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(-16, -r + 6);
       ctx.lineTo(-18, -r - 16);
@@ -644,94 +890,99 @@ export class FruitMerge extends Game {
       ctx.lineTo(18, -r - 16);
       ctx.lineTo(16, -r + 6);
       ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      ctx.fill();
+      ctx.stroke();
     }
 
-    // 3. Bloons Crescent Specular Highlight (Upper Left)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+    // Tinted outer vinyl rim stroke around the sphere
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = lw;
     ctx.beginPath();
-    ctx.ellipse(-r * 0.38, -r * 0.42, r * 0.32, r * 0.16, -0.5, 0, TAU);
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.stroke();
+
+    // 3. Soft Studio Crescent Specular Highlight (Upper Left)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.68)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.35, -r * 0.40, r * 0.3, r * 0.14, -0.52, 0, TAU);
     ctx.fill();
 
-    // 4. Living Animated Cartoon Eyes & Expressions!
+    // 4. Living Animated 3D Toy Eyes & Expressions
     const eyeSpacing = r * 0.32;
-    const eyeY = -r * 0.05;
+    const eyeY = -r * 0.04;
     const isBlinking = (blinkTime % 3.5) > 3.3;
 
     if (isSquished) {
-      // Panicked / Squished expression (>_<)
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = Math.max(2.5, r * 0.08);
-      // Left >
-      ctx.beginPath();
-      ctx.moveTo(-eyeSpacing - 5, eyeY - 5); ctx.lineTo(-eyeSpacing + 3, eyeY); ctx.lineTo(-eyeSpacing - 5, eyeY + 5);
-      ctx.stroke();
-      // Right <
-      ctx.beginPath();
-      ctx.moveTo(eyeSpacing + 5, eyeY - 5); ctx.lineTo(eyeSpacing - 3, eyeY); ctx.lineTo(eyeSpacing + 5, eyeY + 5);
-      ctx.stroke();
+      // Panicked / Squished expression
+      drawToyEyes(ctx, 0, eyeY, Math.max(2.2, r * 0.14), {
+        spacing: eyeSpacing * 2,
+        style: 'dizzy',
+        ink: '#0f172a',
+      });
 
       // Nervous wavy mouth
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = Math.max(1.5, r * 0.06);
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(-r * 0.2, eyeY + r * 0.35);
       ctx.quadraticCurveTo(0, eyeY + r * 0.2, r * 0.2, eyeY + r * 0.35);
       ctx.stroke();
 
-      // Cartoon blue sweat drop
-      ctx.fillStyle = '#4cc9f0';
-      ctx.beginPath();
-      ctx.arc(r * 0.55, -r * 0.35, 3.5, 0, TAU);
-      ctx.fill();
+      // Glossy cyan sweat drop
+      drawToySphere(ctx, r * 0.55, -r * 0.35, Math.max(2.6, r * 0.08), '#38bdf8', {
+        rimColor: '#0284c7',
+        lineWidth: 0.9,
+      });
     } else if (isBlinking) {
       // Cute blinking closed eye lines
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = Math.max(2.5, r * 0.08);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = Math.max(1.6, r * 0.065);
+      ctx.lineCap = 'round';
+      const blinkR = Math.max(2.6, r * 0.13);
       ctx.beginPath();
-      ctx.arc(-eyeSpacing, eyeY, 4, 0.2, Math.PI - 0.2);
-      ctx.arc(eyeSpacing, eyeY, 4, 0.2, Math.PI - 0.2);
+      ctx.arc(-eyeSpacing, eyeY, blinkR, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(eyeSpacing, eyeY, blinkR, 0.2, Math.PI - 0.2);
       ctx.stroke();
     } else {
-      // Big expressive cartoon eyes with glossy pupils
-      [-eyeSpacing, eyeSpacing].forEach((ex) => {
-        const er = Math.max(3.5, r * 0.18);
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#140924';
-        ctx.lineWidth = 1.8;
+      // Rosy soft toy cheeks
+      if (r >= 18) {
+        ctx.fillStyle = 'rgba(255, 117, 143, 0.36)';
         ctx.beginPath();
-        ctx.arc(ex, eyeY, er, 0, TAU);
+        ctx.ellipse(-eyeSpacing * 1.35, eyeY + r * 0.18, r * 0.12, r * 0.07, 0, 0, TAU);
+        ctx.ellipse(eyeSpacing * 1.35, eyeY + r * 0.18, r * 0.12, r * 0.07, 0, 0, TAU);
         ctx.fill();
-        ctx.stroke();
+      }
 
-        // Dark pupil
-        ctx.fillStyle = '#140924';
-        ctx.beginPath();
-        ctx.arc(ex + 1, eyeY, er * 0.65, 0, TAU);
-        ctx.fill();
-
-        // Pupil specular glints
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(ex, eyeY - er * 0.25, er * 0.25, 0, TAU);
-        ctx.fill();
+      // Expressive glossy toy eyes without heavy black outlines
+      drawToyEyes(ctx, 0, eyeY, Math.max(2.2, r * 0.145), {
+        spacing: eyeSpacing * 2,
+        style: 'bright',
+        lookX: 0.2,
+        lookY: -0.05,
+        ink: '#0f172a',
       });
 
       // Cute happy smiling mouth
-      ctx.fillStyle = '#800f2f';
-      ctx.strokeStyle = '#140924';
-      ctx.lineWidth = 1.8;
+      ctx.fillStyle = '#881337';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = Math.max(1.1, r * 0.036);
       ctx.beginPath();
-      ctx.arc(0, eyeY + r * 0.32, Math.max(4, r * 0.18), 0.1, Math.PI - 0.1);
+      ctx.arc(0, eyeY + r * 0.3, Math.max(3.5, r * 0.17), 0.1, Math.PI - 0.1);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
       // Pink tongue
-      ctx.fillStyle = '#ff758f';
+      ctx.fillStyle = '#fb7185';
       ctx.beginPath();
-      ctx.arc(0, eyeY + r * 0.42, Math.max(2, r * 0.1), Math.PI, 0);
+      ctx.arc(0, eyeY + r * 0.4, Math.max(1.8, r * 0.095), Math.PI, 0);
       ctx.fill();
     }
 
+    ctx.restore();
     ctx.restore();
   }
 
@@ -739,21 +990,27 @@ export class FruitMerge extends Game {
   renderNextBubble(ctx) {
     const bx = 48;
     const by = 110;
+    const bw = 74;
+    const bh = 52;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(20, 9, 36, 0.85)';
-    ctx.strokeStyle = '#ffd166';
-    ctx.lineWidth = 2.5;
-    this.rr(bx - 36, by - 24, 72, 48, 14);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, bx - bw / 2, by - bh / 2, bw, bh, 14, '#1e1b4b', {
+      depth: 3,
+      rimColor: '#ffd166',
+      lineWidth: 2,
+      gloss: false,
+    });
 
-    ctx.fillStyle = '#ffd166';
-    ctx.font = '800 10px Outfit, system-ui, sans-serif';
+    ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.fillText('NEXT', bx, by - 10);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.6;
+    ctx.strokeText('NEXT', bx, by - 12);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('NEXT', bx, by - 12);
 
-    this.drawVectorFruit(ctx, bx, by + 8, this.next, 0, 0.65, false);
+    this.drawVectorFruit(ctx, bx, by + 9, this.next, 0, 0.62, false);
     ctx.restore();
   }
 
@@ -761,45 +1018,59 @@ export class FruitMerge extends Game {
   renderShakerHUD(ctx, W, H) {
     const sx = W - 78;
     const sy = 110;
+    const sw = 108;
+    const sh = 50;
 
     ctx.save();
     const canShake = this.shakerCharges > 0;
-    ctx.fillStyle = canShake ? 'rgba(61, 255, 162, 0.25)' : 'rgba(20, 9, 36, 0.7)';
-    ctx.strokeStyle = canShake ? '#3dffa2' : 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 2.5;
-    this.rr(sx - 52, sy - 24, 104, 48, 14);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(
+      ctx,
+      sx - sw / 2,
+      sy - sh / 2,
+      sw,
+      sh,
+      14,
+      canShake ? '#065f46' : '#1e1b4b',
+      {
+        depth: 3,
+        rimColor: canShake ? '#3dffa2' : '#475569',
+        lineWidth: 2,
+        gloss: false,
+      },
+    );
 
-    ctx.fillStyle = canShake ? '#3dffa2' : 'rgba(255, 255, 255, 0.5)';
-    ctx.font = '900 11px Outfit, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`🫨 BUMP JAR`, sx, sy - 8);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
 
-    ctx.font = '800 12px Outfit, system-ui, sans-serif';
+    ctx.font = "700 11px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 2.6;
+    ctx.strokeText('🫨 BUMP JAR', sx, sy - 7);
+    ctx.fillStyle = canShake ? '#3dffa2' : '#94a3b8';
+    ctx.fillText('🫨 BUMP JAR', sx, sy - 7);
+
+    ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
+    ctx.lineWidth = 2.6;
+    ctx.strokeText(`⚡ ${this.shakerCharges} LEFT`, sx, sy + 11);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`⚡ ${this.shakerCharges} LEFT`, sx, sy + 10);
+    ctx.fillText(`⚡ ${this.shakerCharges} LEFT`, sx, sy + 11);
     ctx.restore();
 
     // Bottom Stats
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.font = '800 12px Outfit, system-ui, sans-serif';
+    ctx.save();
+    ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
-    ctx.fillText(`CONFECTIONERY FRUITS: ${this.fruits.length}`, 16, H - 76);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
+    const statMsg = `CONFECTIONERY FRUITS: ${this.fruits.length}`;
+    ctx.strokeText(statMsg, 16, H - 76);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillText(statMsg, 16, H - 76);
+    ctx.restore();
   }
 
   rr(x, y, w, h, r) {
-    const ctx = this.ctx;
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
+    traceRoundRect(this.ctx, x, y, w, h, r);
   }
 }

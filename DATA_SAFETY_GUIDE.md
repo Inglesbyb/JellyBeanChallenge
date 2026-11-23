@@ -48,7 +48,7 @@ When publishing **Jelly Bean: 60s Challenge** in Google Play Console under **Pol
 | Question | Answer |
 | :--- | :--- |
 | **Are all functions in your app available without special access restrictions?** | **Yes, all functionality is available without restrictions** |
-| Notes for review team | *No login, password, or subscription is required. All 20 mini-games and daily challenges are unlocked and immediately playable.* |
+| Notes for review team | *No login, password, or subscription is required. All 20 starter mini-games and daily challenges are immediately playable, with additional mystery game packs unlocked through normal gameplay (no payments or accounts).* |
 
 ---
 

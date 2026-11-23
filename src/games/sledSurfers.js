@@ -1,6 +1,16 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
 import { drawBean } from '../engine/bean.js';
+import {
+  shadeColor,
+  toyRim,
+  toyLineW,
+  drawToyShadow,
+  drawToySphere,
+  drawToyBevelRect,
+  drawToyPill,
+  traceRoundRect,
+} from '../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -25,9 +35,18 @@ export class SledSurfers extends Game {
     id: 'sled-surfers',
     title: 'Sled Surfers',
     icon: '🛷',
-    hint: 'DRAG Left/Right to BANK on the water slide · Hit RAMPS for AIR TIME · FLIP in mid-air for BOOST!',
+    hint: 'DRAG Left/Right to BANK · Hit RAMPS for AIR TIME · FLIP in mid-air for BOOST!',
     baseLikes: 9180,
+    isPrestige: false,
+    parScore60s: 2200,
     roundLen: 90,
+    cue: 'BANK & DO FLIPS!',
+    prestigeCue: 'FASTER SLIDE · FIERCER RIVALS!',
+    scaling: {
+      baseSpeed:      { base: 520,  rate: 0.16, cap: 680,  mode: 'up', round: true, label: 'Cruise Speed' },
+      maxSpeed:       { base: 1050, rate: 0.16, cap: 1250, mode: 'up', round: true, label: 'Top Speed' },
+      rivalAggroMult: { base: 1.0,  rate: 0.16, cap: 1.16, mode: 'up', label: 'Rival Pace' },
+    },
   };
 
   init(saved, score = 0) {
@@ -45,10 +64,10 @@ export class SledSurfers extends Game {
     this.flipSpins = 0; // Completed 360 spins during current jump
     this.isFlipping = false;
 
-    // Movement & Speed
-    this.baseSpeed = 520;
-    this.speed = saved?.speed || 520; // Units/second
-    this.maxSpeed = 1050;
+    // Movement & Speed (scaled by SSOT Prestige slope)
+    this.baseSpeed = this.diff.baseSpeed ?? 520;
+    this.speed = Math.max(this.baseSpeed, saved?.speed || this.baseSpeed);
+    this.maxSpeed = this.diff.maxSpeed ?? 1050;
     this.speedBoostTimer = 0;
     this.wipeoutTimer = 0; // Non-lethal spinout recovery
 
@@ -87,12 +106,13 @@ export class SledSurfers extends Game {
     this.items = [];
     this.nextItemZ = this.playerZ + 200;
 
-    // Rival AI Surfers with distinct personalities and aggression
+    // Rival AI Surfers with distinct personalities and Prestige-scaled aggression
+    const agg = this.diff.rivalAggroMult ?? 1;
     this.rivals = [
-      { id: 1, name: 'SplashBro', color: '#f72585', z: this.playerZ + 45,  u: -0.35, speed: 520, y: 0, aggression: 1.04, fellTimer: 0 },
-      { id: 2, name: 'WaveKing',  color: '#ffb703', z: this.playerZ + 95,  u:  0.30, speed: 540, y: 0, aggression: 1.07, fellTimer: 0 },
-      { id: 3, name: 'TurboBean', color: '#06d6a0', z: this.playerZ - 25, u: -0.15, speed: 510, y: 0, aggression: 1.02, fellTimer: 0 },
-      { id: 4, name: 'DriftQueen',color: '#7209b7', z: this.playerZ + 155, u:  0.45, speed: 550, y: 0, aggression: 1.09, fellTimer: 0 },
+      { id: 1, name: 'SplashBro', color: '#f72585', z: this.playerZ + 45,  u: -0.35, speed: this.baseSpeed,       y: 0, aggression: 1.04 * agg, fellTimer: 0 },
+      { id: 2, name: 'WaveKing',  color: '#ffb703', z: this.playerZ + 95,  u:  0.30, speed: this.baseSpeed + 20,  y: 0, aggression: 1.07 * agg, fellTimer: 0 },
+      { id: 3, name: 'TurboBean', color: '#06d6a0', z: this.playerZ - 25, u: -0.15, speed: this.baseSpeed - 10,  y: 0, aggression: 1.02 * agg, fellTimer: 0 },
+      { id: 4, name: 'DriftQueen',color: '#7209b7', z: this.playerZ + 155, u:  0.45, speed: this.baseSpeed + 30,  y: 0, aggression: 1.09 * agg, fellTimer: 0 },
     ];
     this.lastRank = 4;
 
@@ -193,7 +213,7 @@ export class SledSurfers extends Game {
 
   updateSteering(dt) {
     // Touch/Mouse Dragging
-    if (this.input.isDown) {
+    if (this.input.down) {
       // Map canvas screen X (0..W) to lateral coordinate u (-1.5..1.5)
       const targetU = ((this.input.x / this.W) - 0.5) * 2.9;
       this.playerTargetU = clamp(targetU, -1.5, 1.5);
@@ -244,7 +264,7 @@ export class SledSurfers extends Game {
       this.fovPunch = Math.min(1.0, this.fovPunch + dt * 4);
     } else {
       // Smooth natural acceleration towards cruising speed based on distance
-      const cruiseSpeed = Math.min(880, this.baseSpeed + (this.playerZ * 0.015));
+      const cruiseSpeed = Math.min(this.maxSpeed - 120, this.baseSpeed + (this.playerZ * 0.015));
       this.speed += (cruiseSpeed - this.speed) * Math.min(1.0, 1.5 * dt);
       this.fovPunch = Math.max(0, this.fovPunch - dt * 2);
     }
@@ -281,7 +301,7 @@ export class SledSurfers extends Game {
     this.playerY += this.playerVy * dt;
 
     // Flip stunt control: Holding Space or dragging/clicking during air time
-    const flipInput = this.keys.space || (this.input.isDown && this.input.y < 420);
+    const flipInput = this.keys.space || (this.input.down && this.input.y < 420);
     if (flipInput && Math.abs(this.playerU) <= 1.15) {
       this.isFlipping = true;
       const spinSpeed = 9.2; // rad/s
@@ -633,26 +653,62 @@ export class SledSurfers extends Game {
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, W, horizonY + 2);
 
+    // Warm toy diorama sun orb in upper sky
+    const sunX = W * 0.78;
+    const sunY = 92;
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 110);
+    sunGlow.addColorStop(0, 'rgba(254, 240, 138, 0.85)');
+    sunGlow.addColorStop(0.35, 'rgba(253, 224, 71, 0.32)');
+    sunGlow.addColorStop(1, 'rgba(253, 224, 71, 0)');
+    ctx.fillStyle = sunGlow;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 110, 0, TAU);
+    ctx.fill();
+    drawToySphere(ctx, sunX, sunY, 24, '#fde047', {
+      rimColor: '#ca8a04',
+      lineWidth: 1.2,
+      shine: 0.65,
+      bottomBounce: false,
+    });
+
     // Tropical Ocean below horizon
     const oceanGrad = ctx.createLinearGradient(0, horizonY, 0, H);
-    oceanGrad.addColorStop(0, '#0284c7');
-    oceanGrad.addColorStop(0.4, '#0369a1');
+    oceanGrad.addColorStop(0, '#0ea5e9');
+    oceanGrad.addColorStop(0.35, '#0284c7');
     oceanGrad.addColorStop(1, '#075985');
     ctx.fillStyle = oceanGrad;
     ctx.fillRect(0, horizonY, W, H - horizonY);
 
-    // Fluffy 3D Clouds drifting in the sky
+    // Horizon sun shimmer band
+    const seaGlint = ctx.createLinearGradient(0, horizonY, 0, horizonY + 46);
+    seaGlint.addColorStop(0, 'rgba(186, 230, 253, 0.45)');
+    seaGlint.addColorStop(1, 'rgba(14, 165, 233, 0)');
+    ctx.fillStyle = seaGlint;
+    ctx.fillRect(0, horizonY, W, 46);
+
+    // Fluffy 3D Marshmallow Clouds drifting in the sky
     ctx.save();
     for (const c of this.clouds) {
       const proj = this.project(c.x, c.y, this.playerZ + c.z);
       if (!proj || proj.rz < 80 || proj.y > horizonY - 10) continue;
 
-      ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`;
-      ctx.beginPath();
       const cr = 48 * proj.scale * c.scale;
+      ctx.globalAlpha = c.alpha;
+
+      // Soft cool lower bounce shadow lobe
+      ctx.fillStyle = '#bae6fd';
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y + cr * 0.12, cr * 0.96, 0, TAU);
+      ctx.arc(proj.x - cr * 0.6, proj.y + cr * 0.22, cr * 0.68, 0, TAU);
+      ctx.arc(proj.x + cr * 0.6, proj.y + cr * 0.25, cr * 0.72, 0, TAU);
+      ctx.fill();
+
+      // Bright sunlit marshmallow cloud puffs
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
       ctx.arc(proj.x, proj.y, cr, 0, TAU);
-      ctx.arc(proj.x - cr * 0.6, proj.y + cr * 0.1, cr * 0.7, 0, TAU);
-      ctx.arc(proj.x + cr * 0.6, proj.y + cr * 0.15, cr * 0.75, 0, TAU);
+      ctx.arc(proj.x - cr * 0.6, proj.y + cr * 0.08, cr * 0.7, 0, TAU);
+      ctx.arc(proj.x + cr * 0.6, proj.y + cr * 0.12, cr * 0.75, 0, TAU);
       ctx.fill();
     }
     ctx.restore();
@@ -708,17 +764,18 @@ export class SledSurfers extends Game {
 
         if (!pFarA || !pFarB || !pNearA || !pNearB) continue;
 
-        // Color theme: Alternating turquoise, aqua, and white water stripes
+        // Color theme: Alternating glossy turquoise, aqua, and sunlit rail vinyl stripes
         const stripeCol = (i % 2 === bandIndex);
-        let fillCol = stripeCol ? '#00b4d8' : '#0077b6';
+        let fillCol = stripeCol ? '#06b6d4' : '#0284c7';
 
         // Center lane has a bright aqua speed channel
         if (i === 3 || i === 4) {
-          fillCol = stripeCol ? '#48cae4' : '#0096c7';
+          fillCol = stripeCol ? '#67e8f9' : '#22d3ee';
         }
-        // Top outer rim rails are bright safety orange/yellow
-        if (i === 0 || i === segFar.points.length - 2) {
-          fillCol = '#ffd166';
+        // Top outer rim rails are bright safety toy yellow-gold
+        const isRail = (i === 0 || i === segFar.points.length - 2);
+        if (isRail) {
+          fillCol = stripeCol ? '#fde047' : '#f59e0b';
         }
 
         ctx.fillStyle = fillCol;
@@ -730,10 +787,16 @@ export class SledSurfers extends Game {
         ctx.closePath();
         ctx.fill();
 
-        // Subtle watery border line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        // Tinted edge rim on outer rails, glossy water highlight inside chute
+        if (isRail) {
+          ctx.strokeStyle = toyRim(fillCol, 0.5);
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
     }
 
@@ -768,47 +831,80 @@ export class SledSurfers extends Game {
       const s = proj.scale;
 
       if (it.type === 'coin') {
-        // Floating Gold Diamond Coin
-        ctx.fillStyle = '#ffd166';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
-        const spin = Math.sin(this.time * 6 + it.z * 0.1);
+        // Grounding shadow under spinning vinyl coin
+        drawToyShadow(ctx, 0, 18 * s, 13 * s, 4 * s, 0.24);
+        const spin = Math.max(0.24, Math.abs(Math.sin(this.time * 6 + it.z * 0.1)));
         ctx.scale(spin, 1);
+        drawToySphere(ctx, 0, 0, 16 * s, '#ffd166', {
+          rimColor: '#92400e',
+          lineWidth: toyLineW(32 * s, 0.045, 0.75, 2.0),
+          shine: 0.78,
+        });
+        // Recessed inner gold emblem
+        ctx.fillStyle = '#d97706';
         ctx.beginPath();
-        ctx.arc(0, 0, 16 * s, 0, TAU);
+        ctx.arc(0, 0, 7.5 * s, 0, TAU);
         ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#f59e0b';
+        ctx.fillStyle = '#fef08a';
         ctx.beginPath();
-        ctx.arc(0, 0, 9 * s, 0, TAU);
+        ctx.arc(-1.5 * s, -1.5 * s, 3.2 * s, 0, TAU);
         ctx.fill();
       } else if (it.type === 'boost') {
-        // Glowing Golden Chevron Booster Pad
-        ctx.fillStyle = '#ffd166';
-        ctx.shadowColor = '#ffe066';
-        ctx.shadowBlur = 12 * s;
+        // Tactile 3D Golden Chevron Booster Pad
+        const lw = toyLineW(44 * s, 0.045, 0.8, 2.0);
+        const traceChevron = (dy) => {
+          ctx.beginPath();
+          ctx.moveTo(0, (-22 + dy) * s);
+          ctx.lineTo(26 * s, (18 + dy) * s);
+          ctx.lineTo(12 * s, (18 + dy) * s);
+          ctx.lineTo(0, (-2 + dy) * s);
+          ctx.lineTo(-12 * s, (18 + dy) * s);
+          ctx.lineTo(-26 * s, (18 + dy) * s);
+          ctx.closePath();
+        };
+        // 3D bottom extruded lip
+        ctx.fillStyle = '#d97706';
+        traceChevron(4);
+        ctx.fill();
+        // Volumetric sunlit gradient face
+        const bg = ctx.createLinearGradient(0, -22 * s, 0, 18 * s);
+        bg.addColorStop(0, '#fef08a');
+        bg.addColorStop(0.55, '#ffd166');
+        bg.addColorStop(1, '#f59e0b');
+        ctx.fillStyle = bg;
+        ctx.strokeStyle = '#92400e';
+        ctx.lineWidth = lw;
+        ctx.lineJoin = 'round';
+        traceChevron(0);
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner specular highlight chevron
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.58)';
         ctx.beginPath();
-        ctx.moveTo(0, -22 * s);
-        ctx.lineTo(26 * s, 18 * s);
-        ctx.lineTo(12 * s, 18 * s);
-        ctx.lineTo(0, -2 * s);
-        ctx.lineTo(-12 * s, 18 * s);
-        ctx.lineTo(-26 * s, 18 * s);
+        ctx.moveTo(0, -16 * s);
+        ctx.lineTo(15 * s, 8 * s);
+        ctx.lineTo(7 * s, 8 * s);
+        ctx.lineTo(0, -4 * s);
+        ctx.lineTo(-7 * s, 8 * s);
+        ctx.lineTo(-15 * s, 8 * s);
         ctx.closePath();
         ctx.fill();
       } else if (it.type === 'ramp') {
-        // 3D Air Launch Ramp
-        ctx.fillStyle = '#f72585';
-        ctx.strokeStyle = '#ffd166';
-        ctx.lineWidth = 2 * s;
-        ctx.beginPath();
-        ctx.roundRect(-30 * s, -14 * s, 60 * s, 24 * s, 6 * s);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${Math.round(12 * s)}px system-ui, sans-serif`;
+        // 3D Beveled Vinyl Air Launch Ramp
+        drawToyBevelRect(ctx, -30 * s, -14 * s, 60 * s, 24 * s, 7 * s, '#f72585', {
+          depth: Math.max(1.5, 4.5 * s),
+          rimColor: toyRim('#f72585', 0.56),
+          lineWidth: toyLineW(40 * s, 0.05, 0.85, 2.2),
+          gloss: true,
+        });
+        ctx.font = `700 ${Math.max(8, Math.round(12 * s))}px 'Fredoka', 'Outfit', sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = Math.max(1.5, 2.6 * s);
+        ctx.strokeText('▲ JUMP ▲', 0, -2 * s);
+        ctx.fillStyle = '#fef08a';
         ctx.fillText('▲ JUMP ▲', 0, -2 * s);
       }
 
@@ -839,29 +935,56 @@ export class SledSurfers extends Game {
       ctx.save();
       ctx.translate(proj.x, proj.y);
       const s = proj.scale;
+      const rim = toyRim(r.color, 0.55);
+      const lw = toyLineW(40 * s, 0.045, 0.75, 2.2);
 
-      // Draw Rival Character Bean
-      drawBean(ctx, 0, -18 * s, 26 * s, { color: r.color, squash: 0.95 });
+      // Soft grounding shadow on water chute
+      drawToyShadow(ctx, 0, 8 * s, 23 * s, 6.5 * s, 0.26);
 
-      // Rival Float Sled
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = r.color;
-      ctx.lineWidth = 2.5 * s;
+      // 3D Vinyl Rival Float Sled (extruded bottom rim + glossy top deck)
+      ctx.fillStyle = shadeColor(r.color, -0.34);
+      ctx.beginPath();
+      ctx.ellipse(0, 3 * s, 22 * s, 7 * s, 0, 0, TAU);
+      ctx.fill();
+
+      const sledGrad = ctx.createLinearGradient(0, -7 * s, 0, 7 * s);
+      sledGrad.addColorStop(0, '#ffffff');
+      sledGrad.addColorStop(0.55, '#f1f5f9');
+      sledGrad.addColorStop(1, shadeColor(r.color, 0.25));
+      ctx.fillStyle = sledGrad;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = lw;
       ctx.beginPath();
       ctx.ellipse(0, 0, 22 * s, 7 * s, 0, 0, TAU);
       ctx.fill();
       ctx.stroke();
 
-      // Nametag Badge
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+      // Gloss crescent on sled nose
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
       ctx.beginPath();
-      ctx.roundRect(-28 * s, -48 * s, 56 * s, 16 * s, 4 * s);
+      ctx.ellipse(-5 * s, -2.5 * s, 9 * s, 2.2 * s, -0.1, 0, TAU);
       ctx.fill();
+
+      // Draw Rival Character Bean
+      drawBean(ctx, 0, -18 * s, 26 * s, {
+        color: r.color,
+        bellyColor: shadeColor(r.color, 0.4),
+        squash: 0.95,
+        walkT: this.wakeAnimT * 0.4,
+        eyes: 'happy',
+      });
+
+      // 3D Toy Pill Nametag Badge
+      drawToyPill(ctx, -30 * s, -49 * s, 60 * s, 16 * s, '#0f172a', {
+        rimColor: r.color,
+        lineWidth: Math.max(0.9, 1.5 * s),
+        gloss: false,
+      });
       ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${Math.round(8.5 * s)}px system-ui, sans-serif`;
+      ctx.font = `700 ${Math.max(7, Math.round(8.8 * s))}px 'Fredoka', 'Outfit', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(r.name, 0, -40 * s);
+      ctx.fillText(r.name, 0, -41 * s);
 
       ctx.restore();
     }
@@ -880,7 +1003,18 @@ export class SledSurfers extends Game {
     const cosB = Math.cos(track.bank);
     const sinB = Math.sin(track.bank);
     const worldX = track.x + (localX * cosB - localY * sinB);
-    const worldY = track.y + (localX * sinB + localY * cosB) + this.playerY + 14;
+    const trackSurfaceY = track.y + (localX * sinB + localY * cosB) + 14;
+    const worldY = trackSurfaceY + this.playerY;
+
+    // Grounding shadow projected on the water slide chute
+    if (Math.abs(this.playerU) <= 1.15) {
+      const groundProj = this.project(worldX, trackSurfaceY - 4, this.playerZ);
+      if (groundProj) {
+        const shScale = clamp(1 - this.playerY / 260, 0.35, 1.0);
+        const shAlpha = clamp(0.30 - this.playerY * 0.0009, 0.08, 0.30);
+        drawToyShadow(ctx, groundProj.x, groundProj.y + 10, 34 * shScale, 9 * shScale, shAlpha);
+      }
+    }
 
     const proj = this.project(worldX, worldY, this.playerZ);
     const px = proj ? proj.x : this.W / 2;
@@ -895,51 +1029,87 @@ export class SledSurfers extends Game {
       ctx.rotate(this.sledTilt);
     }
 
-    // High-Tech Aerodynamic Water Sled
-    // Bottom Float Hull
-    const hullGrad = ctx.createLinearGradient(-32, 0, 32, 0);
-    hullGrad.addColorStop(0, '#f72585');
-    hullGrad.addColorStop(0.5, '#7209b7');
-    hullGrad.addColorStop(1, '#4361ee');
+    // Twin 3D Beveled Hydrofoil Skis
+    drawToyBevelRect(ctx, -26, 17, 14, 6, 3, '#fbbf24', {
+      depth: 2,
+      rimColor: '#92400e',
+      lineWidth: 1.4,
+    });
+    drawToyBevelRect(ctx, 12, 17, 14, 6, 3, '#fbbf24', {
+      depth: 2,
+      rimColor: '#92400e',
+      lineWidth: 1.4,
+    });
+
+    // High-Tech 3D Vinyl Water Sled Hull (extruded under-keel + gradient body + specular shine)
+    ctx.fillStyle = '#311068';
+    traceRoundRect(ctx, -30, 6, 60, 18, 10);
+    ctx.fill();
+
+    const hullGrad = ctx.createLinearGradient(-32, 0, 32, 18);
+    hullGrad.addColorStop(0, '#ff4d94');
+    hullGrad.addColorStop(0.5, '#7c3aed');
+    hullGrad.addColorStop(1, '#3b82f6');
     ctx.fillStyle = hullGrad;
     ctx.strokeStyle = '#ffd166';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.roundRect(-30, 2, 60, 18, [8, 8, 16, 16]);
     ctx.fill();
     ctx.stroke();
 
-    // Twin Hydrofoil Skis
-    ctx.fillStyle = '#fef08a';
-    ctx.beginPath();
-    ctx.roundRect(-26, 18, 14, 5, 2);
-    ctx.roundRect(12, 18, 14, 5, 2);
+    // Specular plastic sheen along upper sled lip
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.44)';
+    traceRoundRect(ctx, -25, 3.5, 50, 5, 3);
     ctx.fill();
 
     // Surfing Mascot Bean!
     drawBean(ctx, 0, -22, 34, {
       color: '#ffd166',
-      bellyColor: '#fff',
+      bellyColor: '#fff7ed',
       squash: this.isAirborne ? 1.15 : 0.95,
-      eyes: (this.dead || this.wipeoutTimer > 0 || Math.abs(this.playerU) > 1.15) ? 'dizzy' : 'happy',
+      eyes: (this.dead || this.wipeoutTimer > 0 || Math.abs(this.playerU) > 1.15)
+        ? 'squish'
+        : this.speedBoostTimer > 0
+          ? 'alert'
+          : 'happy',
+      dead: !!this.dead,
     });
 
-    // Sunglasses / Goggles
-    ctx.fillStyle = '#0f172a';
+    // Glossy 3D Toy Surf Goggles
+    const gogGrad = ctx.createLinearGradient(0, -35, 0, -25);
+    gogGrad.addColorStop(0, '#38bdf8');
+    gogGrad.addColorStop(0.55, '#0f172a');
+    gogGrad.addColorStop(1, '#1e293b');
+    ctx.fillStyle = gogGrad;
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.roundRect(-14, -34, 12, 8, 3);
-    ctx.roundRect(2, -34, 12, 8, 3);
+    ctx.roundRect(-14, -34, 12, 8, 3.5);
+    ctx.roundRect(2, -34, 12, 8, 3.5);
     ctx.fill();
-    ctx.strokeStyle = '#00b4d8';
-    ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    // Goggle bridge & bright white studio lens glare
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-2, -30);
+    ctx.lineTo(2, -30);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.beginPath();
+    ctx.ellipse(-10, -32, 3.5, 1.3, -0.35, 0, TAU);
+    ctx.ellipse(6, -32, 3.5, 1.3, -0.35, 0, TAU);
+    ctx.fill();
 
     ctx.restore();
   }
 
   renderSpeedEffects(ctx, W, H) {
     ctx.save();
-    // 1. Water spray particles behind sled
+    // 1. Glossy 3D water spray droplets behind sled
     const track = getTrackCenter(this.playerZ);
     const angle = this.playerU * (Math.PI / 2.3);
     const localX = Math.sin(angle) * TUBE_RADIUS;
@@ -949,17 +1119,23 @@ export class SledSurfers extends Game {
     const originX = proj ? proj.x : W / 2;
     const originY = proj ? proj.y : 580;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     for (const p of this.sprayParticles) {
-      ctx.beginPath();
-      ctx.arc(originX + p.x, originY + p.y, p.scale, 0, TAU);
-      ctx.fill();
+      const alpha = clamp(p.life / p.maxLife, 0, 1);
+      ctx.globalAlpha = alpha * 0.9;
+      drawToySphere(ctx, originX + p.x, originY + p.y, Math.max(1.8, p.scale), '#bae6fd', {
+        rimColor: '#0284c7',
+        lineWidth: 0.7,
+        shine: 0.75,
+        bottomBounce: false,
+      });
     }
+    ctx.globalAlpha = 1;
 
     // 2. Supersonic Speed Lines during Boost
     if (this.speedBoostTimer > 0) {
       const alpha = Math.min(0.65, this.speedBoostTimer * 0.35);
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.lineCap = 'round';
       ctx.lineWidth = 2.5;
 
       for (let i = 0; i < 14; i++) {
@@ -979,78 +1155,91 @@ export class SledSurfers extends Game {
     ctx.save();
     const barY = 94;
 
-    // 1. Top HUD Capsule (Rank, Distance, Coins, Score)
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(14, barY, W - 28, 42, 21);
-    ctx.fill();
-    ctx.stroke();
+    // 1. Top Toy Bevel HUD Capsule (Rank, Distance, Coins)
+    drawToyBevelRect(ctx, 14, barY, W - 28, 42, 21, '#0f172a', {
+      depth: 3,
+      rimColor: '#38bdf8',
+      lineWidth: 2,
+      gloss: false,
+    });
 
     // Rank Badge
-    const rankCol = this.rank === 1 ? '#ffd166' : this.rank === 2 ? '#94a3b8' : '#f97316';
+    const rankCol = this.rank === 1 ? '#ffd166' : this.rank === 2 ? '#cbd5e1' : '#fb923c';
     ctx.fillStyle = rankCol;
-    ctx.font = '900 15px system-ui, sans-serif';
+    ctx.font = "700 15px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 3;
+    ctx.strokeText(`${this.rank === 1 ? '🥇' : '🏁'} #${this.rank}`, 30, barY + 21);
     ctx.fillText(`${this.rank === 1 ? '🥇' : '🏁'} #${this.rank}`, 30, barY + 21);
 
     // Large Distance Counter in Center
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 19px system-ui, sans-serif';
+    ctx.font = "700 19px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
+    ctx.strokeText(`${this.distanceMeters.toLocaleString()} M`, W / 2, barY + 21);
     ctx.fillText(`${this.distanceMeters.toLocaleString()} M`, W / 2, barY + 21);
 
     // Coins Collected
     ctx.fillStyle = '#ffd166';
-    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'right';
+    ctx.strokeText(`💰 ${this.coins}`, W - 28, barY + 21);
     ctx.fillText(`💰 ${this.coins}`, W - 28, barY + 21);
 
-    // 2. Speedometer Gauge (Bottom-Left)
+    // 2. Toy Speedometer Gauge (Bottom-Left)
     const speedKmh = Math.round((this.speed / 5) * 1.8);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.strokeStyle = this.speedBoostTimer > 0 ? '#ffd166' : '#00b4d8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(16, 660, 110, 44, 12);
-    ctx.fill();
-    ctx.stroke();
+    drawToyBevelRect(ctx, 16, 658, 112, 46, 13, '#0f172a', {
+      depth: 3,
+      rimColor: this.speedBoostTimer > 0 ? '#ffd166' : '#00b4d8',
+      lineWidth: 2,
+      gloss: false,
+    });
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 17px monospace';
+    ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
-    ctx.fillText(`${speedKmh}`, 54, 679);
+    ctx.fillText(`${speedKmh}`, 72, 676);
 
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillText('KM/H RUSH', 54, 694);
+    ctx.fillStyle = this.speedBoostTimer > 0 ? '#ffd166' : '#38bdf8';
+    ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillText('KM/H RUSH', 72, 693);
 
-    // 3. Stunt / Air Time Gauge if flying
+    // 3. Stunt / Air Time Pill if flying
     if (this.isAirborne) {
-      ctx.fillStyle = 'rgba(247, 37, 133, 0.9)';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(W / 2 - 80, 150, 160, 34, 17);
-      ctx.fill();
-      ctx.stroke();
+      drawToyPill(ctx, W / 2 - 84, 150, 168, 34, '#f72585', {
+        rimColor: toyRim('#f72585', 0.55),
+        lineWidth: 2,
+        gloss: true,
+      });
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '900 13px system-ui, sans-serif';
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const prompt = this.flipSpins > 0 ? `FLIP x${this.flipSpins}! 🔄` : 'HOLD TO FLIP! 🚀';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      ctx.strokeText(prompt, W / 2, 167);
+      ctx.fillStyle = '#ffffff';
       ctx.fillText(prompt, W / 2, 167);
     }
 
-    // 4. Multiplier Combo Badge
+    // 4. Multiplier Combo Pill Badge
     if (this.combo > 1) {
-      ctx.fillStyle = '#ffd166';
-      ctx.font = '900 14px system-ui, sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`x${this.combo} BOOST`, W - 24, 685);
+      drawToyPill(ctx, W - 122, 667, 106, 30, '#f59e0b', {
+        rimColor: '#92400e',
+        lineWidth: 2,
+        gloss: true,
+      });
+      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.8;
+      ctx.strokeText(`x${this.combo} BOOST`, W - 69, 682);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`x${this.combo} BOOST`, W - 69, 682);
     }
 
     ctx.restore();
