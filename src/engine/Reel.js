@@ -344,6 +344,25 @@ export class Reel {
       });
     }
 
+    const btnStageUnlockClose = $('#btnStageUnlockClose');
+    if (btnStageUnlockClose) btnStageUnlockClose.onclick = () => this.closeStageUnlockModal();
+    const btnStageUnlockStay = $('#btnStageUnlockStay');
+    if (btnStageUnlockStay) btnStageUnlockStay.onclick = () => this.closeStageUnlockModal();
+    const btnStageUnlockGoMap = $('#btnStageUnlockGoMap');
+    if (btnStageUnlockGoMap) {
+      btnStageUnlockGoMap.onclick = () => {
+        this.closeStageUnlockModal({ skipSound: true });
+        $('#summary')?.classList.add('hidden');
+        this.openWorldMap();
+      };
+    }
+    const stageUnlockModal = $('#stageUnlockModal');
+    if (stageUnlockModal) {
+      stageUnlockModal.addEventListener('click', (e) => {
+        if (e.target === stageUnlockModal) this.closeStageUnlockModal();
+      });
+    }
+
     const pinsLayer = $('#wmPinsLayer');
     if (pinsLayer) {
       pinsLayer.addEventListener('click', (e) => {
@@ -1370,8 +1389,10 @@ export class Reel {
     const btnNext = $('#btnNext');
     const footEl = $('#sumFoot');
 
+    let worldRes = null;
     if (this.runType === 'world') {
       const wRes = store.recordWorldRunResult(this.activeWorldNodeId, totalScore, opts);
+      worldRes = wRes;
       this.renderProfileUI();
 
       if (wRes.clearedNow) {
@@ -1427,6 +1448,10 @@ export class Reel {
             bannerEl.textContent = wRes.world2JustUnlocked
               ? `👑 LORD BRIM DEFEATED! ENDLESS MODE UNLOCKED! +${wRes.firstClearBonusRP.toLocaleString()} BONUS RP!`
               : '👑 WORLD 2 PORTAL & ENDLESS MODE STAND READY!';
+          } else if (wRes.clearedNow && wRes.nextNode) {
+            bannerEl.classList.remove('hidden');
+            const nextDesc = wRes.nextNode.isBoss ? 'FINAL BOSS' : `${wRes.nextNode.gameIds.length} REELS`;
+            bannerEl.textContent = `✓ STAGE CLEARED · NEXT UP: ${wRes.nextNode.code} ${wRes.nextNode.title.toUpperCase()} (${nextDesc})`;
           } else if (!wRes.clearedNow) {
             bannerEl.classList.remove('hidden');
             if (wRes.node.isBoss) {
@@ -1487,6 +1512,60 @@ export class Reel {
     this.renderPlazaUI();
     $('#summary').classList.remove('hidden');
     this.lastScoreShown = -1;
+
+    if (this.runType === 'world' && worldRes && (worldRes.nextUnlockedNode || worldRes.world2JustUnlocked)) {
+      this.openStageUnlockModal(worldRes);
+    }
+  }
+
+  openStageUnlockModal(wRes) {
+    const modal = $('#stageUnlockModal');
+    if (!modal || !wRes) return;
+    const setTxt = (sel, txt) => {
+      const el = $(sel);
+      if (el) el.textContent = txt;
+    };
+    const setHtml = (sel, html) => {
+      const el = $(sel);
+      if (el) el.innerHTML = html;
+    };
+
+    if (wRes.nextUnlockedNode) {
+      const next = wRes.nextUnlockedNode;
+      const nextDesc = next.isBoss ? 'FINAL BOSS' : `${next.gameIds.length} Reels`;
+      setTxt('#stageUnlockEyebrow', 'NEW STAGE UNLOCKED! 🔓');
+      setTxt('#stageUnlockTitle', `${next.code} · ${next.title.toUpperCase()}`);
+      setTxt('#stageUnlockMsg', `You crushed ${wRes.node.code} with ${wRes.score.toLocaleString()} PTS and unlocked ${next.code} on the World 1 Map!`);
+      setTxt('#stageUnlockIcon', next.icon || '🗺️');
+      setHtml('#stageUnlockReels', `<em>${next.subtitle || `${next.title} · ${nextDesc}`}</em> — ready to play!`);
+      setHtml(
+        '#stageUnlockBonus',
+        wRes.firstClearBonusRP > 0
+          ? `<em>+${wRes.firstClearBonusRP.toLocaleString()} First-Clear Bonus RP</em> added to your rank!`
+          : `<em>${'★'.repeat(wRes.starsEarned)} Earned</em> — head to the map to walk forward!`,
+      );
+    } else if (wRes.world2JustUnlocked) {
+      setTxt('#stageUnlockEyebrow', 'LORD BRIM VANQUISHED! 👑');
+      setTxt('#stageUnlockTitle', 'ENDLESS MODE UNLOCKED!');
+      setTxt('#stageUnlockMsg', "You shattered Lord Brim's Citadel and rescued Queen Bean! Endless Mode across all 21 reels is now open.");
+      setTxt('#stageUnlockIcon', '∞');
+      setHtml('#stageUnlockReels', '<em>Endless Gauntlet Unlocked</em> — test how long you survive across all 21 reels!');
+      setHtml(
+        '#stageUnlockBonus',
+        wRes.firstClearBonusRP > 0
+          ? `<em>+${wRes.firstClearBonusRP.toLocaleString()} First-Clear Bonus RP</em> added to your Crown Rank!`
+          : '<em>World 1 Conquered!</em> Endless Mode is live on the Plaza.',
+      );
+    }
+
+    modal.classList.remove('hidden');
+    sounds.up();
+    haptics.success();
+  }
+
+  closeStageUnlockModal({ skipSound = false } = {}) {
+    $('#stageUnlockModal')?.classList.add('hidden');
+    if (!skipSound) sounds.whoosh();
   }
 
   showSummary() {

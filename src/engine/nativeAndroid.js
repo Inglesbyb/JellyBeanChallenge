@@ -71,6 +71,13 @@ export function handleAndroidBack(reel) {
     return;
   }
 
+  // 5c. Stage Unlocked Celebration Modal
+  const stageUnlockModal = $('#stageUnlockModal');
+  if (stageUnlockModal && !stageUnlockModal.classList.contains('hidden')) {
+    reel.closeStageUnlockModal();
+    return;
+  }
+
   // 6. Active Gameplay -> Tactical Pause (protect player's run)
   if (reel.mode === 'playing') {
     reel.pause();

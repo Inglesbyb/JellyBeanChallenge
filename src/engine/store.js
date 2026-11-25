@@ -491,10 +491,10 @@ export const store = {
       bestScore: Math.max(prev.bestScore || 0, score),
     };
 
+    const nextNode = WORLD_1_NODES[node.index + 1] || null;
     let nextUnlockedNode = null;
     let world2JustUnlocked = false;
     if (clearedNow) {
-      const nextNode = WORLD_1_NODES[node.index + 1] || null;
       if (nextNode) {
         const hadNext = !!this.worlds.nodes[nextNode.id]?.unlocked;
         const existingNext = this.worlds.nodes[nextNode.id] || { unlocked: true, cleared: false, stars: 0, bestScore: 0 };
@@ -525,6 +525,7 @@ export const store = {
       clearedNow,
       isFirstClear,
       firstClearBonusRP: bonusRP,
+      nextNode,
       nextUnlockedNode,
       world2JustUnlocked,
     };
