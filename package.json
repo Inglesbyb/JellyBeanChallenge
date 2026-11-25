@@ -21,6 +21,7 @@
     "@capacitor/core": "^8.5.3",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/status-bar": "^8.0.4",
-    "matter-js": "^0.20.0"
+    "matter-js": "^0.20.0",
+    "three": "^0.187.0"
   }
 }

@@ -273,7 +273,7 @@ export class BeanTD extends Game {
     hint: 'TAP to place & upgrade Bean Towers · POP every candy balloon before they reach the exit!',
     baseLikes: 6850,
     isPrestige: true,
-    parScore60s: 5200,
+    parScore60s: 3000,
     roundLen: 180,
     cue: 'POP EVERY BALLOON!',
     prestigeCue: 'TOUGHER FASTER BLOONS!',

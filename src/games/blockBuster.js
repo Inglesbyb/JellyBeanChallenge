@@ -1,16 +1,15 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
 import {
-  shadeColor,
-  toyRim,
-  toyLineW,
-  drawToyShadow,
-  drawToySphere,
-  drawToyBevelRect,
-  drawToyPill,
-  traceRoundRect,
-} from '../engine/toyStyle.js';
+  STYLE_TOKENS,
+  preloadWeeblAtlas,
+  drawSprite,
+  drawSunburst,
+  drawComicPanel,
+  drawComicText as _rawDrawComicText,
+  drawWeeblCelBean,
+  drawHeroCharacter,
+} from './weeblAtlas.js';
 
 const TAU = Math.PI * 2;
 const COLS = 7;
@@ -19,15 +18,100 @@ const RIGHT_WALL = 435;
 const PLAY_W = RIGHT_WALL - LEFT_WALL; // 420
 const COL_W = PLAY_W / COLS; // 60
 const BLOCK_W = 54;
-const BLOCK_H = 40;
-const TOP_ROW_Y = 120;
-const ROW_H = 48;
-const DANGER_Y = 650;
+const BLOCK_H = 38;
+const TOP_ROW_Y = 170; // Cleanly below top HUD row (y 98..136) and ceiling lintel (y 142..150)
+const CEIL_Y = TOP_ROW_Y - 20; // 150
+const ROW_H = 44;
+const DANGER_Y = 656;
 const CANNON_Y = 718;
-const BALL_R = 5.2;
+const BALL_R = 5.4;
 const BASE_SPEED = 740;
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+/* ------------------------------------------------------------ 2x PNG Bitmap Comic Text Cache (60 FPS) */
+const TEXT_STAMP_CACHE = new Map();
+const TEXT_STAMP_MAX = 220;
+let _measureCtx = null;
+
+function drawComicText(ctx, text, x, y, font, fill = '#ffffff', opts = {}) {
+  const canCache =
+    typeof ctx.drawImage === 'function' &&
+    typeof document !== 'undefined' &&
+    typeof HTMLCanvasElement !== 'undefined' &&
+    typeof Image !== 'undefined';
+
+  if (!canCache) {
+    _rawDrawComicText(ctx, text, x, y, font, fill, opts);
+    return;
+  }
+
+  const label = String(text);
+  const strokeCol = opts.stroke || '#000000';
+  const strokeW = opts.strokeWidth ?? 4.0;
+  const shadowTag = opts.shadow ? `${opts.shadowDx ?? 2},${opts.shadowDy ?? 2.5}` : '';
+  const key = `${label}|${font}|${fill}|${strokeCol}|${strokeW}|${shadowTag}`;
+
+  let entry = TEXT_STAMP_CACHE.get(key);
+  if (!entry) {
+    if (!_measureCtx) {
+      const mc = document.createElement('canvas');
+      mc.width = 4; mc.height = 4;
+      _measureCtx = mc.getContext?.('2d') || null;
+    }
+    const c = document.createElement('canvas');
+    const sctx = c.getContext?.('2d');
+    if (!_measureCtx || !sctx || typeof c.toDataURL !== 'function') {
+      _rawDrawComicText(ctx, label, x, y, font, fill, opts);
+      return;
+    }
+
+    _measureCtx.font = font;
+    const tw = Math.max(4, Math.ceil(_measureCtx.measureText(label).width));
+    const fhMatch = /([\d.]+)px/.exec(font);
+    const fh = fhMatch ? Math.ceil(parseFloat(fhMatch[1])) : 18;
+    const pad = Math.ceil(strokeW + 8);
+    const w = tw + pad * 2;
+    const h = Math.max(12, Math.ceil(fh * 1.45) + pad * 2);
+
+    c.width = w * 2;
+    c.height = h * 2;
+    sctx.scale(2, 2);
+    _rawDrawComicText(sctx, label, w * 0.5, h * 0.5, font, fill, {
+      ...opts,
+      align: 'center',
+      baseline: 'middle',
+    });
+
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = c.toDataURL('image/png');
+    img.decode?.().catch(() => {});
+
+    entry = { img, w, h, pad };
+    if (TEXT_STAMP_CACHE.size >= TEXT_STAMP_MAX) {
+      const oldest = TEXT_STAMP_CACHE.keys().next().value;
+      if (oldest !== undefined) TEXT_STAMP_CACHE.delete(oldest);
+    }
+    TEXT_STAMP_CACHE.set(key, entry);
+  } else {
+    TEXT_STAMP_CACHE.delete(key);
+    TEXT_STAMP_CACHE.set(key, entry);
+  }
+
+  if (entry.img.complete && entry.img.naturalWidth > 0) {
+    const align = opts.align || 'center';
+    const dx = align === 'left'
+      ? x - entry.pad
+      : align === 'right'
+      ? x - (entry.w - entry.pad)
+      : x - entry.w * 0.5;
+    const dy = y - entry.h * 0.5;
+    ctx.drawImage(entry.img, dx, dy, entry.w, entry.h);
+  } else {
+    _rawDrawComicText(ctx, label, x, y, font, fill, opts);
+  }
+}
 
 export class BlockBuster extends Game {
   static meta = {
@@ -37,7 +121,7 @@ export class BlockBuster extends Game {
     hint: 'DRAG to aim laser · RELEASE to fire ball stream · TAP for 2.5× TURBO!',
     baseLikes: 1940,
     isPrestige: false,
-    parScore60s: 750,
+    parScore60s: 14000,
     cue: 'AIM & BLAST BRICKS!',
     prestigeCue: 'TOUGHER BRICK ARMOR!',
     scaling: {
@@ -49,6 +133,7 @@ export class BlockBuster extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    preloadWeeblAtlas();
     this.wave = 1;
     this.ballCount = 15;
     this.cannonX = (LEFT_WALL + RIGHT_WALL) / 2;
@@ -73,6 +158,9 @@ export class BlockBuster extends Game {
     this.shards = [];
     this.shocks = [];
     this.sfxCooldown = 0;
+    this._bgCacheKey = '';
+    this._bgCacheCanvas = null;
+    this._bgCacheImg = null;
 
     if (saved && saved.wave) {
       this.wave = saved.wave;
@@ -80,20 +168,24 @@ export class BlockBuster extends Game {
       this.cannonX = clamp(Number(saved.cannonX) || (LEFT_WALL + RIGHT_WALL) / 2, LEFT_WALL + 28, RIGHT_WALL - 28);
       this.targetCannonX = this.cannonX;
       if (saved.blocks && Array.isArray(saved.blocks) && saved.blocks.length > 0) {
-        this.blocks = saved.blocks.map(b => ({
-          ...b,
-          w: b.w || BLOCK_W,
-          h: b.h || BLOCK_H,
-          pulse: 0,
-          rot: 0,
-        }));
+        this.blocks = saved.blocks.map((b) => {
+          const rowIdx = Number.isFinite(b.row) ? b.row : Math.max(0, Math.round(((b.y || TOP_ROW_Y) - TOP_ROW_Y) / ROW_H));
+          const normalizedY = b.y < TOP_ROW_Y ? TOP_ROW_Y + rowIdx * ROW_H : b.y;
+          return {
+            ...b,
+            y: clamp(normalizedY, TOP_ROW_Y, DANGER_Y - ROW_H - 1),
+            w: b.w || BLOCK_W,
+            h: BLOCK_H,
+            pulse: 0,
+            rot: 0,
+          };
+        });
       } else {
         this.spawnRow(0);
         this.spawnRow(1);
         this.spawnRow(2);
       }
     } else {
-      // Starting board setup: 3 rows to get action started immediately
       this.spawnRow(0);
       this.spawnRow(1);
       this.spawnRow(2);
@@ -106,7 +198,7 @@ export class BlockBuster extends Game {
       ballCount: this.ballCount,
       cannonX: Math.round(this.cannonX),
       score: this.score,
-      blocks: this.blocks.map(b => ({
+      blocks: this.blocks.map((b) => ({
         col: b.col,
         row: b.row,
         x: Math.round(b.x),
@@ -121,17 +213,15 @@ export class BlockBuster extends Game {
   }
 
   restoreLabel() {
-    return `Wave ${this.wave} · ⚪ ×${this.ballCount} · ${Math.round(this.score)} pts`;
+    return `Wave ${this.wave} · ×${this.ballCount} balls · ${Math.round(this.score)} pts`;
   }
 
   /* ------------------------------------------------------------- Row Spawner */
   spawnRow(targetRow = 0) {
-    // Pick 3 to 5 columns for standard numbered blocks
     const cols = [0, 1, 2, 3, 4, 5, 6].sort(() => Math.random() - 0.5);
-    const count = 3 + Math.floor(Math.random() * 2); // 3 to 4 blocks
+    const count = 3 + Math.floor(Math.random() * 2);
     const chosenCols = cols.slice(0, count);
 
-    // Guaranteed +1 Ball ring in one of the remaining empty columns
     const emptyCols = cols.slice(count);
     const plusCol = emptyCols.length > 0 ? emptyCols[0] : null;
 
@@ -164,7 +254,6 @@ export class BlockBuster extends Game {
         type = 'prism';
       }
 
-      // Base HP scales with current wave + SSOT Prestige slope
       const isHard = Math.random() < (0.25 + (this.diff.hardBlockBonus || 0));
       const baseHp = isHard ? Math.round(this.wave * 1.8) : this.wave;
       const hp = Math.max(1, Math.round(baseHp * (this.diff.brickHpMult ?? 1)));
@@ -196,19 +285,14 @@ export class BlockBuster extends Game {
     this.sfxCooldown = Math.max(0, this.sfxCooldown - dt);
     this.fx.update(dt);
 
-    // Cannon glide lerp
     this.cannonX += (this.targetCannonX - this.cannonX) * Math.min(1, dt * 12);
 
-    // Active lasers animation
     for (let i = this.lasers.length - 1; i >= 0; i--) {
       const l = this.lasers[i];
       l.t += dt;
-      if (l.t >= l.maxT) {
-        this.lasers.splice(i, 1);
-      }
+      if (l.t >= l.maxT) this.lasers.splice(i, 1);
     }
 
-    // Active shards
     for (let i = this.shards.length - 1; i >= 0; i--) {
       const s = this.shards[i];
       s.x += s.vx * dt;
@@ -219,13 +303,11 @@ export class BlockBuster extends Game {
       if (s.alpha <= 0) this.shards.splice(i, 1);
     }
 
-    // Block pulse decay & rotation
     for (const b of this.blocks) {
       if (b.pulse > 0) b.pulse = Math.max(0, b.pulse - dt * 5.0);
       if (b.type === 'plus') b.rot += dt * 3.2;
     }
 
-    // State machine updates
     if (this.state === 'aim') {
       this.updateAiming();
     } else if (this.state === 'firing' || this.state === 'returning') {
@@ -239,7 +321,6 @@ export class BlockBuster extends Game {
   updateAiming() {
     const p = this.input;
 
-    // Check tap on Turbo button (bottom right)
     if (p.pressed && p.x > this.W - 90 && p.y > this.H - 56) {
       this.turbo = !this.turbo;
       this.sounds.tick();
@@ -252,22 +333,15 @@ export class BlockBuster extends Game {
         this.aimStart = { x: p.x, y: p.y };
       }
 
-      // Drag aim: vector from touch toward cannon OR direct pointer aim
-      // Direct drag from cannon up into arena
       const dx = p.x - this.cannonX;
       const dy = p.y - CANNON_Y;
 
-      // Only allow aiming upward into the playfield
       if (dy < -18 || Math.abs(dx) > 10) {
         let ang = Math.atan2(dy, dx);
-        // Clamp angle between -170 deg and -10 deg (upward hemisphere)
-        const minAng = -Math.PI + 0.16;
-        const maxAng = -0.16;
-        ang = clamp(ang, minAng, maxAng);
+        ang = clamp(ang, -Math.PI + 0.16, -0.16);
         this.aimAngle = ang;
       }
     } else if (this.aiming) {
-      // Touch released -> FIRE!
       this.aiming = false;
       this.startFiring();
     }
@@ -289,31 +363,26 @@ export class BlockBuster extends Game {
   updateBalls(dt) {
     this.turnDuration += dt;
 
-    // Tap during flight toggles 2.5x Turbo speed immediately
     if (this.input.pressed) {
       this.turbo = !this.turbo;
       this.sounds.tick();
       this.haptics.light();
     }
 
-    // Auto-turbo after 6 seconds so rounds stay fast and exciting
     const speedMult = this.turbo || this.turnDuration > 5.5 ? 2.5 : 1.0;
     const simDt = dt * speedMult;
 
-    // Stream firing balls one by one
     if (this.ballsToFire > 0) {
       this.fireTimer -= simDt;
       if (this.fireTimer <= 0) {
         this.fireTimer = 0.042;
         this.ballsToFire--;
         const spd = BASE_SPEED;
-        const vx = Math.cos(this.aimAngle) * spd;
-        const vy = Math.sin(this.aimAngle) * spd;
         this.balls.push({
           x: this.cannonX,
           y: CANNON_Y - 10,
-          vx,
-          vy,
+          vx: Math.cos(this.aimAngle) * spd,
+          vy: Math.sin(this.aimAngle) * spd,
           active: true,
           returned: false,
           trail: [],
@@ -321,10 +390,8 @@ export class BlockBuster extends Game {
       }
     }
 
-    // Sub-step ball physics (3 sub-steps) for perfect high-speed collision accuracy
     const SUB_STEPS = 3;
     const subDt = simDt / SUB_STEPS;
-
     let activeCount = 0;
 
     for (let step = 0; step < SUB_STEPS; step++) {
@@ -335,31 +402,27 @@ export class BlockBuster extends Game {
         ball.x += ball.vx * subDt;
         ball.y += ball.vy * subDt;
 
-        // Left / Right Wall Collisions
         if (ball.x - BALL_R <= LEFT_WALL) {
           ball.x = LEFT_WALL + BALL_R;
           ball.vx = Math.abs(ball.vx);
-          this.playWallBounce(ball.x, ball.y);
+          this.playWallBounce();
         } else if (ball.x + BALL_R >= RIGHT_WALL) {
           ball.x = RIGHT_WALL - BALL_R;
           ball.vx = -Math.abs(ball.vx);
-          this.playWallBounce(ball.x, ball.y);
+          this.playWallBounce();
         }
 
-        // Ceiling Collision
-        if (ball.y - BALL_R <= TOP_ROW_Y - 24) {
-          ball.y = TOP_ROW_Y - 24 + BALL_R;
+        if (ball.y - BALL_R <= CEIL_Y) {
+          ball.y = CEIL_Y + BALL_R;
           ball.vy = Math.abs(ball.vy);
-          this.playWallBounce(ball.x, ball.y);
+          this.playWallBounce();
         }
 
-        // Floor / Return Collision
         if (ball.y >= CANNON_Y) {
           ball.active = false;
           ball.returned = true;
           ball.y = CANNON_Y;
 
-          // The very first ball to return sets the cannon's next position!
           if (this.nextCannonX === null) {
             this.nextCannonX = clamp(ball.x, LEFT_WALL + 28, RIGHT_WALL - 28);
             this.targetCannonX = this.nextCannonX;
@@ -369,23 +432,20 @@ export class BlockBuster extends Game {
           continue;
         }
 
-        // Block Collisions
         this.checkBlockCollision(ball);
       }
     }
 
-    // Count remaining active balls
     for (let i = 0; i < this.balls.length; i++) {
       if (this.balls[i].active) activeCount++;
     }
 
-    // Check if turn complete
     if (this.ballsToFire <= 0 && activeCount === 0) {
       this.endTurn();
     }
   }
 
-  playWallBounce(x, y) {
+  playWallBounce() {
     if (this.sfxCooldown <= 0) {
       this.sfxCooldown = 0.035;
       this.sounds.tick();
@@ -397,35 +457,29 @@ export class BlockBuster extends Game {
       const b = this.blocks[i];
       if (b.dead) continue;
 
-      // Closest point on rectangle
       const bw = b.w || BLOCK_W;
       const bh = b.h || BLOCK_H;
       const cx = clamp(ball.x, b.x, b.x + bw);
       const cy = clamp(ball.y, b.y, b.y + bh);
       const dx = ball.x - cx;
       const dy = ball.y - cy;
-      const distSq = dx * dx + dy * dy;
 
-      if (distSq < BALL_R * BALL_R) {
-        // HIT DETECTED!
+      if (dx * dx + dy * dy < BALL_R * BALL_R) {
         if (b.type === 'plus') {
-          // Extra ball pickup item
           b.dead = true;
           this.extraBallsCollected++;
           this.score += 50;
-          this.fx.ring(b.x + b.w / 2, b.y + b.h / 2, '#00f5d4', 36, 0.4, 3);
-          this.fx.text(b.x + b.w / 2, b.y - 10, '+1 BALL!', '#00f5d4', 16);
+          this.fx.ring(b.x + b.w / 2, b.y + b.h / 2, '#10b981', 36, 0.4, 3);
+          this.fx.text(b.x + b.w / 2, b.y - 10, '+1 BALL!', '#4ade80', 16);
           this.sounds.up();
           this.haptics.medium();
           continue;
         }
 
         if (b.type === 'prism') {
-          // Multi-ball prism splits this ball into 2 additional split rays!
           this.spawnSplitBalls(ball);
         }
 
-        // Rebound reflection normal determination
         const overlapL = (ball.x + BALL_R) - b.x;
         const overlapR = (b.x + b.w) - (ball.x - BALL_R);
         const overlapT = (ball.y + BALL_R) - b.y;
@@ -441,39 +495,32 @@ export class BlockBuster extends Game {
           ball.y += (overlapT < overlapB ? -overlapT : overlapB) * 0.5;
         }
 
-        // Apply Damage
         b.hp--;
         b.pulse = 0.45;
         this.combo++;
         this.score += 15;
 
-        // Pentatonic ascending chime
         if (this.sfxCooldown <= 0) {
           this.sfxCooldown = 0.025;
           this.sounds.blockPop(this.combo);
         }
 
-        // Sparks
-        this.fx.burst(cx, cy, this.getBlockColor(b), 4, 60, 0.25, 2.5);
+        this.fx.burst(cx, cy, this.getBlockStyle(b).fill, 4, 60, 0.25, 2.5);
 
-        // Block destroyed!
         if (b.hp <= 0) {
           b.dead = true;
           this.onBlockDestroyed(b);
         }
-
-        break; // Process one block collision per sub-step
+        break;
       }
     }
   }
 
   spawnSplitBalls(parentBall) {
-    if (this.balls.length > 250) return; // Prevent infinite runaway balls
+    if (this.balls.length > 250) return;
     const baseAng = Math.atan2(parentBall.vy, parentBall.vx);
     const spd = Math.hypot(parentBall.vx, parentBall.vy);
-    const spreads = [-0.35, 0.35];
-
-    spreads.forEach(diff => {
+    for (const diff of [-0.35, 0.35]) {
       const a = baseAng + diff;
       this.balls.push({
         x: parentBall.x,
@@ -484,10 +531,9 @@ export class BlockBuster extends Game {
         returned: false,
         trail: [],
       });
-    });
-
+    }
     this.sounds.laser();
-    this.fx.ring(parentBall.x, parentBall.y, '#9b5de5', 40, 0.35, 3);
+    this.fx.ring(parentBall.x, parentBall.y, '#c084fc', 40, 0.35, 3);
   }
 
   onBlockDestroyed(b) {
@@ -495,13 +541,13 @@ export class BlockBuster extends Game {
     this.score += pts;
     const cx = b.x + b.w / 2;
     const cy = b.y + b.h / 2;
+    const st = this.getBlockStyle(b);
 
-    this.fx.burst(cx, cy, this.getBlockColor(b), 16, 140, 0.55, 4);
-    this.fx.text(cx, cy - 12, `+${pts}`, '#ffd166', 18);
+    this.fx.burst(cx, cy, st.fill, 16, 140, 0.55, 4);
+    this.fx.text(cx, cy - 12, `+${pts}`, '#fde047', 18);
     this.sounds.shatter();
     this.haptics.medium();
 
-    // Spawn polygon physics shards
     for (let s = 0; s < 6; s++) {
       const ang = Math.random() * TAU;
       const spd = 60 + Math.random() * 180;
@@ -514,16 +560,14 @@ export class BlockBuster extends Game {
         vRot: (Math.random() - 0.5) * 12,
         w: 8 + Math.random() * 8,
         h: 6 + Math.random() * 6,
-        col: this.getBlockColor(b),
+        col: st.fill,
         alpha: 1.0,
       });
     }
 
-    // Special Block Abilities:
     if (b.type === 'bomb') {
-      // 3x3 Explosion: damages all surrounding blocks
-      this.fx.burst(cx, cy, '#ff0054', 28, 220, 0.7, 5);
-      this.fx.ring(cx, cy, '#ff0054', 160, 0.6, 5);
+      this.fx.burst(cx, cy, '#ef4444', 28, 220, 0.7, 5);
+      this.fx.ring(cx, cy, '#facc15', 160, 0.6, 5);
       this.fx.shake(7, 0.3);
       this.sounds.fail();
       this.haptics.heavy();
@@ -542,16 +586,7 @@ export class BlockBuster extends Game {
         }
       }
     } else if (b.type === 'laserH') {
-      // Horizontal laser beam clears entire row
-      this.lasers.push({
-        type: 'H',
-        y: cy,
-        t: 0,
-        maxT: 0.3,
-        x1: LEFT_WALL,
-        x2: RIGHT_WALL,
-        col: '#00f5d4',
-      });
+      this.lasers.push({ type: 'H', y: cy, t: 0, maxT: 0.3, x1: LEFT_WALL, x2: RIGHT_WALL, col: '#38bdf8' });
       this.sounds.laser();
       this.haptics.heavy();
 
@@ -567,16 +602,7 @@ export class BlockBuster extends Game {
         }
       }
     } else if (b.type === 'laserV') {
-      // Vertical laser beam clears entire column
-      this.lasers.push({
-        type: 'V',
-        x: cx,
-        t: 0,
-        maxT: 0.3,
-        y1: TOP_ROW_Y - 20,
-        y2: DANGER_Y + 20,
-        col: '#ffbe0b',
-      });
+      this.lasers.push({ type: 'V', x: cx, t: 0, maxT: 0.3, y1: CEIL_Y + 4, y2: DANGER_Y + 12, col: '#facc15' });
       this.sounds.laser();
       this.haptics.heavy();
 
@@ -599,20 +625,15 @@ export class BlockBuster extends Game {
     this.state = 'advancing';
     this.turbo = false;
 
-    // Filter dead blocks
-    this.blocks = this.blocks.filter(b => !b.dead);
+    this.blocks = this.blocks.filter((b) => !b.dead);
 
-    // Add extra balls collected
     if (this.extraBallsCollected > 0) {
       this.ballCount += this.extraBallsCollected;
     }
-
-    // Set cannon position to first returned ball position
     if (this.nextCannonX !== null) {
       this.targetCannonX = this.nextCannonX;
     }
 
-    // Check if any block reaches the danger line (Failure condition!)
     let failed = false;
     for (const b of this.blocks) {
       if (b.type === 'plus') continue;
@@ -624,53 +645,201 @@ export class BlockBuster extends Game {
 
     if (failed) {
       this.die(`Crushed by blocks on Wave ${this.wave}!`);
-      this.fx.burst(this.cannonX, CANNON_Y, '#ff4b5c', 40, 300, 0.9, 6);
+      this.fx.burst(this.cannonX, CANNON_Y, '#ef4444', 40, 300, 0.9, 6);
       this.fx.shake(16, 0.5);
       this.sounds.fail();
       this.haptics.heavy();
       return;
     }
 
-    // Move all rows down by 1
     for (const b of this.blocks) {
       b.row++;
       b.y += ROW_H;
     }
 
-    // Increment wave and spawn fresh top row
     this.wave++;
     this.spawnRow(0);
 
-    // Wave Milestone fanfare
     if (this.wave % 5 === 0) {
       this.sounds.up();
-      this.fx.text(this.W / 2, 260, `WAVE ${this.wave} REACHED! ⭐`, '#ffd166', 26, 1.8);
-      this.fx.burst(this.W / 2, 260, '#ffd166', 24, 200, 0.8, 4);
+      this.fx.text(this.W / 2, 260, `WAVE ${this.wave} REACHED!`, '#fde047', 26, 1.8);
+      this.fx.burst(this.W / 2, 260, '#facc15', 24, 200, 0.8, 4);
     }
 
     this.state = 'aim';
   }
 
-  updateAdvancing(dt) {
-    // Transition back to aim mode
+  updateAdvancing() {
     this.state = 'aim';
   }
 
-  /* ------------------------------------------------------------- Colors & Theming */
-  getBlockColor(b) {
-    if (b.type === 'bomb') return '#ff0054';
-    if (b.type === 'laserH') return '#00f5d4';
-    if (b.type === 'laserV') return '#ffbe0b';
-    if (b.type === 'plus') return '#4cc9f0';
-    if (b.type === 'prism') return '#9b5de5';
+  /* ------------------------------------------------------------- Cel Block Palettes */
+  getBlockStyle(b) {
+    if (b.type === 'bomb') return { fill: '#dc2626', top: '#fb7185', shade: '#991b1b' };
+    if (b.type === 'laserH') return { fill: '#0284c7', top: '#38bdf8', shade: '#0369a1' };
+    if (b.type === 'laserV') return { fill: '#eab308', top: '#fef08a', shade: '#a16207' };
+    if (b.type === 'plus') return { fill: '#10b981', top: '#34d399', shade: '#047857' };
+    if (b.type === 'prism') return { fill: '#9333ea', top: '#c084fc', shade: '#6b21a8' };
 
-    // Normal blocks dynamically change hue based on remaining hit points
     const ratio = b.hp / Math.max(1, this.wave);
-    if (ratio > 1.4) return '#7209b7'; // High HP royal purple
-    if (ratio > 0.9) return '#3a86ff'; // Solid blue
-    if (ratio > 0.5) return '#06d6a0'; // Fresh neon emerald
-    if (ratio > 0.25) return '#ffd166'; // Amber yellow
-    return '#ff4b5c'; // Critical low HP coral red
+    if (ratio > 1.4) return { fill: '#7c3aed', top: '#a78bfa', shade: '#4c1d95' };
+    if (ratio > 0.9) return { fill: '#2563eb', top: '#60a5fa', shade: '#1d4ed8' };
+    if (ratio > 0.5) return { fill: '#16a34a', top: '#4ade80', shade: '#166534' };
+    if (ratio > 0.25) return { fill: '#f59e0b', top: '#fde047', shade: '#b45309' };
+    return { fill: '#e11d48', top: '#fb7185', shade: '#9f1239' };
+  }
+
+  /* ------------------------------------------------------------- Cached Weebl Siege Bastion Arena */
+  renderBackdrop(ctx, W, H) {
+    const key = `${W}|${H}`;
+    if (this._bgCacheKey !== key || !this._bgCacheCanvas) {
+      const off = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+      const sctx = off?.getContext?.('2d');
+      if (off && sctx) {
+        off.width = W;
+        off.height = H;
+        sctx.lineJoin = 'round';
+        sctx.lineCap = 'round';
+
+        // 1. Sunlit Weebl Sky + Emerald Harbor Courtyard
+        const sky = sctx.createLinearGradient(0, 0, 0, 260);
+        sky.addColorStop(0, STYLE_TOKENS.skyTop);
+        sky.addColorStop(0.6, STYLE_TOKENS.skyMid);
+        sky.addColorStop(1, STYLE_TOKENS.skyHorizon);
+        sctx.fillStyle = sky;
+        sctx.fillRect(0, 0, W, H);
+
+        drawSunburst(sctx, W * 0.5, CEIL_Y - 12, 290, 0.14, 14, 0.25, false);
+
+        // Rolling inked green hills flanking the bastion behind the slate arena
+        sctx.fillStyle = '#4ade80';
+        sctx.strokeStyle = STYLE_TOKENS.ink;
+        sctx.lineWidth = 3.0;
+        sctx.beginPath();
+        sctx.moveTo(-10, H);
+        sctx.lineTo(-10, 560);
+        sctx.quadraticCurveTo(110, 520, 225, 562);
+        sctx.quadraticCurveTo(340, 522, W + 10, 558);
+        sctx.lineTo(W + 10, H);
+        sctx.closePath();
+        sctx.fill();
+        sctx.stroke();
+
+        // Lower stone bastion parapet courtyard behind turret
+        const stoneBaseY = CANNON_Y - 30;
+        const stoneGrad = sctx.createLinearGradient(0, stoneBaseY, 0, H);
+        stoneGrad.addColorStop(0, '#475569');
+        stoneGrad.addColorStop(0.28, '#334155');
+        stoneGrad.addColorStop(1, '#0f172a');
+        sctx.fillStyle = stoneGrad;
+        sctx.fillRect(0, stoneBaseY, W, H - stoneBaseY);
+
+        sctx.fillStyle = '#94a3b8';
+        sctx.fillRect(0, stoneBaseY, W, 6);
+        sctx.strokeStyle = STYLE_TOKENS.ink;
+        sctx.lineWidth = 3.0;
+        sctx.beginPath();
+        sctx.moveTo(0, stoneBaseY);
+        sctx.lineTo(W, stoneBaseY);
+        sctx.stroke();
+
+        // Ashlar stone joint ticks
+        sctx.lineWidth = 2.0;
+        sctx.strokeStyle = '#1e293b';
+        for (const sy of [stoneBaseY + 34, stoneBaseY + 68]) {
+          sctx.beginPath();
+          sctx.moveTo(0, sy);
+          sctx.lineTo(W, sy);
+          sctx.stroke();
+        }
+
+        // 2. High-Contrast Obsidian Slate Arena Play-Well (y = CEIL_Y..DANGER_Y+14)
+        const boardH = DANGER_Y + 14 - CEIL_Y;
+        sctx.fillStyle = '#0f172a';
+        sctx.beginPath();
+        sctx.roundRect(LEFT_WALL - 1, CEIL_Y - 2, PLAY_W + 2, boardH, 10);
+        sctx.fill();
+
+        // Crisp subtle vertical column tracks
+        sctx.strokeStyle = '#1e293b';
+        sctx.lineWidth = 2.0;
+        for (let c = 1; c < COLS; c++) {
+          const x = LEFT_WALL + c * COL_W;
+          sctx.beginPath();
+          sctx.moveTo(x, CEIL_Y + 6);
+          sctx.lineTo(x, DANGER_Y + 8);
+          sctx.stroke();
+        }
+        for (let gy = TOP_ROW_Y; gy < DANGER_Y; gy += ROW_H) {
+          sctx.beginPath();
+          sctx.moveTo(LEFT_WALL + 4, gy);
+          sctx.lineTo(RIGHT_WALL - 4, gy);
+          sctx.stroke();
+        }
+
+        // 3. Heavy #000-Inked Cobalt Iron Bastion Side Bumpers (Zero clip())
+        const drawIronRail = (bx, bw) => {
+          sctx.fillStyle = '#1d4ed8';
+          sctx.beginPath();
+          sctx.roundRect(bx, CEIL_Y - 6, bw, boardH + 8, 6);
+          sctx.fill();
+
+          sctx.fillStyle = '#3b82f6';
+          sctx.fillRect(bx + 2, CEIL_Y - 2, Math.max(2, bw * 0.35), boardH);
+
+          sctx.strokeStyle = STYLE_TOKENS.ink;
+          sctx.lineWidth = 2.6;
+          sctx.beginPath();
+          sctx.roundRect(bx, CEIL_Y - 6, bw, boardH + 8, 6);
+          sctx.stroke();
+
+          // Gold rivet studs along rail
+          sctx.fillStyle = '#facc15';
+          sctx.lineWidth = 1.6;
+          for (let ry = CEIL_Y + 18; ry < CEIL_Y + boardH - 12; ry += 42) {
+            sctx.beginPath();
+            sctx.arc(bx + bw * 0.5, ry, 2.8, 0, TAU);
+            sctx.fill();
+            sctx.stroke();
+          }
+        };
+        drawIronRail(2, LEFT_WALL - 2);
+        drawIronRail(RIGHT_WALL, W - RIGHT_WALL - 2);
+
+        // 4. Inked Brass Top Ceiling Lintel Connecting Side Rails
+        drawComicPanel(sctx, LEFT_WALL - 4, CEIL_Y - 10, PLAY_W + 8, 12, 5, '#f59e0b', {
+          lineWidth: 2.8,
+          shadowDx: 0,
+          shadowDy: 2.5,
+        });
+
+        this._bgCacheCanvas = off;
+        this._bgCacheImg = null;
+        if (typeof off.toDataURL === 'function' && typeof Image !== 'undefined') {
+          const img = new Image();
+          img.decoding = 'async';
+          img.src = off.toDataURL('image/png');
+          img.decode?.().catch(() => {});
+          this._bgCacheImg = img;
+        }
+        this._bgCacheKey = key;
+      }
+    }
+
+    const bgSrc =
+      this._bgCacheImg && this._bgCacheImg.complete && this._bgCacheImg.naturalWidth > 0
+        ? this._bgCacheImg
+        : this._bgCacheCanvas;
+    if (bgSrc && typeof ctx.drawImage === 'function') {
+      ctx.drawImage(bgSrc, 0, 0, W, H);
+    } else {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Cornerstone battlements capping the side rails
+    drawSprite(ctx, 'p_stone_pillar', LEFT_WALL - 4, CEIL_Y - 2, 18, 30, { fallback: () => {} });
+    drawSprite(ctx, 'p_stone_pillar', RIGHT_WALL + 4, CEIL_Y - 2, 18, 30, { fallback: () => {} });
   }
 
   /* ------------------------------------------------------------- Render Engine */
@@ -678,242 +847,131 @@ export class BlockBuster extends Game {
     const ctx = this.ctx;
     const { W, H } = this;
 
-    // 1. Vibrant Nintendo Toy Diorama Studio Background
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#2e1065'); // Playful berry violet
-    bg.addColorStop(0.5, '#3b0764'); // Rich plum
-    bg.addColorStop(1, '#1e1b4b'); // Deep indigo base
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    // 1. Cached Weebl Bastion Courtyard & Arena
+    this.renderBackdrop(ctx, W, H);
 
-    // Subtle studio dome radial key light behind the toy playboard
-    const dome = ctx.createRadialGradient(W * 0.5, H * 0.34, 24, W * 0.5, H * 0.42, W * 0.78);
-    dome.addColorStop(0, 'rgba(192, 132, 252, 0.22)');
-    dome.addColorStop(0.6, 'rgba(99, 102, 241, 0.08)');
-    dome.addColorStop(1, 'rgba(15, 23, 42, 0)');
-    ctx.fillStyle = dome;
-    ctx.fillRect(0, 0, W, H);
-
-    // Recessed glossy playfield backing tray
-    const boardTop = TOP_ROW_Y - 24;
-    const boardH = DANGER_Y - TOP_ROW_Y + 44;
-    ctx.save();
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
-    traceRoundRect(ctx, LEFT_WALL, boardTop, PLAY_W, boardH, 12);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // 2. Playfield Grid Guidelines (Soft subtle rounded track slots)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
-    ctx.lineWidth = 1.2;
-    for (let c = 1; c < COLS; c++) {
-      const x = LEFT_WALL + c * COL_W;
-      ctx.beginPath();
-      ctx.moveTo(x, TOP_ROW_Y - 16);
-      ctx.lineTo(x, DANGER_Y + 8);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Outer Inflatable 3D Vinyl Candy Cushion Bumpers
-    const drawSideBumper = (bx, bw) => {
-      ctx.save();
-      const by = TOP_ROW_Y - 24;
-      const bh = DANGER_Y - TOP_ROW_Y + 44;
-      const rim = toyRim('#ff85b3', 0.58);
-      const lw = toyLineW(bw, 0.09, 1.0, 1.8);
-
-      // Soft side drop shadow
-      ctx.fillStyle = 'rgba(12, 20, 42, 0.34)';
-      traceRoundRect(ctx, bx + 2, by + 4, bw, bh, 8);
-      ctx.fill();
-
-      // Volumetric cylindrical cushion body
-      const cg = ctx.createLinearGradient(bx, by, bx + bw, by);
-      cg.addColorStop(0, shadeColor('#ffafcc', 0.36));
-      cg.addColorStop(0.45, '#ff85b3');
-      cg.addColorStop(1, shadeColor('#ff85b3', -0.26));
-      ctx.fillStyle = cg;
-      traceRoundRect(ctx, bx, by, bw, bh, 8);
-      ctx.fill();
-
-      // Glossy white marshmallow cushion bands (clipped inside bumper)
-      ctx.save();
-      traceRoundRect(ctx, bx, by, bw, bh, 8);
-      ctx.clip();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
-      for (let y = by + 8; y < by + bh - 14; y += 28) {
-        traceRoundRect(ctx, bx + 1.5, y, bw - 3, 11, 4);
-        ctx.fill();
-      }
-      // Left specular studio sheen along cushion edge
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
-      traceRoundRect(ctx, bx + 1.5, by + 4, Math.max(2, bw * 0.28), bh - 8, 4);
-      ctx.fill();
-      ctx.restore();
-
-      ctx.strokeStyle = rim;
-      ctx.lineWidth = lw;
-      traceRoundRect(ctx, bx, by, bw, bh, 8);
-      ctx.stroke();
-
-      ctx.restore();
-    };
-
-    drawSideBumper(4, LEFT_WALL - 6);
-    drawSideBumper(RIGHT_WALL + 2, W - RIGHT_WALL - 6);
-
-    // Top bumper rail connecting both side cushions
-    drawToyBevelRect(ctx, LEFT_WALL - 2, TOP_ROW_Y - 30, PLAY_W + 4, 8, 4, '#f472b6', {
-      depth: 2,
-      rimColor: toyRim('#f472b6', 0.56),
-      lineWidth: 1.2,
-      gloss: true,
-    });
-
-    // 3. Danger Hazard Threshold Line
+    // 2. Danger Hazard Threshold Line
     this.drawDangerLine(ctx);
 
-    // 4. Draw Active Lasers
+    // 3. Active Lasers
     this.drawLasers(ctx);
 
-    // 5. Draw Blocks
+    // 4. #000-Inked 2-Tone Cel Bricks & +1 Orbs
     for (const b of this.blocks) {
       this.drawBlock(ctx, b);
     }
 
-    // 6. Draw Falling Shards (3D beveled plastic toy chips)
+    // 5. Falling Shards
     for (const s of this.shards) {
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.rotate(s.rot);
       ctx.globalAlpha = clamp(s.alpha, 0, 1);
-      const sg = ctx.createLinearGradient(-s.w / 2, -s.h / 2, s.w / 2, s.h / 2);
-      sg.addColorStop(0, shadeColor(s.col, 0.35));
-      sg.addColorStop(1, shadeColor(s.col, -0.2));
-      ctx.fillStyle = sg;
-      traceRoundRect(ctx, -s.w / 2, -s.h / 2, s.w, s.h, 2.5);
+      ctx.fillStyle = s.col;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.roundRect(-s.w / 2, -s.h / 2, s.w, s.h, 2.5);
       ctx.fill();
-      ctx.strokeStyle = toyRim(s.col, 0.58);
-      ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
     }
 
-    // 7. Draw Active Aiming Trajectory Laser
+    // 6. Aiming Ricochet Guide
     if (this.state === 'aim' && this.aiming) {
       this.drawAimGuide(ctx);
     }
 
-    // 8. Draw Flying Balls
+    // 7. Inked Flying Energy Balls
     for (const ball of this.balls) {
       if (!ball.active) continue;
       this.drawBall(ctx, ball);
     }
 
-    // 9. Draw Bottom Cannon Turret with Captain Jellybean!
+    // 8. Cannon Turret & Crowned Green Hero Bean Operator
     this.drawCannonTurret(ctx);
 
-    // 10. FX Render
+    // 9. FX Layer
     this.fx.render(ctx, 1.0);
 
-    // 11. HUD Header & Turbo Toggle Button
+    // 10. Clean Safe-Zoned Comic HUD
     this.drawHUD(ctx, W, H);
   }
 
   drawDangerLine(ctx) {
     const pulse = 0.5 + Math.sin(this.time * 6) * 0.3;
-    ctx.save();
-
-    // Tactile 3D beveled safety hazard ribbon
-    const ribbonH = 11;
+    const ribbonH = 12;
     const ry = DANGER_Y - ribbonH / 2;
     const ribbonW = RIGHT_WALL - LEFT_WALL;
-    const amberRim = toyRim('#f59e0b', 0.62);
 
-    // Bottom depth lip
-    ctx.fillStyle = shadeColor('#f59e0b', -0.36);
-    traceRoundRect(ctx, LEFT_WALL, ry + 2.5, ribbonW, ribbonH, 5);
+    // Inked extruded yellow hazard ribbon with analytic clipped diagonal black stripes (zero clip())
+    ctx.fillStyle = STYLE_TOKENS.ink;
+    ctx.beginPath();
+    ctx.roundRect(LEFT_WALL, ry + 2.5, ribbonW, ribbonH, 5);
     ctx.fill();
 
-    // Sunny yellow gradient bar
-    const yg = ctx.createLinearGradient(0, ry, 0, ry + ribbonH);
-    yg.addColorStop(0, '#fde047');
-    yg.addColorStop(1, '#f59e0b');
-    ctx.fillStyle = yg;
-    traceRoundRect(ctx, LEFT_WALL, ry, ribbonW, ribbonH, 5);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.roundRect(LEFT_WALL, ry, ribbonW, ribbonH, 5);
     ctx.fill();
 
-    // Clipped diagonal slate hazard stripes + top gloss
-    ctx.save();
-    traceRoundRect(ctx, LEFT_WALL, ry, ribbonW, ribbonH, 5);
-    ctx.clip();
     ctx.fillStyle = '#1e293b';
-    for (let x = LEFT_WALL - 10; x < RIGHT_WALL; x += 18) {
+    const xMin = LEFT_WALL + 2;
+    const xMax = RIGHT_WALL - 2;
+    for (let x = LEFT_WALL - 10; x < RIGHT_WALL + 10; x += 18) {
+      const bx0 = clamp(x, xMin, xMax);
+      const tx0 = clamp(x + 8, xMin, xMax);
+      const tx1 = clamp(x + 14, xMin, xMax);
+      const bx1 = clamp(x + 6, xMin, xMax);
+      if (tx1 <= tx0 && bx1 <= bx0) continue;
       ctx.beginPath();
-      ctx.moveTo(x, ry + ribbonH);
-      ctx.lineTo(x + 8, ry);
-      ctx.lineTo(x + 14, ry);
-      ctx.lineTo(x + 6, ry + ribbonH);
+      ctx.moveTo(bx0, ry + ribbonH - 1.5);
+      ctx.lineTo(tx0, ry + 1.5);
+      ctx.lineTo(tx1, ry + 1.5);
+      ctx.lineTo(bx1, ry + ribbonH - 1.5);
       ctx.closePath();
       ctx.fill();
     }
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
-    ctx.fillRect(LEFT_WALL + 2, ry + 1, ribbonW - 4, 2.5);
-    ctx.restore();
 
-    ctx.strokeStyle = amberRim;
-    ctx.lineWidth = 1.4;
-    traceRoundRect(ctx, LEFT_WALL, ry, ribbonW, ribbonH, 5);
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.roundRect(LEFT_WALL, ry, ribbonW, ribbonH, 5);
     ctx.stroke();
 
-    // Hazard Badge Callout (3D pill card)
-    const badgeColor = pulse > 0.55 ? '#ff0054' : '#f43f5e';
-    drawToyBevelRect(ctx, RIGHT_WALL - 152, ry - 21, 146, 18, 9, badgeColor, {
-      depth: 2.5,
-      rimColor: toyRim('#f43f5e', 0.62),
-      lineWidth: 1.3,
-      gloss: true,
+    // Comic Danger Callout Badge
+    const badgeCol = pulse > 0.55 ? '#dc2626' : '#e11d48';
+    drawComicPanel(ctx, RIGHT_WALL - 146, ry - 23, 140, 20, 9, badgeCol, {
+      lineWidth: 2.2,
+      shadowDx: 1.5,
+      shadowDy: 2,
     });
-
-    ctx.font = "700 9.5px 'Fredoka', 'Outfit', sans-serif";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.6;
-    ctx.strokeText('⚠️ DANGER BOUNDARY', RIGHT_WALL - 79, ry - 12);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('⚠️ DANGER BOUNDARY', RIGHT_WALL - 79, ry - 12);
-    ctx.restore();
+    drawComicText(ctx, 'DANGER BOUNDARY', RIGHT_WALL - 76, ry - 13, "900 10px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+      strokeWidth: 2.6,
+    });
   }
 
   drawLasers(ctx) {
     ctx.save();
     for (const l of this.lasers) {
-      const alpha = 1 - l.t / l.maxT;
+      const alpha = clamp(1 - l.t / l.maxT, 0, 1);
       ctx.lineCap = 'round';
-      ctx.globalAlpha = clamp(alpha * 0.42, 0, 1);
-      ctx.strokeStyle = l.col;
-      ctx.lineWidth = 20 * alpha;
+      ctx.globalAlpha = alpha;
+
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 16 * alpha;
       ctx.beginPath();
       if (l.type === 'H') {
-        ctx.moveTo(l.x1, l.y);
-        ctx.lineTo(l.x2, l.y);
+        ctx.moveTo(l.x1, l.y); ctx.lineTo(l.x2, l.y);
       } else {
-        ctx.moveTo(l.x, l.y1);
-        ctx.lineTo(l.x, l.y2);
+        ctx.moveTo(l.x, l.y1); ctx.lineTo(l.x, l.y2);
       }
       ctx.stroke();
 
-      ctx.globalAlpha = clamp(alpha, 0, 1);
       ctx.strokeStyle = l.col;
       ctx.lineWidth = 10 * alpha;
       ctx.stroke();
 
-      // White inner core
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 4 * alpha;
       ctx.stroke();
@@ -929,26 +987,19 @@ export class BlockBuster extends Game {
     let vy = Math.sin(this.aimAngle);
 
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(37, 230, 255, 0.35)';
-    ctx.lineWidth = 6;
-    ctx.setLineDash([7, 9]);
-    ctx.lineDashOffset = -this.time * 44;
+    ctx.setLineDash([8, 9]);
+    ctx.lineDashOffset = -this.time * 48;
 
     ctx.beginPath();
     ctx.moveTo(rx, ry);
 
-    // Trace ray forward until hitting wall or ceiling
-    let maxDist = 700;
+    let maxDist = 720;
     while (maxDist > 0) {
-      // Find distance to left or right wall
       const targetWallX = vx < 0 ? LEFT_WALL + BALL_R : RIGHT_WALL - BALL_R;
       const distToWallX = (targetWallX - rx) / vx;
-
-      // Find distance to ceiling
-      const distToCeil = (TOP_ROW_Y - 20 + BALL_R - ry) / vy;
+      const distToCeil = (CEIL_Y + BALL_R - ry) / vy;
 
       const stepDist = Math.min(distToWallX > 0 ? distToWallX : Infinity, distToCeil > 0 ? distToCeil : Infinity);
-
       if (stepDist === Infinity || stepDist > maxDist) {
         rx += vx * maxDist;
         ry += vy * maxDist;
@@ -961,48 +1012,41 @@ export class BlockBuster extends Game {
       ctx.lineTo(rx, ry);
       maxDist -= stepDist;
 
-      // Ricochet bounce!
-      if (stepDist === distToWallX) {
-        vx = -vx; // Bounce off wall
-      } else {
-        vy = -vy; // Bounce off ceiling
-      }
+      if (stepDist === distToWallX) vx = -vx;
+      else vy = -vy;
     }
 
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 6.2;
     ctx.stroke();
-    ctx.strokeStyle = '#67e8f9';
-    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 3.2;
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Glossy 3D toy target bead at bounce/impact tip
-    ctx.fillStyle = 'rgba(37, 230, 255, 0.28)';
+    ctx.fillStyle = '#38bdf8';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.arc(rx, ry, 10, 0, TAU);
+    ctx.arc(rx, ry, 6.5, 0, TAU);
     ctx.fill();
-    drawToySphere(ctx, rx, ry, 6, '#25e6ff', { rimColor: '#0369a1', lineWidth: 1.2, shine: 0.85 });
-
+    ctx.stroke();
     ctx.restore();
   }
 
   drawBall(ctx, ball) {
-    // Soft cyan energy aura + glossy 3D marble sphere
-    ctx.save();
-    ctx.fillStyle = 'rgba(37, 230, 255, 0.25)';
+    const fillCol = this.turbo || this.turnDuration > 5.5 ? '#fde047' : '#e0f2fe';
+    ctx.fillStyle = fillCol;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.0;
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, BALL_R * 1.45, 0, TAU);
+    ctx.arc(ball.x, ball.y, BALL_R, 0, TAU);
     ctx.fill();
-    ctx.restore();
-    drawToySphere(ctx, ball.x, ball.y, BALL_R, '#e0f2fe', {
-      rimColor: '#0284c7',
-      lineWidth: 1.0,
-      shine: 0.9,
-      bottomBounce: false,
-    });
+    ctx.stroke();
   }
 
   drawBlock(ctx, b) {
-    const scale = 1.0 + (b.pulse || 0) * 0.15;
+    const scale = 1.0 + (b.pulse || 0) * 0.14;
     const bw = (b.w || BLOCK_W) * scale;
     const bh = (b.h || BLOCK_H) * scale;
     const bx = Number.isFinite(b.x) ? b.x : LEFT_WALL;
@@ -1012,271 +1056,284 @@ export class BlockBuster extends Game {
     const x = cx - bw / 2;
     const y = cy - bh / 2;
 
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(bw) || !Number.isFinite(bh)) {
-      return;
-    }
-
-    ctx.save();
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(bw) || !Number.isFinite(bh)) return;
 
     if (b.type === 'plus') {
-      // Rotating 3D Vinyl Mint +1 Ball Token Orb
+      // Spinning #000-Inked Mint +1 Ball Orb
       const pulse = 1 + Math.sin(this.time * 5 + cx) * 0.06;
-      drawToyShadow(ctx, cx, cy + 16, 13, 4.5, 0.25);
-
-      ctx.fillStyle = 'rgba(0, 245, 212, 0.22)';
+      ctx.save();
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
       ctx.beginPath();
-      ctx.arc(cx, cy, 20 * pulse, 0, TAU);
+      ctx.arc(cx, cy, 19 * pulse, 0, TAU);
       ctx.fill();
 
       ctx.translate(cx, cy);
       ctx.rotate(b.rot);
-      drawToySphere(ctx, 0, 0, 15, '#2dd4bf', {
-        rimColor: toyRim('#0d9488', 0.56),
-        lineWidth: 1.4,
-        shine: 0.78,
-      });
-
-      // Crisp embossed white + icon with dark teal outline
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#064e3b';
-      ctx.lineWidth = 5.5;
+      ctx.fillStyle = '#10b981';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(-6.5, 0); ctx.lineTo(6.5, 0);
-      ctx.moveTo(0, -6.5); ctx.lineTo(0, 6.5);
+      ctx.arc(0, 0, 14.5, 0, TAU);
+      ctx.fill();
       ctx.stroke();
 
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3.0;
+      ctx.fillStyle = '#34d399';
       ctx.beginPath();
-      ctx.moveTo(-6.5, 0); ctx.lineTo(6.5, 0);
-      ctx.moveTo(0, -6.5); ctx.lineTo(0, 6.5);
+      ctx.ellipse(-4, -5, 6, 3.2, -0.5, 0, TAU);
+      ctx.fill();
+
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 5.4;
+      ctx.beginPath();
+      ctx.moveTo(-6, 0); ctx.lineTo(6, 0);
+      ctx.moveTo(0, -6); ctx.lineTo(0, 6);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.6;
       ctx.stroke();
 
       ctx.restore();
       return;
     }
 
-    const col = this.getBlockColor(b);
-    const rim = toyRim(col, 0.58);
-    const lw = toyLineW(Math.min(bw, bh), 0.044, 1.0, 1.85);
+    const st = this.getBlockStyle(b);
 
-    // Subtle grounding shadow under block
-    drawToyShadow(ctx, cx, y + bh + 4, bw * 0.45, 5, 0.22);
+    // Inked extruded bottom lip + 2-tone Flash cel block (zero clip())
+    ctx.fillStyle = STYLE_TOKENS.ink;
+    ctx.beginPath();
+    ctx.roundRect(x, y + 4.2, bw, bh, 8);
+    ctx.fill();
 
-    // Volumetric 3D Extruded Vinyl Toy Block
-    drawToyBevelRect(ctx, x, y, bw, bh, 9, col, {
-      depth: 4.5,
-      rimColor: rim,
-      lineWidth: lw,
-      gloss: true,
-    });
+    ctx.fillStyle = st.shade;
+    ctx.beginPath();
+    ctx.roundRect(x, y, bw, bh, 8);
+    ctx.fill();
 
-    // Special block accents & specular crystal facets
-    if (b.type === 'prism') {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.fillStyle = st.fill;
+    ctx.beginPath();
+    ctx.roundRect(x + 1, y, bw - 2, bh * 0.82, 7);
+    ctx.fill();
+
+    ctx.fillStyle = st.top;
+    ctx.beginPath();
+    ctx.roundRect(x + 3, y + 2, bw - 6, Math.max(4, bh * 0.28), 5);
+    ctx.fill();
+
+    if (b.pulse > 0.08) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${clamp(b.pulse * 0.8, 0, 0.5)})`;
       ctx.beginPath();
-      ctx.moveTo(cx, y + 4);
-      ctx.lineTo(x + bw - 6, cy);
-      ctx.lineTo(cx, y + bh - 4);
-      ctx.lineTo(x + 6, cy);
+      ctx.roundRect(x + 1, y + 1, bw - 2, bh - 2, 7);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.roundRect(x, y, bw, bh, 8);
+    ctx.stroke();
+
+    // Inked Special Icons + Bitmap-Cached HP Numbers
+    if (b.type === 'bomb') {
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(cx - 2, cy - 6, 5.5, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 11, 2.6, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      drawComicText(ctx, b.hp, cx, cy + 9, "900 12px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+        strokeWidth: 3.0,
+      });
+    } else if (b.type === 'laserH' || b.type === 'laserV') {
+      ctx.fillStyle = '#fef08a';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      if (b.type === 'laserH') {
+        ctx.moveTo(cx - 12, cy - 7); ctx.lineTo(cx - 6, cy - 11); ctx.lineTo(cx - 6, cy - 3); ctx.closePath();
+        ctx.moveTo(cx + 12, cy - 7); ctx.lineTo(cx + 6, cy - 11); ctx.lineTo(cx + 6, cy - 3); ctx.closePath();
+        ctx.rect(cx - 6, cy - 9, 12, 4);
+      } else {
+        ctx.moveTo(cx, cy - 13); ctx.lineTo(cx - 5, cy - 7); ctx.lineTo(cx + 5, cy - 7); ctx.closePath();
+        ctx.rect(cx - 2, cy - 7, 4, 6);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      drawComicText(ctx, b.hp, cx, cy + 9, "900 12px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+        strokeWidth: 3.0,
+      });
+    } else if (b.type === 'prism') {
+      ctx.fillStyle = '#f5d0fe';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 13); ctx.lineTo(cx + 7, cy - 7); ctx.lineTo(cx, cy - 1); ctx.lineTo(cx - 7, cy - 7);
       ctx.closePath();
       ctx.fill();
-    } else if (b.type === 'laserH') {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-      traceRoundRect(ctx, x + 4, cy - 3, 6, 6, 3);
-      ctx.fill();
-      traceRoundRect(ctx, x + bw - 10, cy - 3, 6, 6, 3);
-      ctx.fill();
-    } else if (b.type === 'laserV') {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-      traceRoundRect(ctx, cx - 3, y + 4, 6, 6, 3);
-      ctx.fill();
-      traceRoundRect(ctx, cx - 3, y + bh - 10, 6, 6, 3);
-      ctx.fill();
-    }
+      ctx.stroke();
 
-    // Impact hit-flash glint
-    if (b.pulse > 0.08) {
-      ctx.fillStyle = `rgba(255, 255, 255, ${clamp(b.pulse * 0.7, 0, 0.38)})`;
-      traceRoundRect(ctx, x + 1, y + 1, bw - 2, bh - 2, 8);
-      ctx.fill();
-    }
-
-    // Inner icon & crisp outlined Toy Typography
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-
-    if (b.type === 'bomb' || b.type === 'laserH' || b.type === 'laserV' || b.type === 'prism') {
-      const icon = b.type === 'bomb' ? '💣' : (b.type === 'laserH' ? '⚡' : (b.type === 'laserV' ? '↕️' : '💎'));
-      ctx.font = '15px sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(icon, cx, cy - 6);
-
-      ctx.font = "800 11.5px 'Fredoka', 'Outfit', sans-serif";
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 3.0;
-      ctx.strokeText(String(b.hp), cx, cy + 10);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(String(b.hp), cx, cy + 10);
+      drawComicText(ctx, b.hp, cx, cy + 9, "900 12px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+        strokeWidth: 3.0,
+      });
     } else {
-      ctx.font = "800 17px 'Fredoka', 'Outfit', sans-serif";
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 3.4;
-      ctx.strokeText(String(b.hp), cx, cy + 1);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(String(b.hp), cx, cy + 1);
+      drawComicText(ctx, b.hp, cx, cy + 1, "900 16px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+        strokeWidth: 3.4,
+      });
     }
-
-    ctx.restore();
   }
 
   drawCannonTurret(ctx) {
     const cx = this.cannonX;
     const cy = CANNON_Y;
+    const aimRight = Math.cos(this.aimAngle) >= 0;
 
-    ctx.save();
+    // Grounding shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 25, 44, 8, 0, 0, TAU);
+    ctx.fill();
 
-    // Grounding shadow under turret mount
-    drawToyShadow(ctx, cx, cy + 24, 42, 9, 0.32);
-
-    // 1. Tactile 3D Vinyl Metallic Turret Platform
-    drawToyBevelRect(ctx, cx - 38, cy + 2, 76, 22, 11, '#334155', {
-      depth: 4,
-      rimColor: '#0f172a',
-      lineWidth: 1.6,
-      gloss: true,
+    // 1. Wide Inked Steel Cannon Carriage Deck
+    drawComicPanel(ctx, cx - 40, cy + 2, 80, 22, 10, '#334155', {
+      lineWidth: 2.8,
+      shadowDx: 0,
+      shadowDy: 3,
     });
-    drawToySphere(ctx, cx - 26, cy + 13, 3.5, '#38bdf8', { rimColor: '#0f172a', lineWidth: 1.0 });
-    drawToySphere(ctx, cx + 26, cy + 13, 3.5, '#38bdf8', { rimColor: '#0f172a', lineWidth: 1.0 });
 
-    // 2. Aiming Cannon Barrel pivoting toward aimAngle
+    // Twin #000-inked gold cannon wheels
+    for (const wx of [cx - 28, cx + 28]) {
+      ctx.fillStyle = '#f59e0b';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(wx, cy + 16, 7.5, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(wx, cy + 16, 2.5, 0, TAU);
+      ctx.fill();
+    }
+
+    // 2. Pivoting #000-Inked Steel & Brass Cannon Barrel centered at cannonX
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(this.aimAngle + Math.PI / 2);
 
-    // 3D Chrome Cannon Barrel with rim highlight
-    const barrelGrad = ctx.createLinearGradient(-11, 0, 11, 0);
-    barrelGrad.addColorStop(0, '#475569');
-    barrelGrad.addColorStop(0.35, '#f1f5f9');
-    barrelGrad.addColorStop(0.75, '#94a3b8');
-    barrelGrad.addColorStop(1, '#1e293b');
-    ctx.fillStyle = barrelGrad;
-    traceRoundRect(ctx, -10.5, -39, 21, 37, 6);
+    ctx.fillStyle = '#64748b';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    ctx.roundRect(-11, -39, 22, 38, 6);
     ctx.fill();
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 1.5;
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.beginPath();
+    ctx.roundRect(-7, -36, 7, 32, 3);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.roundRect(-11, -39, 22, 38, 6);
     ctx.stroke();
 
-    // Glossy Cyan 3D Muzzle Collar
-    drawToyPill(ctx, -13, -43, 26, 8, '#25e6ff', {
-      rimColor: '#0284c7',
-      lineWidth: 1.3,
-      gloss: true,
-    });
+    // Gold inked muzzle collar
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.roundRect(-13.5, -43, 27, 8, 4);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
 
-    // 3. Captain Jellybean operating the cannon!
-    drawBean(ctx, cx, cy - 4, 32, {
-      ufo: false,
-      color: '#25e6ff',
-      bellyColor: '#ffd166',
-      walkT: this.time * 2.5,
-      squash: 1,
-      dir: Math.cos(this.aimAngle) < 0 ? -1 : 1,
-      eyes: this.state === 'firing' ? 'bright' : 'happy',
-      hat: 'crown',
+    // 3. Pristine HD 3D Cannon Carriage Operator spotting upward & steering
+    drawHeroCharacter(ctx, cx - 22, cy + 16, 40, {
+      view: 'threeQuarterFront',
+      dir: aimRight ? 1 : -1,
+      state: 'steer_fire',
+      expr: this.state === 'firing' ? 'focus' : 'happy',
+      t: this.time * 4.5,
+      lean: this.state === 'firing' ? Math.sin(this.time * 18) * 0.12 : Math.max(-0.22, Math.min(0.22, Math.cos(this.aimAngle) * 0.22)),
+      lookX: aimRight ? 0.5 : -0.5,
     });
 
-    // 4. Ball count badge directly above cannon (3D Pill Card)
+    // 4. Crisp Comic Ball Count Badge neatly beside/below or centered in Aim state
     if (this.state === 'aim') {
-      drawToyBevelRect(ctx, cx - 32, cy - 50, 64, 22, 11, '#1e293b', {
-        depth: 2.5,
-        rimColor: '#38bdf8',
-        lineWidth: 1.5,
-        gloss: false,
+      drawComicPanel(ctx, cx - 32, cy - 58, 64, 22, 9, '#0f172a', {
+        lineWidth: 2.4,
+        shadowDx: 1.5,
+        shadowDy: 2,
       });
-
-      ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2.5;
-      ctx.strokeText(`⚪ ×${this.ballCount}`, cx, cy - 39);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(`⚪ ×${this.ballCount}`, cx, cy - 39);
+      ctx.fillStyle = '#e0f2fe';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(cx - 16, cy - 47, 5, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      drawComicText(ctx, `×${this.ballCount}`, cx + 7, cy - 46.5, "900 12px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+        strokeWidth: 2.8,
+      });
     }
-
-    ctx.restore();
   }
 
   drawHUD(ctx, W, H) {
-    ctx.save();
-
-    // 1. Wave Badge (Top Left) — 3D Beveled Toy HUD Card
-    drawToyBevelRect(ctx, 14, 106, 94, 34, 11, '#1e293b', {
-      depth: 3,
-      rimColor: '#475569',
-      lineWidth: 1.6,
-      gloss: false,
+    // 1. Top-Left Wave Pill (y=98..132 — 10px clear above ceiling lintel!)
+    drawComicPanel(ctx, 14, 98, 96, 34, 11, '#0f172a', {
+      lineWidth: 2.8,
+      shadowDx: 2,
+      shadowDy: 3,
+    });
+    drawComicText(ctx, `WAVE ${this.wave}`, 62, 116, "900 14px 'Fredoka', 'Outfit', sans-serif", '#fde047', {
+      strokeWidth: 3.0,
     });
 
-    ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.8;
-    ctx.strokeText(`WAVE ${this.wave}`, 61, 123);
-    ctx.fillStyle = '#ffd166';
-    ctx.fillText(`WAVE ${this.wave}`, 61, 123);
-
-    // 2. Score Badge (Top Right) — 3D Beveled Toy HUD Card
-    drawToyBevelRect(ctx, W - 142, 106, 128, 34, 11, '#1e293b', {
-      depth: 3,
-      rimColor: '#475569',
-      lineWidth: 1.6,
-      gloss: false,
+    // 2. Top-Right Ball Count / Status Pill cleanly below #prestigeBadge (y=102..134)
+    const rw = 108;
+    const rh = 32;
+    const rx = W - rw - 14;
+    const ry = 102;
+    const isFiring = this.state === 'firing' || this.state === 'returning';
+    const rFill = isFiring ? '#0369a1' : '#166534';
+    const rText = isFiring
+      ? `IN FLIGHT: ${this.balls.filter((b) => b.active).length}`
+      : `${this.ballCount} BALLS`;
+    drawComicPanel(ctx, rx, ry, rw, rh, 11, rFill, {
+      lineWidth: 2.8,
+      shadowDx: 2,
+      shadowDy: 3,
+    });
+    drawComicText(ctx, rText, rx + rw * 0.5, ry + rh * 0.5 + 1, "900 11.5px 'Fredoka', 'Outfit', sans-serif", '#ffffff', {
+      strokeWidth: 2.8,
     });
 
-    ctx.textAlign = 'right';
-    ctx.strokeText(`${Math.round(this.score)} PTS`, W - 26, 123);
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText(`${Math.round(this.score)} PTS`, W - 26, 123);
-
-    // 3. Fast-Forward Turbo Toggle Button (Bottom Right)
-    const isFast = this.turbo || this.turnDuration > 5.5;
-    drawToyBevelRect(ctx, W - 88, H - 54, 74, 32, 11, isFast ? '#f43f5e' : '#334155', {
-      depth: 3,
-      rimColor: isFast ? '#ffd166' : '#0f172a',
-      lineWidth: 1.8,
-      gloss: true,
-    });
-
-    ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
-    ctx.textAlign = 'center';
-    ctx.strokeText(isFast ? '⚡ 2.5×' : '⚡ 1.0×', W - 51, H - 38);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(isFast ? '⚡ 2.5×' : '⚡ 1.0×', W - 51, H - 38);
-
-    // Combo Callout
+    // Center Combo Burst cleanly in HUD band when active
     if (this.combo > 15) {
-      const alpha = Math.min(1, this.combo / 40);
-      ctx.globalAlpha = alpha;
-      ctx.font = "700 15px 'Fredoka', 'Outfit', sans-serif";
-      ctx.textAlign = 'center';
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 3.2;
-      ctx.strokeText(`🔥 ${this.combo} COMBO!`, W / 2, 123);
-      ctx.fillStyle = '#ffd166';
-      ctx.fillText(`🔥 ${this.combo} COMBO!`, W / 2, 123);
+      drawComicText(ctx, `${this.combo} COMBO!`, W * 0.5, 116, "900 14px 'Fredoka', 'Outfit', sans-serif", '#fde047', {
+        strokeWidth: 3.4,
+      });
     }
 
-    ctx.restore();
+    // 3. Bottom-Right Turbo Toggle Comic Button (clear of bottom-left #adminDock)
+    const isFast = this.turbo || this.turnDuration > 5.5;
+    drawComicPanel(ctx, W - 88, H - 54, 74, 34, 11, isFast ? '#dc2626' : '#334155', {
+      lineWidth: 2.6,
+      shadowDx: 2,
+      shadowDy: 3,
+    });
+    drawComicText(ctx, isFast ? '2.5× FAST' : '1.0× SPD', W - 51, H - 36, "900 11px 'Fredoka', 'Outfit', sans-serif", isFast ? '#fef08a' : '#ffffff', {
+      strokeWidth: 2.8,
+    });
   }
 
   rr(ctx, x, y, w, h, r) {
-    traceRoundRect(ctx, x, y, w, h, r);
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
   }
 }

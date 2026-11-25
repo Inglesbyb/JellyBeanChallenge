@@ -1,20 +1,41 @@
-// Interactive Toy Courtyard Plaza & World 1 Mario-Style Diorama Overworld Renderer.
-import { drawBean } from './bean.js';
+// Interactive HD Flash Cel-Cartoon ("Weebl's Stuff") Sunburst Plaza FX & World 1 Overworld Renderer.
 import { store } from './store.js';
 import { sounds } from '../audio.js';
 import {
   WORLD_1_NODES,
-  WORLD_1_CHESTS,
   getWorldById,
   getWorldNodeById,
 } from '../games/registry.js';
+import { drawComicStarburst } from '../games/weeblAtlas.js';
+
+let _heroMapSprite = null;
+function getHeroMapSprite() {
+  if (typeof Image === 'undefined') return null;
+  if (!_heroMapSprite) {
+    const img = new Image();
+    img.src = '/assets/world1/hero-bean-map.png';
+    _heroMapSprite = img;
+  }
+  return _heroMapSprite.complete && _heroMapSprite.naturalWidth > 0 ? _heroMapSprite : null;
+}
+
+let _world2MapSprite = null;
+function getWorld2MapSprite() {
+  if (typeof Image === 'undefined') return null;
+  if (!_world2MapSprite) {
+    const img = new Image();
+    img.src = '/assets/world1/world2-portal-plaza.png';
+    _world2MapSprite = img;
+  }
+  return _world2MapSprite.complete && _world2MapSprite.naturalWidth > 0 ? _world2MapSprite : null;
+}
 
 export const STAGE_W = 450;
 export const STAGE_H = 800;
 
 function syncCanvasDPR(canvas) {
   if (!canvas) return null;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const tw = Math.round(STAGE_W * dpr);
   const th = Math.round(STAGE_H * dpr);
   if (canvas.width !== tw || canvas.height !== th) {
@@ -27,9 +48,9 @@ function syncCanvasDPR(canvas) {
 }
 
 /**
- * Live 60fps overlay on the Toy Courtyard Plaza backdrop:
- * - Renders the player's equipped Closet skin + hat standing on the center stone pedestal
- * - Animates subtle ambient sparkle glints over buildings & tap confetti burst
+ * Live 60fps Interactive FX Overlay layered seamlessly over the illustrated Opt2 Sunburst Stage:
+ * - Animates emerald portal energy ripples inside the World 1 Stone Arch
+ * - Pops crisp Weebl starbursts & outlined confetti when tapping the Crowned Hero Bean
  */
 export class PlazaScene {
   constructor(canvas) {
@@ -38,18 +59,21 @@ export class PlazaScene {
     this.t = 0;
     this.last = 0;
     this.bounceT = 0;
+    this.world2PulseT = 0;
     this.sparkles = [];
   }
 
   start() {
     this.stop();
     if (!this.canvas) return;
+    getWorld2MapSprite();
     this.last = performance.now();
     const tick = (now) => {
       const dt = Math.min(0.05, Math.max(0.001, (now - this.last) / 1000));
       this.last = now;
       this.t += dt;
       if (this.bounceT > 0) this.bounceT = Math.max(0, this.bounceT - dt * 2.1);
+      if (this.world2PulseT > 0) this.world2PulseT = Math.max(0, this.world2PulseT - dt * 2.4);
       this.updateSparkles(dt);
       this.render();
       this.raf = requestAnimationFrame(tick);
@@ -64,23 +88,31 @@ export class PlazaScene {
     }
   }
 
-  triggerBounce() {
-    this.bounceT = 1.0;
-    const palette = ['#ffd166', '#38f3ff', '#ff5ea8', '#3dffa2', '#ffffff'];
-    for (let i = 0; i < 16; i++) {
-      const ang = (Math.PI * 2 * i) / 16 + (Math.random() - 0.5) * 0.35;
-      const spd = 65 + Math.random() * 115;
+  _spawnSparkBurst(cx, cy, count, palette) {
+    for (let i = 0; i < count; i++) {
+      const ang = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.35;
+      const spd = 70 + Math.random() * 115;
       this.sparkles.push({
-        x: 225 + (Math.random() - 0.5) * 20,
-        y: 422 + (Math.random() - 0.5) * 14,
+        x: cx + (Math.random() - 0.5) * 26,
+        y: cy + (Math.random() - 0.5) * 22,
         vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd - 45,
-        life: 0.7 + Math.random() * 0.35,
+        vy: Math.sin(ang) * spd - 50,
+        life: 0.72 + Math.random() * 0.35,
         maxLife: 1.05,
-        r: 2.5 + Math.random() * 3.5,
+        r: 3.2 + Math.random() * 3.2,
         color: palette[i % palette.length],
       });
     }
+  }
+
+  triggerBounce() {
+    this.bounceT = 1.0;
+    this._spawnSparkBurst(228, 438, 18, ['#facc15', '#38bdf8', '#fb7185', '#4ade80', '#ffffff']);
+  }
+
+  triggerWorld2Pulse() {
+    this.world2PulseT = 1.0;
+    this._spawnSparkBurst(388, 438, 14, ['#e879f9', '#c084fc', '#fde047', '#ffffff']);
   }
 
   updateSparkles(dt) {
@@ -88,10 +120,104 @@ export class PlazaScene {
       const s = this.sparkles[i];
       s.x += s.vx * dt;
       s.y += s.vy * dt;
-      s.vy += 220 * dt;
+      s.vy += 240 * dt;
       s.life -= dt;
       if (s.life <= 0) this.sparkles.splice(i, 1);
     }
+  }
+
+  drawWorld2PortalArch(ctx) {
+    const cx = 388.5;
+    const baseY = 489.5;
+    const drawW = 100.8;
+    const drawH = 113.5;
+    const ready = !!store.worlds.world2Unlocked;
+    const tapBump = this.world2PulseT > 0 ? Math.sin(this.world2PulseT * Math.PI) * 0.07 : 0;
+    const w2Sprite = getWorld2MapSprite();
+
+    ctx.save();
+    ctx.translate(cx, baseY);
+    ctx.scale(1 + tapBump, 1 - tapBump * 0.45);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // Mystic violet threshold glow radiating onto right patio floor
+    const glowGrad = ctx.createRadialGradient(0, -6, 4, 0, -4, 42);
+    glowGrad.addColorStop(0, 'rgba(192, 132, 252, 0.55)');
+    glowGrad.addColorStop(0.55, 'rgba(147, 51, 234, 0.24)');
+    glowGrad.addColorStop(1, 'rgba(147, 51, 234, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, -4, 42, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (w2Sprite) {
+      ctx.drawImage(w2Sprite, -drawW / 2, -drawH, drawW, drawH);
+    } else {
+      // Minimal geometric fallback if sprite image has not decoded yet
+      ctx.fillStyle = '#3b0764';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(-36, -6);
+      ctx.lineTo(-36, -54);
+      ctx.arc(0, -54, 36, Math.PI, 0);
+      ctx.lineTo(36, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Living lavender-violet portal shimmer ripple matching World 1's emerald pulse
+    const wave = (this.t * 0.65 + 0.35) % 1;
+    ctx.save();
+    ctx.globalAlpha = (1 - wave) * 0.5;
+    ctx.strokeStyle = '#f5d0fe';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(-2, -46, 5 + wave * 12, 9 + wave * 20, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Crisp Weebl Comic Header Sign: WORLD 2 (styled identically to World 1, shifted to violet-purple)
+    ctx.font = "900 16.5px 'Fredoka', 'Outfit', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText('WORLD 2', 0, -106);
+    const titleGrad = ctx.createLinearGradient(0, -115, 0, -97);
+    titleGrad.addColorStop(0, '#f5d0fe');
+    titleGrad.addColorStop(0.5, '#d8b4fe');
+    titleGrad.addColorStop(1, '#9333ea');
+    ctx.fillStyle = titleGrad;
+    ctx.fillText('WORLD 2', 0, -106);
+
+    // Compact Ribbon Pill at Base: COMING SOON
+    const badgeW = 82;
+    const badgeH = 17.5;
+    const badgeY = -14;
+    const pillGrad = ctx.createLinearGradient(0, badgeY, 0, badgeY + badgeH);
+    if (ready) {
+      pillGrad.addColorStop(0, '#e9d5ff');
+      pillGrad.addColorStop(1, '#9333ea');
+    } else {
+      pillGrad.addColorStop(0, '#fef08a');
+      pillGrad.addColorStop(1, '#f59e0b');
+    }
+    ctx.fillStyle = pillGrad;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.roundRect(-badgeW / 2, badgeY, badgeW, badgeH, 8.75);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = "900 9px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillStyle = ready ? '#ffffff' : '#451a03';
+    ctx.fillText('COMING SOON', 0, badgeY + badgeH / 2 + 0.5);
+
+    ctx.restore();
   }
 
   render() {
@@ -99,85 +225,47 @@ export class PlazaScene {
     if (!ctx) return;
     ctx.clearRect(0, 0, STAGE_W, STAGE_H);
 
-    // 1. Subtle ambient glow shimmer on Emerald Portal & Floating Daily Cube
-    const pulse = 0.5 + 0.5 * Math.sin(this.t * 3.1);
+    // 1. Living Emerald Shimmer & Vortex Pulse inside World 1 Portal Doorway (`x=60, y=444`)
+    const wave = (this.t * 0.65) % 1;
     ctx.save();
-    const portalGlow = ctx.createRadialGradient(106, 360, 4, 106, 360, 46);
-    portalGlow.addColorStop(0, `rgba(61, 255, 200, ${0.22 + pulse * 0.14})`);
-    portalGlow.addColorStop(1, 'rgba(61, 255, 200, 0)');
-    ctx.fillStyle = portalGlow;
+    ctx.globalAlpha = (1 - wave) * 0.45;
+    ctx.strokeStyle = '#bbf7d0';
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.arc(106, 360, 46, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Floating glint motes near Daily Cube (225, 312) and Vault Chest (388, 412)
-    const glints = [
-      [225 + Math.sin(this.t * 2.2) * 24, 306 + Math.cos(this.t * 2.8) * 10, '#fff7ae'],
-      [388 + Math.cos(this.t * 2.4) * 18, 404 + Math.sin(this.t * 3.1) * 12, '#9beeff'],
-      [104 + Math.sin(this.t * 1.9 + 1) * 18, 355 + Math.cos(this.t * 2.5) * 18, '#7cfcc6'],
-    ];
-    for (const [gx, gy, col] of glints) {
-      const a = 0.35 + 0.55 * Math.abs(Math.sin(this.t * 2.6 + gx));
-      ctx.globalAlpha = a;
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.arc(gx, gy, 2.8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // 2. Central golden stone pedestal highlight ring & Bean shadow
-    const pedX = 225;
-    const pedY = 446;
-    const jumpArc = this.bounceT > 0 ? Math.sin(this.bounceT * Math.PI) * 32 : 0;
-    const idleBob = Math.sin(this.t * 2.6) * 2.5;
-    const by = pedY - 20 - idleBob - jumpArc;
-
-    ctx.save();
-    const ringAlpha = 0.25 + 0.18 * pulse;
-    ctx.strokeStyle = `rgba(255, 240, 145, ${ringAlpha})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.ellipse(pedX, pedY + 4, 58, 22, 0, 0, Math.PI * 2);
+    ctx.ellipse(58, 446, 6 + wave * 14, 10 + wave * 24, 0, 0, Math.PI * 2);
     ctx.stroke();
-
-    // Shadow shrinks naturally as Bean jumps
-    const shScale = Math.max(0.55, 1 - jumpArc / 65);
-    ctx.fillStyle = `rgba(18, 36, 12, ${0.34 * shScale})`;
-    ctx.beginPath();
-    ctx.ellipse(pedX, pedY + 4, 36 * shScale, 12 * shScale, 0, 0, Math.PI * 2);
-    ctx.fill();
     ctx.restore();
 
-    // 3. Live Equipped Jelly Bean Hero standing & bouncing on the Plaza Pedestal
-    const squash =
-      this.bounceT > 0.72
-        ? 0.85
-        : this.bounceT > 0.12
-          ? 1.1
-          : 1 + Math.sin(this.t * 5.2) * 0.03;
-    const eyes =
-      this.bounceT > 0.1
-        ? 'happy'
-        : Math.floor(this.t * 1.4) % 7 === 0
-          ? 'wink'
-          : 'happy';
+    // 2. Right Terrace Companion Landmark: World 2 Coming Soon Sealed Archway
+    this.drawWorld2PortalArch(ctx);
 
-    drawBean(ctx, pedX, by, 44, {
-      dir: Math.sin(this.t * 0.9) >= 0 ? 1 : -1,
-      walkT: this.bounceT > 0 ? this.t * 5.5 : this.t * 1.4,
-      squash,
-      eyes,
-    });
+    // 3. Celebratory Comic Halo, Starburst & Sparkles when Hero Bean is Tapped
+    if (this.bounceT > 0.05) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.bounceT) * 0.65;
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(228, 526, 48 + (1 - this.bounceT) * 32, 13 + (1 - this.bounceT) * 8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
 
-    // 4. Tap celebration sparkles
+      if (this.bounceT > 0.42) {
+        const k = (this.bounceT - 0.42) / 0.58;
+        drawComicStarburst(ctx, 228, 362, 28 * k, 12 * k, 9, '#fef08a', '#000000', this.t * 8, 2.2);
+      }
+    }
+
     for (const s of this.sparkles) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, s.life / s.maxLife));
       ctx.fillStyle = s.color;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
       ctx.restore();
     }
   }
@@ -209,6 +297,7 @@ export class WorldMapScene {
   start() {
     this.stop();
     if (!this.canvas) return;
+    getHeroMapSprite();
     const cur = getWorldNodeById(store.worlds.selectedNodeId || '1-1');
     if (!this.isWalking) {
       this.beanPos = { x: cur.pos.x, y: cur.pos.y };
@@ -341,20 +430,18 @@ export class WorldMapScene {
     };
 
     if (unlocked) {
-      // Soft outer gold aura
+      // Crisp comic golden path highlight + outlined Spark Bead
       trace();
-      ctx.strokeStyle = 'rgba(255, 204, 64, 0.38)';
-      ctx.lineWidth = 14;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.lineWidth = 8;
       ctx.stroke();
 
-      // Core warm golden Nintendo path ribbon
       trace();
-      ctx.strokeStyle = '#ffd15c';
-      ctx.lineWidth = 6.5;
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 4.2;
       ctx.stroke();
 
-      // Animated traveling light bead along spline
-      const phase = ((this.t * 0.55 + worldIdx * 0.23) % 1 + 1) % 1;
+      const phase = ((this.t * 0.52 + worldIdx * 0.23) % 1 + 1) % 1;
       const totalPts = pts.length - 1;
       const fIdx = Math.min(totalPts - 1, Math.floor(phase * totalPts));
       const localT = phase * totalPts - fIdx;
@@ -364,17 +451,17 @@ export class WorldMapScene {
       const gy = p0[1] + (p1[1] - p0[1]) * localT;
 
       ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#ffd166';
-      ctx.shadowBlur = 10;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(gx, gy, 3.6, 0, Math.PI * 2);
+      ctx.arc(gx, gy, 3.8, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
     } else {
-      // Subtle muted dotted stepping stones on locked stretches
       trace();
       ctx.setLineDash([4, 8]);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.28)';
+      ctx.lineWidth = 3;
       ctx.stroke();
     }
     ctx.restore();
@@ -384,49 +471,46 @@ export class WorldMapScene {
     ctx.save();
     const wave = Math.sin(this.t * 5.2 + x) * 2.2;
     const isGold = stars >= 3;
-    const flagCol = isGold ? '#ffbe2e' : '#25e6ff';
-    const trimCol = isGold ? '#fff3a8' : '#b8fbff';
+    const flagCol = isGold ? '#facc15' : '#22c55e';
+    const trimCol = isGold ? '#fef9c3' : '#bbf7d0';
 
-    // Pole shadow & metal pole
-    ctx.strokeStyle = '#1b1d36';
-    ctx.lineWidth = 4.2;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4.6;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineTo(x, y - 34);
+    ctx.lineTo(x, y - 32);
     ctx.stroke();
 
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineTo(x, y - 34);
+    ctx.lineTo(x, y - 32);
     ctx.stroke();
 
-    // Waving pennant
     ctx.fillStyle = flagCol;
-    ctx.strokeStyle = '#1b1d36';
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(x + 1, y - 33);
-    ctx.quadraticCurveTo(x + 13, y - 36 + wave, x + 23, y - 28 + wave * 0.7);
-    ctx.lineTo(x + 1, y - 20);
+    ctx.moveTo(x + 1, y - 31);
+    ctx.quadraticCurveTo(x + 13, y - 34 + wave, x + 23, y - 26 + wave * 0.7);
+    ctx.lineTo(x + 1, y - 18);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Mini highlight emblem
     ctx.fillStyle = trimCol;
     ctx.beginPath();
-    ctx.arc(x + 9, y - 27 + wave * 0.3, 2.5, 0, Math.PI * 2);
+    ctx.arc(x + 9, y - 25 + wave * 0.3, 2.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Top gold finial sphere
-    ctx.fillStyle = '#ffd166';
-    ctx.strokeStyle = '#1b1d36';
-    ctx.lineWidth = 1.4;
+    ctx.fillStyle = '#fde047';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y - 35, 3.6, 0, Math.PI * 2);
+    ctx.arc(x, y - 33, 3.6, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -442,51 +526,224 @@ export class WorldMapScene {
       const isSelected = node.id === selectedId;
 
       if (isSelected) {
-        // Expanding Nintendo Mario active pad halo
+        // Sunlit gold halo for standard stages, fiery crimson-gold ring for 1-6 Final Boss
         ctx.save();
-        ctx.strokeStyle = `rgba(255, 226, 85, ${0.55 + pulse * 0.4})`;
-        ctx.lineWidth = 3.5;
+        ctx.globalAlpha = 0.72 + pulse * 0.24;
+        ctx.strokeStyle = node.isBoss ? '#ef4444' : '#fde047';
+        ctx.lineWidth = node.isBoss ? 3.8 : 3.2;
         ctx.beginPath();
-        ctx.ellipse(x, y, 27 + pulse * 4, 15 + pulse * 2.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y + 1, 26 + pulse * 2.5, 14 + pulse * 1.4, 0, 0, Math.PI * 2);
         ctx.stroke();
+        if (node.isBoss) {
+          ctx.strokeStyle = '#fde047';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.ellipse(x, y + 1, 22 + pulse * 1.8, 11.8 + pulse * 1.0, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
       if (!st.unlocked) {
-        // Dim circular lock medallion over locked pad
+        // Crisp Opt3 Weebl lock medallion sized to nest inside cream disc face (rx 14.5, ry 8.2)
         ctx.save();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.52)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-        ctx.lineWidth = 2;
+        ctx.fillStyle = node.isBoss ? '#7f1d1d' : '#475569';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.ellipse(x, y, 21, 11.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y, 14.5, 8.2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        ctx.font = '700 13px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#fff';
-        ctx.fillText('🔒', x, y - 1);
+        ctx.strokeStyle = node.isBoss ? '#fde047' : '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y - 3.2, 3, Math.PI, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = node.isBoss ? '#ef4444' : '#facc15';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(x - 4.5, y - 2.6, 9, 6.8, 1.6);
+        ctx.fill();
+        ctx.stroke();
         ctx.restore();
       } else if (st.cleared) {
-        this.drawFlag(ctx, x - 21, y - 4, st.stars);
+        this.drawFlag(ctx, x - 20, y - 3, st.stars);
       }
     }
 
-    // Subtle shimmer inside W2 warp arch when unlocked or previewing
     const world = getWorldById('world-1');
     const px = world.portalPos.x;
-    const py = world.portalPos.y - 14;
-    ctx.save();
+    const py = world.portalPos.y - 6;
     const w2Open = !!store.worlds.world2Unlocked;
-    const g = ctx.createRadialGradient(px, py, 2, px, py, 24);
-    g.addColorStop(0, w2Open ? `rgba(56, 243, 255, ${0.42 + pulse * 0.25})` : 'rgba(56, 243, 255, 0.16)');
-    g.addColorStop(1, 'rgba(56, 243, 255, 0)');
-    ctx.fillStyle = g;
+    ctx.save();
+    ctx.globalAlpha = w2Open ? 0.55 : 0.28;
+    ctx.strokeStyle = '#a5f3fc';
+    ctx.lineWidth = 2.2;
+    const pw = (this.t * 0.7) % 1;
     ctx.beginPath();
-    ctx.arc(px, py, 24, 0, Math.PI * 2);
+    ctx.ellipse(px, py, 5 + pw * 10, 8 + pw * 16, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawWeeblHeroOnMap(ctx, x, y, bounce, walkCycle, dir) {
+    const sqY = 1 + Math.sin(walkCycle) * 0.035;
+    const sqX = 2 - sqY;
+
+    // Render isolated Crowned Green Bean sprite (with cel vector fallback while loading)
+    const sprite = getHeroMapSprite();
+    if (sprite) {
+      const drawH = 70;
+      const drawW = Math.round((sprite.naturalWidth / sprite.naturalHeight) * drawH) || 57;
+      ctx.save();
+      ctx.translate(x, y + 3 - bounce);
+      ctx.scale((dir >= 0 ? 1 : -1) * sqX, sqY);
+      ctx.drawImage(sprite, -drawW / 2, -drawH + 2, drawW, drawH);
+      ctx.restore();
+      return;
+    }
+
+    const bodyCol = '#22c55e';
+    const shadeCol = '#15803d';
+    const hatId = 'crown';
+
+    ctx.save();
+    ctx.translate(x, y + 2 - bounce);
+    ctx.scale((dir >= 0 ? 0.56 : -0.56) * sqX, 0.56 * sqY);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // Waving/swinging cartoon arms
+    const swing = Math.sin(walkCycle) * 0.25;
+    ctx.save();
+    ctx.translate(-22, -46);
+    ctx.rotate(-0.45 + swing);
+    ctx.strokeStyle = '#000000'; ctx.lineWidth = 11;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-15, -6, -20, -20); ctx.stroke();
+    ctx.strokeStyle = bodyCol; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-15, -6, -20, -20); ctx.stroke();
+    ctx.fillStyle = bodyCol; ctx.strokeStyle = '#000000'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(-21, -22, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(22, -44);
+    ctx.rotate(-swing * 0.7);
+    ctx.strokeStyle = '#000000'; ctx.lineWidth = 11;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(14, 1); ctx.lineTo(18, -14); ctx.stroke();
+    ctx.strokeStyle = shadeCol; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(14, 1); ctx.lineTo(18, -14); ctx.stroke();
+    ctx.fillStyle = bodyCol; ctx.strokeStyle = '#000000'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(18, -16, 7.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // Stubby cartoon legs
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    const stepL = this.isWalking ? Math.sin(walkCycle) * 4 : 0;
+    for (const lx of [-11, 11]) {
+      const ly = lx < 0 ? stepL : -stepL;
+      ctx.fillStyle = shadeCol;
+      ctx.beginPath(); ctx.roundRect(lx - 4.5, -15 + ly, 9, 13, 4); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(lx + (lx < 0 ? -2.5 : 2.5), -2 + ly, 9.5, 4.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    // Crisp Weebl kidney-bean torso + separate outer ink contour (never outlines forehead glint!)
+    const traceBody = () => {
+      ctx.beginPath();
+      ctx.moveTo(-24, -62);
+      ctx.bezierCurveTo(-22, -96, 26, -96, 27, -62);
+      ctx.bezierCurveTo(29, -42, 26, -22, 16, -13);
+      ctx.bezierCurveTo(5, -8, -13, -10, -20, -19);
+      ctx.bezierCurveTo(-27, -30, -26, -46, -24, -62);
+      ctx.closePath();
+    };
+    traceBody();
+    ctx.fillStyle = bodyCol;
     ctx.fill();
+
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = shadeCol;
+    ctx.beginPath(); ctx.ellipse(23, -46, 15, 42, -0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.ellipse(-10, -78, 5, 11, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    traceBody();
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.8;
+    ctx.stroke();
+
+    // Expressive eyebrows, white sclera eyes & wide smile with crisp upper tooth strip
+    ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    ctx.moveTo(-14, -71); ctx.quadraticCurveTo(-7, -75, -1, -71);
+    ctx.moveTo(5, -71); ctx.quadraticCurveTo(12, -75, 18, -71);
+    ctx.stroke();
+
+    for (const ex of [-6, 11]) {
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.ellipse(ex, -58, 8, 10.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#000000';
+      ctx.beginPath(); ctx.arc(ex + 1.5, -57, 3.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(ex + 2.6, -59, 1.3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.moveTo(-10, -42); ctx.quadraticCurveTo(2, -38, 14, -42);
+    ctx.quadraticCurveTo(10, -25, 1, -26); ctx.quadraticCurveTo(-8, -27, -10, -42);
+    ctx.closePath();
+    ctx.fillStyle = '#7f1d1d'; ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(-12, -43, 28, 6);
+    ctx.fillStyle = '#fb7185'; ctx.beginPath(); ctx.ellipse(2, -29, 6, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.6; ctx.stroke();
+
+    // Crown or Equipped Hat anchored cleanly atop head
+    ctx.save();
+    ctx.translate(4, -84);
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
+    if (hatId === 'tophat') {
+      ctx.rotate(0.1);
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath(); ctx.ellipse(0, 0, 24, 5.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillRect(-15, -23, 30, 23); ctx.strokeRect(-15, -23, 30, 23);
+      ctx.fillStyle = '#ef4444'; ctx.fillRect(-15, -7, 30, 5); ctx.strokeRect(-15, -7, 30, 5);
+    } else if (hatId === 'viking') {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath(); ctx.arc(0, 4, 21, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fef9c3';
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(s * 18, -2); ctx.quadraticCurveTo(s * 34, -10, s * 28, -24);
+        ctx.quadraticCurveTo(s * 20, -12, s * 12, -8); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    } else if (hatId === 'party') {
+      ctx.rotate(0.12);
+      ctx.fillStyle = '#ec4899';
+      ctx.beginPath(); ctx.moveTo(-14, 2); ctx.lineTo(0, -30); ctx.lineTo(14, 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(0, -30, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    } else if (hatId === 'chef') {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(-9, -14, 11, 0, Math.PI * 2); ctx.arc(9, -14, 11, 0, Math.PI * 2); ctx.arc(0, -20, 12, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke(); ctx.fillRect(-15, -9, 30, 10); ctx.strokeRect(-15, -9, 30, 10);
+    } else if (hatId === 'astro') {
+      ctx.strokeStyle = '#bae6fd'; ctx.fillStyle = 'rgba(186,230,253,0.28)';
+      ctx.beginPath(); ctx.arc(0, 20, 38, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.4; ctx.stroke();
+    } else {
+      ctx.rotate(0.14);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(-20, 4); ctx.lineTo(-23, -18); ctx.lineTo(-9, -7); ctx.lineTo(0, -23);
+      ctx.lineTo(9, -7); ctx.lineTo(23, -18); ctx.lineTo(20, 4); ctx.quadraticCurveTo(0, 8, -20, 4);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
     ctx.restore();
   }
 
@@ -502,46 +759,22 @@ export class WorldMapScene {
       this.drawPathSegment(ctx, node.pathFromPrev, unlocked, i);
     });
 
-    // Spur path to W2 Warp Arch
     const world = getWorldById('world-1');
     this.drawPathSegment(ctx, world.portalPath, !!store.worlds.world2Unlocked, 5);
 
-    // 2. Draw pad rings, lock medallions, & clear flags
+    // 2. Draw crisp lock medallions, clear pennants, & active pad rings
     this.drawPadHighlights(ctx);
 
-    // 3. Draw Star Chest glow ring if a chest is ready to claim
-    const nextChest = store.getNextUnclaimedChest();
-    if (nextChest && nextChest.ready) {
-      const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
-      const { x, y } = world.chestPos;
-      ctx.save();
-      const cg = ctx.createRadialGradient(x, y, 4, x, y, 28 + pulse * 6);
-      cg.addColorStop(0, `rgba(255, 215, 70, ${0.55 + pulse * 0.3})`);
-      cg.addColorStop(1, 'rgba(255, 215, 70, 0)');
-      ctx.fillStyle = cg;
-      ctx.beginPath();
-      ctx.arc(x, y, 34, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // 4. Draw Live Equipped Jelly Bean walking/bouncing on the active pad
+    // 3. Draw Live Crowned Weebl Hero standing/jogging on active pad
     const { x, y } = this.beanPos;
-    const hop = this.isWalking ? Math.abs(Math.sin(this.t * 14)) * 6 : Math.sin(this.t * 3.4) * 2;
+    const hop = this.isWalking ? Math.abs(Math.sin(this.t * 14)) * 7 : Math.sin(this.t * 3.4) * 2;
     ctx.save();
-    ctx.fillStyle = 'rgba(15, 32, 14, 0.35)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
     ctx.beginPath();
     ctx.ellipse(x, y + 2, 16, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    drawBean(ctx, x, y - 14 - hop, 24, {
-      dir: this.beanDir,
-      walkT: this.isWalking ? this.t * 7.5 : this.t * 1.6,
-      squash: this.isWalking ? 1 + Math.sin(this.t * 14) * 0.08 : 1 + Math.sin(this.t * 3.4) * 0.03,
-      eyes: 'happy',
-    });
+    this.drawWeeblHeroOnMap(ctx, x, y - 1, hop, this.isWalking ? this.t * 12 : this.t * 3.4, this.beanDir);
   }
 }
-
-export { WORLD_1_CHESTS };

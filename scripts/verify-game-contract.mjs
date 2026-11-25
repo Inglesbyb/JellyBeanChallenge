@@ -3,8 +3,9 @@
 import {
   GAMES,
   GAME_BY_ID,
+  GAME_BANK,
+  GAME_BANK_BY_ID,
   WORLD_1_NODES,
-  WORLD_1_CHESTS,
   QUEST_POOL,
   getStarsForScore,
   validateAllGames,
@@ -47,13 +48,32 @@ const mockEnv = {
   haptics: new Proxy({}, { get: () => noop }),
 };
 
+const ALL_GAME_CLASSES = [...GAMES, ...GAME_BANK];
+
 const errors = [
-  ...validateAllGames(GAMES),
+  ...validateAllGames(ALL_GAME_CLASSES),
   ...validateGameContract(TemplateGame),
 ];
 
+// Verify live roster is strictly the starting 20 reels + 1 boss level, isolated from GAME_BANK
+if (GAMES.length !== 21) {
+  errors.push(`GAMES: expected 21 live games (20 reels + boss), got ${GAMES.length}`);
+}
+for (const BankGame of GAME_BANK) {
+  const gid = BankGame?.meta?.id;
+  if (GAME_BY_ID[gid] || GAMES.includes(BankGame)) {
+    errors.push(`GAME_BANK '${gid}' must not be exposed in user-facing GAMES / GAME_BY_ID`);
+  }
+  if (store.isGameUnlocked(gid) || store.getUnlockedGameIds().includes(gid)) {
+    errors.push(`GAME_BANK '${gid}' must not be unlocked in store for players`);
+  }
+  if (!GAME_BANK_BY_ID[gid]) {
+    errors.push(`GAME_BANK_BY_ID missing '${gid}'`);
+  }
+}
+
 // Verify asymptotic monotonicity & caps for Prestige 1..20 + live lifecycle at P1 & P2
-for (const G of [...GAMES, TemplateGame]) {
+for (const G of [...ALL_GAME_CLASSES, TemplateGame]) {
   const id = G?.meta?.id || G?.name;
   const spec = G?.meta?.scaling;
   if (!spec || typeof spec !== 'object') continue;
@@ -101,11 +121,11 @@ for (const G of [...GAMES, TemplateGame]) {
   }
 }
 
-// Verify World 1 Overworld SSOT (5 nodes: 4 -> 8 -> 12 -> 16 -> 20 starter reels, monotonic clearScore)
-if (WORLD_1_NODES.length !== 5) {
-  errors.push(`WORLD_1_NODES: expected 5 nodes, got ${WORLD_1_NODES.length}`);
+// Verify World 1 Overworld SSOT (6 nodes: 4 -> 8 -> 12 -> 16 -> 20 starter reels, then 1-6 Final Boss)
+if (WORLD_1_NODES.length !== 6) {
+  errors.push(`WORLD_1_NODES: expected 6 nodes, got ${WORLD_1_NODES.length}`);
 } else {
-  const expectedCounts = [4, 8, 12, 16, 20];
+  const expectedCounts = [4, 8, 12, 16, 20, 1];
   WORLD_1_NODES.forEach((node, idx) => {
     if (node.gameIds.length !== expectedCounts[idx]) {
       errors.push(`World node ${node.id}: expected ${expectedCounts[idx]} reels, got ${node.gameIds.length}`);
@@ -119,13 +139,19 @@ if (WORLD_1_NODES.length !== 5) {
       errors.push(`World node ${node.id}: starScores must have 3 thresholds starting at clearScore`);
     }
   });
+  if (!WORLD_1_NODES[4].gameIds.includes('bean-helix')) {
+    errors.push('World node 1-5: expected bean-helix to be unlocked as reel #20');
+  }
+  if (!WORLD_1_NODES[5].isBoss || WORLD_1_NODES[5].gameIds[0] !== 'citadel-siege-boss') {
+    errors.push('World node 1-6: expected Final Boss node for citadel-siege-boss');
+  }
 }
 
-if (WORLD_1_CHESTS.length !== 3 || QUEST_POOL.length < 3) {
-  errors.push('World 1 chests or QUEST_POOL incomplete');
+if (QUEST_POOL.length < 3) {
+  errors.push('QUEST_POOL incomplete');
 }
 
-// Verify store World 1 unlock progression & star awarding without persisting to browser storage
+// Verify store World 1 unlock progression & Boss World 2 gating without persisting to browser storage
 try {
   store.reset();
   if (!store.isNodeUnlocked('1-1') || store.isNodeUnlocked('1-2')) {
@@ -138,6 +164,21 @@ try {
   const clearRes = store.recordWorldRunResult('1-1', 6200);
   if (!clearRes.clearedNow || clearRes.starsEarned !== 2 || !store.isNodeUnlocked('1-2')) {
     errors.push('store World 1 failed to unlock 1-2 or compute 2 stars on 1-1 clear');
+  }
+  // Verify clearing 1-5 unlocks 1-6 (Boss) WITHOUT unlocking World 2 or Endless Mode yet
+  const clear15 = store.recordWorldRunResult('1-5', 22500);
+  if (!clear15.clearedNow || !store.isNodeUnlocked('1-6') || store.worlds.world2Unlocked || store.isEndlessUnlocked()) {
+    errors.push('store World 1 clearing 1-5 must unlock 1-6 without unlocking World 2 or Endless');
+  }
+  // Losing 1-6 Boss leaves World 2 & Endless Mode locked
+  const fail16 = store.recordWorldRunResult('1-6', 4000, { bossVictory: false });
+  if (fail16.clearedNow || store.worlds.world2Unlocked || store.isEndlessUnlocked()) {
+    errors.push('store World 1 failed boss run must not clear 1-6 or unlock World 2 / Endless');
+  }
+  // Defeating Lord Brim on 1-6 unlocks World 2 + Endless Mode & awards heart-scaled stars
+  const win16 = store.recordWorldRunResult('1-6', 2800, { bossVictory: true, heartsRemaining: 4, maxHearts: 5 });
+  if (!win16.clearedNow || win16.starsEarned !== 2 || !win16.world2JustUnlocked || !store.worlds.world2Unlocked || !store.isEndlessUnlocked()) {
+    errors.push('store World 1 defeating 1-6 boss failed to clear 1-6 / award stars / unlock World 2 & Endless');
   }
   if (getStarsForScore(WORLD_1_NODES[0], 9500) !== 3) {
     errors.push('getStarsForScore failed 3-star threshold check');
@@ -157,4 +198,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`✅ Verified ${GAMES.length} registered games + TemplateGame pass SSOT contract, Prestige 1..20 scaling bounds, World 1 (4→20) progression, and P1→P2 runtime lifecycle.`);
+console.log(`✅ Verified ${GAMES.length} live games + ${GAME_BANK.length} WIP Game Bank games + TemplateGame pass SSOT contract, isolation, Prestige 1..20 scaling bounds, World 1 (4→20 + Boss 1-6) progression, and P1→P2 runtime lifecycle.`);

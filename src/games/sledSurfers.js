@@ -15,11 +15,25 @@ import {
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
+function formatOrdinal(n) {
+  const v = Math.max(1, Math.round(n));
+  const mod100 = v % 100;
+  let suffix = 'TH';
+  if (mod100 < 11 || mod100 > 13) {
+    if (v % 10 === 1) suffix = 'ST';
+    else if (v % 10 === 2) suffix = 'ND';
+    else if (v % 10 === 3) suffix = 'RD';
+  }
+  return { num: `${v}`, suffix, full: `${v}${suffix}` };
+}
+
 // Half-pipe geometry constants
 const TUBE_RADIUS = 150; // Radius of the curved half-pipe chute
 const SEG_LENGTH = 36;   // World units per track slice
 const DRAW_DIST = 1600;  // How far ahead to render track segments
 const FOCAL_LEN = 280;   // 3D perspective projection focal length
+const SAFE_RIM_U = 1.04; // Player steering stays safely atop the banked safety rails
+const FALL_RIM_U = 1.28; // Only strong shoves or extreme air drift vault past outer rim
 
 // Track Curvature Math
 function getTrackCenter(z) {
@@ -38,7 +52,7 @@ export class SledSurfers extends Game {
     hint: 'DRAG Left/Right to BANK · Hit RAMPS for AIR TIME · FLIP in mid-air for BOOST!',
     baseLikes: 9180,
     isPrestige: false,
-    parScore60s: 2200,
+    parScore60s: 7500,
     roundLen: 90,
     cue: 'BANK & DO FLIPS!',
     prestigeCue: 'FASTER SLIDE · FIERCER RIVALS!',
@@ -55,8 +69,11 @@ export class SledSurfers extends Game {
 
     // Longitudinal position along track
     this.playerZ = saved?.playerZ || 0;
-    this.playerU = saved?.playerU || 0; // Normalized lateral position: -1 (left rim), 0 (chute bed), 1 (right rim)
-    this.playerTargetU = 0;
+    this.playerU = clamp(saved?.playerU || 0, -0.85, 0.85); // Normalized lateral position: -1 (left rim), 0 (chute bed), 1 (right rim)
+    this.playerTargetU = this.playerU;
+    this.playerVu = 0; // Lateral carve velocity for heavy rival slams
+    this.playerBumpVu = 0; // Lateral shove velocity when rivals bump you
+    this.playerBumpTimer = 0;
     this.playerY = 0; // Altitude above track surface (0 when sliding on water)
     this.playerVy = 0;
     this.isAirborne = false;
@@ -64,12 +81,14 @@ export class SledSurfers extends Game {
     this.flipSpins = 0; // Completed 360 spins during current jump
     this.isFlipping = false;
 
-    // Movement & Speed (scaled by SSOT Prestige slope)
+    // Movement & Speed (scaled by SSOT Prestige slope; start gently so opening 3.5s is easy to handle)
     this.baseSpeed = this.diff.baseSpeed ?? 520;
-    this.speed = Math.max(this.baseSpeed, saved?.speed || this.baseSpeed);
+    this.speed = saved?.speed ? Math.max(this.baseSpeed * 0.72, saved.speed) : this.baseSpeed * 0.72;
     this.maxSpeed = this.diff.maxSpeed ?? 1050;
     this.speedBoostTimer = 0;
     this.wipeoutTimer = 0; // Non-lethal spinout recovery
+    this.openingSafeTimer = saved ? 2.5 : 4.0;
+    this.bumpCooldown = 0;
 
     // Distance & Race Metrics
     this.distanceMeters = Math.floor(this.playerZ / 10);
@@ -77,7 +96,11 @@ export class SledSurfers extends Game {
     this.coins = saved?.coins || 0;
     this.combo = 1;
     this.comboTimer = 0;
-    this.rank = 1;
+    this.rank = 6;
+    this.lastRank = 6;
+    this.rankPopTimer = 0;
+    this.rankToastCd = 0;
+    this.lastCcTier = '50cc';
 
     // Camera 3D Position
     this.camX = 0;
@@ -102,19 +125,22 @@ export class SledSurfers extends Game {
     window.addEventListener('keydown', this.keyHandler);
     window.addEventListener('keyup', this.keyHandler);
 
-    // Procedural Obstacles, Ramps & Pickups
+    // Procedural Obstacles, Ramps & Pickups (keep opening runway clear before first ramp)
     this.items = [];
-    this.nextItemZ = this.playerZ + 200;
+    this.spawnStartZ = this.playerZ;
+    this.nextItemZ = this.playerZ + 520;
 
-    // Rival AI Surfers with distinct personalities and Prestige-scaled aggression
+    // Rival AI Surfers staggered safely ahead in clear lanes so nobody bumps you at frame 1
     const agg = this.diff.rivalAggroMult ?? 1;
     this.rivals = [
-      { id: 1, name: 'SplashBro', color: '#f72585', z: this.playerZ + 45,  u: -0.35, speed: this.baseSpeed,       y: 0, aggression: 1.04 * agg, fellTimer: 0 },
-      { id: 2, name: 'WaveKing',  color: '#ffb703', z: this.playerZ + 95,  u:  0.30, speed: this.baseSpeed + 20,  y: 0, aggression: 1.07 * agg, fellTimer: 0 },
-      { id: 3, name: 'TurboBean', color: '#06d6a0', z: this.playerZ - 25, u: -0.15, speed: this.baseSpeed - 10,  y: 0, aggression: 1.02 * agg, fellTimer: 0 },
-      { id: 4, name: 'DriftQueen',color: '#7209b7', z: this.playerZ + 155, u:  0.45, speed: this.baseSpeed + 30,  y: 0, aggression: 1.09 * agg, fellTimer: 0 },
+      { id: 1, name: 'SplashBro',  color: '#f72585', z: this.playerZ + 120, u: -0.52, vu: 0, speed: this.baseSpeed * 0.84, y: 0, vy: 0, aggression: 0.96 * agg, fellTimer: 0, shoveCd: 0, knockTimer: 0 },
+      { id: 2, name: 'WaveKing',   color: '#ffb703', z: this.playerZ + 195, u:  0.48, vu: 0, speed: this.baseSpeed * 0.86, y: 0, vy: 0, aggression: 1.00 * agg, fellTimer: 0, shoveCd: 0, knockTimer: 0 },
+      { id: 3, name: 'TurboBean',  color: '#06d6a0', z: this.playerZ + 270, u: -0.24, vu: 0, speed: this.baseSpeed * 0.82, y: 0, vy: 0, aggression: 0.94 * agg, fellTimer: 0, shoveCd: 0, knockTimer: 0 },
+      { id: 4, name: 'DriftQueen', color: '#7209b7', z: this.playerZ + 345, u:  0.26, vu: 0, speed: this.baseSpeed * 0.88, y: 0, vy: 0, aggression: 1.03 * agg, fellTimer: 0, shoveCd: 0, knockTimer: 0 },
+      { id: 5, name: 'HydroBlitz', color: '#ef4444', z: this.playerZ + 430, u: -0.05, vu: 0, speed: this.baseSpeed * 0.90, y: 0, vy: 0, aggression: 1.05 * agg, fellTimer: 0, shoveCd: 0, knockTimer: 0 },
     ];
-    this.lastRank = 4;
+    this.lastRank = 6;
+    this.rank = 6;
 
     // Background floating clouds (high in the sky, y > 240)
     this.clouds = [];
@@ -133,7 +159,7 @@ export class SledSurfers extends Game {
       this.spawnItemBatch(this.nextItemZ);
       this.nextItemZ += 450 + Math.random() * 350;
     }
-    if (saved) this.grace = 1.5;
+    this.grace = saved ? 2.5 : 3.5;
   }
 
   destroy() {
@@ -154,26 +180,55 @@ export class SledSurfers extends Game {
     return `${Math.floor(this.playerZ / 10)}m · Coins $${this.coins}`;
   }
 
+  /* ---------------------------------------------------- Mario-Style Intensity */
+  getRaceIntensity() {
+    const total = (this.rivals?.length || 5) + 1;
+    // Higher placement (6th -> 1st) AND farther distance crank up CC speed, rival rubber-banding & hazards!
+    const rankFactor = clamp((total - this.rank) / Math.max(1, total - 1), 0, 1);
+    const distFactor = clamp(this.distanceMeters / 2600, 0, 1);
+    const heat = clamp(rankFactor * 0.65 + distFactor * 0.45, 0, 1.15);
+
+    if (heat < 0.25) {
+      return { cc: '50cc', tag: 'CHILL', col: '#4ade80', heat, speedAdd: 0, rubberBand: 0.91, hazardChance: 0.0 };
+    }
+    if (heat < 0.55) {
+      return { cc: '100cc', tag: 'PACK', col: '#38bdf8', heat, speedAdd: 85, rubberBand: 0.99, hazardChance: 0.12 };
+    }
+    if (heat < 0.85) {
+      return { cc: '150cc', tag: 'PRO', col: '#fbbf24', heat, speedAdd: 175, rubberBand: 1.08, hazardChance: 0.20 };
+    }
+    return { cc: '200cc', tag: 'CHAMPS', col: '#f43f5e', heat, speedAdd: 265, rubberBand: 1.16, hazardChance: 0.28 };
+  }
+
   /* ---------------------------------------------------- Procedural Spawning */
   spawnItemBatch(z) {
     const roll = Math.random();
+    const introStretch = (z - (this.spawnStartZ || 0)) < 1200;
+    const tier = this.getRaceIntensity();
 
-    if (roll < 0.28) {
-      // Occasional High-Air Launch Ramp
-      const u = (Math.random() - 0.5) * 0.7;
+    // When trailing (5th/6th), deal catch-up boosts like Mario Kart; when leading (1st/2nd), deal more hazards!
+    if (!introStretch && tier.hazardChance > 0 && roll < tier.hazardChance) {
+      const u = (Math.random() - 0.5) * 1.15;
+      this.items.push({ type: 'hazard', z, u, collected: false });
+      return;
+    }
+
+    if (!introStretch && roll < tier.hazardChance + 0.25) {
+      // Occasional High-Air Launch Ramp (introduced cleanly after opening run)
+      const u = (Math.random() - 0.5) * 0.65;
       this.items.push({ type: 'ramp', z, u, collected: false });
-    } else if (roll < 0.60) {
-      // Golden Boost Chevron Pad
-      const u = (Math.random() - 0.5) * 0.8;
+    } else if (roll < (introStretch ? 0.35 : 0.62)) {
+      // Golden Boost Chevron Pad (weighted higher when catching up)
+      const u = (Math.random() - 0.5) * 0.72;
       this.items.push({ type: 'boost', z, u, collected: false });
     } else {
       // Graceful Arc of Gold Coins along the slide curve
-      const centerU = (Math.random() - 0.5) * 0.9;
+      const centerU = (Math.random() - 0.5) * 0.78;
       for (let i = 0; i < 4; i++) {
         this.items.push({
           type: 'coin',
           z: z + i * 26,
-          u: centerU + Math.sin(i * 0.5) * 0.2,
+          u: centerU + Math.sin(i * 0.5) * 0.16,
           collected: false,
         });
       }
@@ -184,6 +239,10 @@ export class SledSurfers extends Game {
   update(dt) {
     if (this.dead) return;
     this.time += dt;
+    if (this.openingSafeTimer > 0) this.openingSafeTimer = Math.max(0, this.openingSafeTimer - dt);
+    if (this.bumpCooldown > 0) this.bumpCooldown = Math.max(0, this.bumpCooldown - dt);
+    if (this.rankPopTimer > 0) this.rankPopTimer = Math.max(0, this.rankPopTimer - dt);
+    if (this.rankToastCd > 0) this.rankToastCd = Math.max(0, this.rankToastCd - dt);
     this.fx.update(dt);
 
     // 1. Player Lateral Steering & Banking
@@ -212,60 +271,90 @@ export class SledSurfers extends Game {
   }
 
   updateSteering(dt) {
-    // Touch/Mouse Dragging
+    const startDragOffset = Math.abs((this.input.x ?? 0) - (this.input.startX ?? 0));
+
+    // Touch/Mouse Dragging (supports both natural relative drag AND gentle off-center hold)
     if (this.input.down) {
-      // Map canvas screen X (0..W) to lateral coordinate u (-1.5..1.5)
-      const targetU = ((this.input.x / this.W) - 0.5) * 2.9;
-      this.playerTargetU = clamp(targetU, -1.5, 1.5);
+      const fdx = this.input.frameDX || 0;
+      if (Math.abs(fdx) > 0.05) {
+        this.playerTargetU = clamp(this.playerTargetU + fdx / (this.W * 0.36), -SAFE_RIM_U, SAFE_RIM_U);
+      } else if (startDragOffset < 8 && Math.abs((this.input.x ?? this.W / 2) - this.W / 2) > 42) {
+        const sideDir = Math.sign(this.input.x - this.W / 2);
+        this.playerTargetU = clamp(this.playerTargetU + sideDir * 1.95 * dt, -SAFE_RIM_U, SAFE_RIM_U);
+      }
     } else {
-      // Keyboard A/D or ArrowLeft/ArrowRight
+      // Keyboard A/D or ArrowLeft/ArrowRight (capped safely inside chute walls)
       let keyDir = 0;
       if (this.keys.left) keyDir -= 1;
       if (this.keys.right) keyDir += 1;
       if (keyDir !== 0) {
-        this.playerTargetU = clamp(this.playerTargetU + keyDir * 2.6 * dt, -1.5, 1.5);
+        this.playerTargetU = clamp(this.playerTargetU + keyDir * 2.35 * dt, -SAFE_RIM_U, SAFE_RIM_U);
       }
     }
 
-    // Smooth lateral movement interpolation
-    const steerSpeed = this.isAirborne ? 2.5 : 5.8;
+    // Smooth lateral movement interpolation + rival knockback kick & velocity tracking
+    const prevU = this.playerU;
+    const steerSpeed = this.isAirborne ? 4.2 : 6.4;
+    if (this.playerBumpTimer > 0) {
+      this.playerBumpTimer = Math.max(0, this.playerBumpTimer - dt);
+      this.playerU += this.playerBumpVu * dt;
+      this.playerBumpVu *= Math.pow(0.16, dt);
+    }
     this.playerU += (this.playerTargetU - this.playerU) * Math.min(1.0, steerSpeed * dt);
+    this.playerVu = dt > 1e-4 ? (this.playerU - prevU) / dt : 0;
+
+    // Safety cushion on yellow outer rails during opening grace OR gentle rim touches
+    if (this.openingSafeTimer > 0 || this.grace > 0) {
+      if (Math.abs(this.playerU) > 1.06) {
+        this.playerU = clamp(this.playerU, -1.06, 1.06);
+        this.playerTargetU = clamp(this.playerTargetU, -SAFE_RIM_U, SAFE_RIM_U);
+      }
+    }
 
     // Sled banking roll based on lateral position on the curved half-pipe
-    const targetRoll = this.playerU * 0.55;
+    const targetRoll = this.playerU * 0.52;
     this.sledTilt += (targetRoll - this.sledTilt) * Math.min(1.0, 10 * dt);
 
-    // Check if player steers over the edge of the slide!
-    if (Math.abs(this.playerU) > 1.10) {
+    // Only vault off the outer lip if forced well past the yellow safety rail!
+    if (Math.abs(this.playerU) > FALL_RIM_U) {
       if (!this.isAirborne) {
         // Starts falling off the slide!
         this.isAirborne = true;
-        this.playerVy = -35; // Starts plummeting downward
+        this.playerVy = -20; // Starts descending with time to pull back inward
         this.sounds.whoosh();
         this.haptics.heavy();
         this.fx.burst(this.W / 2, 560, '#ffffff', 16, 140, 0.4, 3);
-        this.fx.text(this.W / 2, 300, 'FALLING OFF! ⚠️', '#ef4444', 22, 0.8);
+        this.fx.text(this.W / 2, 300, 'PULL BACK IN! ⚠️', '#ef4444', 22, 0.8);
       }
     }
   }
 
   updateSpeed(dt) {
-    // Wipeout recovery
+    const tier = this.getRaceIntensity();
+
+    // Wipeout recovery (keep sled sliding smoothly while slowing so camera never freezes)
     if (this.wipeoutTimer > 0) {
       this.wipeoutTimer -= dt;
-      this.speed = Math.max(260, this.speed - 350 * dt);
+      this.speed = Math.max(280, this.speed - 360 * dt);
+      this.playerZ += this.speed * dt;
       return;
     }
+
+    const capSpeed = this.maxSpeed + tier.heat * 140;
 
     // Speed boost countdown
     if (this.speedBoostTimer > 0) {
       this.speedBoostTimer -= dt;
-      this.speed = Math.min(this.maxSpeed, this.speed + 450 * dt);
+      this.speed = Math.min(capSpeed, this.speed + 480 * dt);
       this.fovPunch = Math.min(1.0, this.fovPunch + dt * 4);
     } else {
-      // Smooth natural acceleration towards cruising speed based on distance
-      const cruiseSpeed = Math.min(this.maxSpeed - 120, this.baseSpeed + (this.playerZ * 0.015));
-      this.speed += (cruiseSpeed - this.speed) * Math.min(1.0, 1.5 * dt);
+      // Smooth opening ramp-up over first 3.5s, then escalates the higher in rank/distance you climb!
+      const introRamp = Math.min(1.0, (this.time + 0.8) / 4.0);
+      const cruiseSpeed = Math.min(
+        capSpeed - 80,
+        this.baseSpeed * (0.72 + 0.28 * introRamp) + tier.speedAdd + (this.playerZ * 0.012),
+      );
+      this.speed += (cruiseSpeed - this.speed) * Math.min(1.0, 1.9 * dt);
       this.fovPunch = Math.max(0, this.fovPunch - dt * 2);
     }
 
@@ -295,14 +384,15 @@ export class SledSurfers extends Game {
   updateAirTime(dt) {
     if (!this.isAirborne) return;
 
-    // Gravity (heavier plunge if off the edge)
-    const gravity = Math.abs(this.playerU) > 1.15 ? 900 : 680;
+    const overEdge = Math.abs(this.playerU) > FALL_RIM_U;
+    // Gravity (forgiving air fall speed gives time to counter-steer back into the chute)
+    const gravity = overEdge ? 720 : 660;
     this.playerVy -= gravity * dt;
     this.playerY += this.playerVy * dt;
 
-    // Flip stunt control: Holding Space or dragging/clicking during air time
-    const flipInput = this.keys.space || (this.input.down && this.input.y < 420);
-    if (flipInput && Math.abs(this.playerU) <= 1.15) {
+    // Flip stunt control: Holding Space/Up or dragging high up the screen (y < 320) during air time
+    const flipInput = this.keys.space || (this.input.down && this.input.y < 320);
+    if (flipInput && !overEdge) {
       this.isFlipping = true;
       const spinSpeed = 9.2; // rad/s
       const prevAngle = this.flipAngle;
@@ -322,32 +412,45 @@ export class SledSurfers extends Game {
     }
 
     // Check if falling off the sides into the ocean below!
-    if (Math.abs(this.playerU) > 1.10) {
-      // Sled tumbles outwards in the air
-      this.sledTilt += Math.sign(this.playerU) * 8.0 * dt;
+    if (overEdge) {
+      if (this.openingSafeTimer > 0 || this.grace > 0) {
+        // Opening/restore safeguard: pull back safely onto track rim instead of plunging!
+        this.playerU = clamp(this.playerU, -1.0, 1.0);
+        this.playerTargetU = clamp(this.playerTargetU, -SAFE_RIM_U, SAFE_RIM_U);
+        this.playerY = Math.max(0, this.playerY);
+        if (this.playerY <= 0) {
+          this.isAirborne = false;
+          this.playerVy = 0;
+        }
+        return;
+      }
 
-      // When player falls below the chute structure (-40 altitude)
-      if (this.playerY < -40) {
-        this.die('Fell off the slide!');
-        this.sounds.fail();
-        this.haptics.fail();
-        this.fx.screenShake(18, 0.6);
-        this.fx.burst(this.W / 2, 540, '#00b4d8', 30, 240, 0.8, 5);
-        this.fx.text(this.W / 2, 340, 'FELL OFF THE SLIDE! 🌊', '#ef4444', 26, 1.2);
+      // Sled tumbles outwards in the air
+      this.sledTilt += Math.sign(this.playerU) * 6.5 * dt;
+
+      // Generous altitude threshold (-75) so pulling back inward can save you
+      if (this.playerY < -75) {
+        if (this.die('Fell off the slide!')) {
+          this.sounds.fail();
+          this.haptics.fail();
+          this.fx.screenShake(18, 0.6);
+          this.fx.burst(this.W / 2, 540, '#00b4d8', 30, 240, 0.8, 5);
+          this.fx.text(this.W / 2, 340, 'FELL OFF THE SLIDE! 🌊', '#ef4444', 26, 1.2);
+        }
         return;
       }
       return; // Still falling, do not touch down
     }
 
-    // Touchdown on half-pipe water slide (only when within slide bounds |u| <= 1.15)
+    // Touchdown on half-pipe water slide (within slide bounds |u| <= FALL_RIM_U)
     if (this.playerY <= 0) {
       this.playerY = 0;
       this.playerVy = 0;
       this.isAirborne = false;
 
-      // Evaluate landing stunt angle
+      // Evaluate landing stunt angle with generous tolerance
       const remAngle = (this.flipAngle % TAU);
-      const isCleanLanding = remAngle < 0.65 || remAngle > (TAU - 0.65) || this.flipSpins === 0;
+      const isCleanLanding = remAngle < 0.95 || remAngle > (TAU - 0.95) || this.flipSpins === 0;
 
       if (isCleanLanding) {
         // Perfect landing bonus!
@@ -417,7 +520,10 @@ export class SledSurfers extends Game {
       const du = Math.abs(item.u - this.playerU);
 
       // Check within hit box (only when player is near ground or landing)
-      if (dz > -25 && dz < 35 && this.playerY < 35 && du < 0.38) {
+      const hitU = item.type === 'hazard' ? 0.27 : 0.40;
+      const hitZMin = item.type === 'hazard' ? -18 : -25;
+      const hitZMax = item.type === 'hazard' ? 28 : 35;
+      if (dz > hitZMin && dz < hitZMax && this.playerY < 35 && du < hitU) {
         if (item.type === 'coin') {
           item.collected = true;
           this.coins++;
@@ -437,85 +543,181 @@ export class SledSurfers extends Game {
           item.collected = true;
           this.launchIntoAir(460);
           this.fx.text(this.W / 2, 280, 'BIG AIR! 🚀', '#00b4d8', 26, 1.0);
+        } else if (item.type === 'hazard') {
+          item.collected = true;
+          if (this.openingSafeTimer <= 0 && this.grace <= 0 && this.wipeoutTimer <= 0) {
+            this.triggerWipeout('Hit a warning buoy!');
+          }
         }
       }
     }
   }
 
+  triggerRivalKnockout(r, byPlayer = true) {
+    r.fellTimer = 3.0;
+    r.knockOutAnim = 0.65;
+    r.vy = 190;
+    if (byPlayer) {
+      this.score += 300 * this.combo;
+      this.speedBoostTimer = Math.max(this.speedBoostTimer, 1.25);
+      this.sounds.powerup();
+      this.haptics.heavy();
+      this.fx.text(this.W / 2, 310, `KNOCKED OUT ${r.name}! 🌊 +300`, '#06d6a0', 22, 1.2);
+      this.fx.burst(this.W / 2, 520, '#ffd166', 24, 220, 0.6, 4);
+    }
+  }
+
   updateRivals(dt) {
-    // Dynamic Pack Racing & Competitive AI
+    const tier = this.getRaceIntensity();
+
+    // Dynamic Mario-Style Pack Racing & Competitive AI
     for (const r of this.rivals) {
+      if (r.shoveCd > 0) r.shoveCd = Math.max(0, r.shoveCd - dt);
+      if (r.knockTimer > 0) r.knockTimer = Math.max(0, r.knockTimer - dt);
+
+      // Animate knocked-out rival tumbling off the side rail into the ocean!
       if (r.fellTimer > 0) {
         r.fellTimer -= dt;
+        if (r.knockOutAnim > 0) {
+          r.knockOutAnim = Math.max(0, r.knockOutAnim - dt);
+          r.u += (r.vu || Math.sign(r.u || 1) * 3.0) * dt;
+          r.vy -= 680 * dt;
+          r.y += r.vy * dt;
+          r.z += r.speed * 0.7 * dt;
+        }
+        if (r.fellTimer <= 0) {
+          r.z = this.playerZ - 160;
+          r.u = (Math.random() - 0.5) * 0.9;
+          r.vu = 0;
+          r.y = 0;
+          r.vy = 0;
+          r.knockTimer = 0;
+        }
         continue;
       }
 
-      // 1. Dynamic Speed AI: Bots scale to match and challenge player speed!
+      // 1. Balanced Mario-Style Rubber-Banding AI:
+      // Leaders ahead stay catchable so you can overtake into 1st; followers draft hard behind to pressure you!
       const distFromPlayer = r.z - this.playerZ;
       let targetSpeed;
 
-      if (distFromPlayer < -40) {
-        // Behind player: Catch slipstream & draft hard!
-        targetSpeed = this.speed * (1.05 * r.aggression);
-      } else if (distFromPlayer > 120) {
-        // Ahead of player: Cruise at competitive pace
-        targetSpeed = this.speed * (0.97 * r.aggression);
+      if (distFromPlayer < -35) {
+        // Behind player: Draft hard to reclaim spots, stronger at higher CC!
+        targetSpeed = this.speed * (1.03 + tier.heat * 0.10) * clamp(r.aggression, 0.94, 1.06);
+      } else if (distFromPlayer > 35) {
+        // Ahead of player: Capped slightly under player pace so skilled driving catches & passes 1st!
+        const aheadCap = this.rank >= 4 ? 0.88 : 0.945;
+        targetSpeed = this.speed * aheadCap;
       } else {
-        // Neck-and-neck: Joust for the lead with micro-bursts!
-        targetSpeed = this.speed * (1.0 + 0.12 * Math.sin(this.time * 2.0 + r.id));
+        // Side-by-side battle pack: Jostle closely around your speed!
+        targetSpeed = this.speed * (0.97 + 0.06 * Math.sin(this.time * 2.1 + r.id));
       }
 
-      r.speed += (targetSpeed - r.speed) * Math.min(1.0, 3.8 * dt);
+      r.speed += (targetSpeed - r.speed) * Math.min(1.0, 3.5 * dt);
       r.z += r.speed * dt;
 
-      // 2. Continuous Pack Recycling:
-      // If a bot gets left behind (-180 units) or surges too far ahead (+520), keep them closely contested!
-      if (r.z < this.playerZ - 180) {
-        r.z = this.playerZ + 80 + Math.random() * 140;
-        r.u = (Math.random() - 0.5) * 1.3;
-        r.speed = this.speed * (0.99 + Math.random() * 0.08);
-      } else if (r.z > this.playerZ + 550) {
-        r.z = this.playerZ + 200 + Math.random() * 140;
+      // 2. Fair Pack Recycling: passed rivals recycle BEHIND you to earn passes legitimately
+      if (r.z < this.playerZ - 260) {
+        r.z = this.playerZ - 135 - Math.random() * 60;
+        const offsetSign = this.playerU >= 0 ? -1 : 1;
+        r.u = clamp(this.playerU + offsetSign * (0.40 + Math.random() * 0.45), -0.88, 0.88);
+        r.vu = 0;
+        r.knockTimer = 0;
+        r.speed = this.speed * (1.02 + tier.heat * 0.06);
+      } else if (r.z > this.playerZ + 440) {
+        r.z = this.playerZ + 220 + Math.random() * 110;
       }
 
-      // 3. Competitive Bot Steering:
-      // Bots steer toward the ideal line, but if near player, they try to shove!
-      const targetU = Math.sin(r.z * 0.007 + r.id * 1.5) * 0.75;
-      r.u += (targetU - r.u) * Math.min(1.0, 3.2 * dt);
+      // 3. Lateral Knockback Physics OR Autonomous Weaving (rivals sometimes ride high banks)
+      if (r.knockTimer > 0) {
+        r.u += r.vu * dt;
+        r.vu *= Math.pow(0.18, dt);
+        if (Math.abs(r.u) > 1.14) {
+          this.triggerRivalKnockout(r, true);
+          continue;
+        }
+      } else {
+        let targetU = Math.sin(r.z * 0.0075 + r.id * 1.7) * 0.86;
+        // Rivals alongside you actively lean in to contest & bump you back (harder at higher CC!)
+        if (tier.heat >= 0.25 && Math.abs(distFromPlayer) < 105 && this.openingSafeTimer <= 0) {
+          const aggroBlend = clamp(0.24 + tier.heat * 0.14, 0.24, 0.38);
+          targetU = targetU * (1 - aggroBlend) + clamp(this.playerU, -0.95, 0.95) * aggroBlend;
+        }
+        r.u += (targetU - r.u) * Math.min(1.0, 2.9 * dt);
+      }
 
-      // 4. Bumping & Jostling Physics:
-      const dz = Math.abs(r.z - this.playerZ);
-      const du = Math.abs(r.u - this.playerU);
+      // 4. Two-Way Tactical Bump Physics (center hits jostle; edge hits knock rivals out!)
+      if (this.time > 1.0 && r.shoveCd <= 0 && !this.dead) {
+        const dz = Math.abs(r.z - this.playerZ);
+        const du = Math.abs(r.u - this.playerU);
 
-      if (dz < 38 && du < 0.38 && this.playerY < 35 && !this.dead) {
-        // Lateral shove direction
-        const shoveDir = Math.sign(this.playerU - r.u) || 1;
+        if (dz < 50 && du < 0.42 && this.playerY < 45) {
+          const pushDir = Math.sign(r.u - this.playerU) || (this.playerVu !== 0 ? Math.sign(this.playerVu) : 1);
+          const carveSpeed = Math.abs(this.playerVu);
+          const playerInitiated = carveSpeed > 0.65 || this.speedBoostTimer > 0;
+          const boostPower = this.speedBoostTimer > 0 ? 0.55 : 0;
 
-        // Bot pushes player outwards toward dangerous rim!
-        this.playerTargetU = clamp(this.playerTargetU + shoveDir * 0.38, -1.5, 1.5);
-        // Player pushes bot in opposite direction!
-        r.u -= shoveDir * 0.32;
+          // Modest lateral impulse: ~0.35 on casual touch, ~0.50 on slam -> KOs rivals close to the rail!
+          const rivalImpulse = playerInitiated
+            ? clamp(1.38 + carveSpeed * 0.22 + boostPower, 1.38, 1.92)
+            : 1.05;
+          r.vu = pushDir * rivalImpulse;
+          r.u += pushDir * (playerInitiated ? 0.08 : 0.05);
+          r.knockTimer = playerInitiated ? 0.42 : 0.34;
+          r.shoveCd = 0.45;
 
-        this.fx.screenShake(7, 0.25);
-        this.sounds.hit();
-        this.haptics.medium();
-        this.fx.burst(this.W / 2, 540, r.color, 14, 140, 0.4, 2.5);
+          // Two-way counter-bump: stronger lateral kick & momentary pace check when rivals slam you!
+          if (this.openingSafeTimer <= 0 && this.grace <= 0 && this.bumpCooldown <= 0) {
+            const playerRecoil = playerInitiated ? 0.24 : (0.40 + tier.heat * 0.14);
+            const maxBumpU = (this.rank >= 4 && this.prestige === 1) ? 1.12 : 1.30;
+            this.playerBumpVu = -pushDir * (playerInitiated ? 0.85 : (1.35 + tier.heat * 0.45));
+            this.playerBumpTimer = playerInitiated ? 0.20 : 0.28;
+            this.playerU = clamp(this.playerU - pushDir * (playerRecoil * 0.50), -maxBumpU, maxBumpU);
+            this.playerTargetU = clamp(this.playerTargetU - pushDir * playerRecoil, -maxBumpU, maxBumpU);
+            this.bumpCooldown = 0.35;
+            if (!playerInitiated) {
+              this.speed = Math.max(280, this.speed - 45);
+            }
+          }
 
-        // Check if bot was shoved off the edge!
-        if (Math.abs(r.u) > 1.25) {
-          r.fellTimer = 3.5;
-          r.z = this.playerZ - 400; // Sent back
-          this.score += 300 * this.combo;
-          this.sounds.powerup();
-          this.fx.text(this.W / 2, 320, `KNOCKED OUT ${r.name}! 🌊`, '#06d6a0', 22, 1.2);
-          this.fx.burst(this.W / 2, 540, '#ffd166', 22, 200, 0.6, 4);
-        } else {
-          this.fx.text(this.W / 2, 380, `RIVAL BUMP! 💥`, '#ffd166', 16, 0.5);
+          if (playerInitiated) {
+            this.speed = Math.min(this.maxSpeed + tier.heat * 140, this.speed + 20);
+          }
+          this.fx.screenShake(6, 0.20);
+          this.sounds.hit();
+          this.haptics.medium();
+          this.fx.burst(this.W / 2, 540, r.color, 16, 160, 0.45, 3);
+
+          if (Math.abs(r.u) > 1.14) {
+            this.triggerRivalKnockout(r, true);
+          } else {
+            const label = playerInitiated ? `SLAM! 💥` : `RIVAL BUMP! 💥`;
+            this.fx.text(this.W / 2, 370, label, '#ffd166', 18, 0.55);
+          }
         }
       }
     }
 
-    // Dynamic Race Rank Calculation
+    // Chain Knockback: sliding rivals jostle neighbors without catapulting midfielders out
+    for (let i = 0; i < this.rivals.length; i++) {
+      const a = this.rivals[i];
+      if (a.fellTimer > 0 || a.knockTimer <= 0) continue;
+      for (let j = 0; j < this.rivals.length; j++) {
+        if (i === j) continue;
+        const b = this.rivals[j];
+        if (b.fellTimer > 0 || b.shoveCd > 0) continue;
+        if (Math.abs(a.z - b.z) < 40 && Math.abs(a.u - b.u) < 0.34) {
+          const dir = Math.sign(b.u - a.u) || Math.sign(a.vu) || 1;
+          b.vu = dir * 1.25;
+          b.u += dir * 0.06;
+          b.knockTimer = 0.36;
+          b.shoveCd = 0.48;
+          if (Math.abs(b.u) > 1.14) this.triggerRivalKnockout(b, true);
+        }
+      }
+    }
+
+    // Dynamic Race Placement (1st, 2nd, 3rd, 4th, 5th, 6th)
     let currentRank = 1;
     let leaderName = null;
     for (const r of this.rivals) {
@@ -525,13 +727,32 @@ export class SledSurfers extends Game {
       }
     }
 
-    // Rank alerts
-    if (currentRank === 1 && this.lastRank > 1) {
-      this.fx.text(this.W / 2, 280, `TAKEN 1ST PLACE! 👑`, '#ffd166', 24, 1.0);
-      this.sounds.upgrade();
-    } else if (currentRank > 1 && this.lastRank === 1) {
-      this.fx.text(this.W / 2, 280, `${leaderName || 'Rival'} OVERTOOK YOU! 💨`, '#f72585', 20, 0.8);
+    if (currentRank !== this.lastRank) {
+      this.rankPopTimer = 0.45;
+      if (this.rankToastCd <= 0) {
+        const ord = formatOrdinal(currentRank).full;
+        if (currentRank === 1 && this.lastRank > 1) {
+          this.fx.text(this.W / 2, 276, `TAKEN 1ST PLACE! 👑`, '#ffd166', 24, 1.0);
+          this.sounds.upgrade();
+          this.rankToastCd = 1.0;
+        } else if (currentRank < this.lastRank) {
+          this.fx.text(this.W / 2, 276, `UP TO ${ord}! 🔥`, '#4ade80', 21, 0.85);
+          this.sounds.coin();
+          this.rankToastCd = 0.9;
+        } else if (currentRank > 1 && this.lastRank === 1) {
+          this.fx.text(this.W / 2, 276, `${leaderName || 'Rival'} TOOK 1ST! 💨`, '#f72585', 20, 0.85);
+          this.rankToastCd = 1.0;
+        }
+      }
     }
+
+    if (tier.cc !== this.lastCcTier) {
+      this.lastCcTier = tier.cc;
+      if (this.time > 2.5) {
+        this.fx.text(this.W / 2, 326, `${tier.cc.toUpperCase()} ${tier.tag} PACE! 🏁`, tier.col, 20, 0.9);
+      }
+    }
+
     this.lastRank = currentRank;
     this.rank = currentRank;
   }
@@ -906,6 +1127,23 @@ export class SledSurfers extends Game {
         ctx.strokeText('▲ JUMP ▲', 0, -2 * s);
         ctx.fillStyle = '#fef08a';
         ctx.fillText('▲ JUMP ▲', 0, -2 * s);
+      } else if (it.type === 'hazard') {
+        // Mario-Style Striped Warning Hazard Buoy (appears when leading / high CC!)
+        drawToyShadow(ctx, 0, 14 * s, 18 * s, 5 * s, 0.30);
+        drawToySphere(ctx, 0, -2 * s, 17 * s, '#ef4444', {
+          rimColor: '#0f172a',
+          lineWidth: toyLineW(34 * s, 0.055, 0.9, 2.4),
+          shine: 0.72,
+        });
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(0, -2 * s, 14 * s, 5 * s, -0.35, 0, TAU);
+        ctx.fill();
+        ctx.font = `900 ${Math.max(9, Math.round(14 * s))}px 'Fredoka', 'Outfit', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText('!', 0, -2 * s);
       }
 
       ctx.restore();
@@ -916,7 +1154,7 @@ export class SledSurfers extends Game {
   renderRivals(ctx) {
     ctx.save();
     for (const r of this.rivals) {
-      if (r.fellTimer > 0 || r.z < this.camZ + 15 || r.z > this.playerZ + DRAW_DIST) continue;
+      if ((r.fellTimer > 0 && !(r.knockOutAnim > 0)) || r.z < this.camZ + 15 || r.z > this.playerZ + DRAW_DIST) continue;
 
       const track = getTrackCenter(r.z);
       const angle = r.u * (Math.PI / 2.3);
@@ -934,6 +1172,8 @@ export class SledSurfers extends Game {
 
       ctx.save();
       ctx.translate(proj.x, proj.y);
+      if (r.knockOutAnim > 0) ctx.rotate((1 - r.knockOutAnim / 0.65) * 6.5);
+      else if (r.knockTimer > 0) ctx.rotate(Math.sin(this.time * 28) * 0.25);
       const s = proj.scale;
       const rim = toyRim(r.color, 0.55);
       const lw = toyLineW(40 * s, 0.045, 0.75, 2.2);
@@ -971,7 +1211,7 @@ export class SledSurfers extends Game {
         bellyColor: shadeColor(r.color, 0.4),
         squash: 0.95,
         walkT: this.wakeAnimT * 0.4,
-        eyes: 'happy',
+        eyes: (r.knockTimer > 0 || r.knockOutAnim > 0) ? 'squish' : 'happy',
       });
 
       // 3D Toy Pill Nametag Badge
@@ -1068,7 +1308,7 @@ export class SledSurfers extends Game {
       color: '#ffd166',
       bellyColor: '#fff7ed',
       squash: this.isAirborne ? 1.15 : 0.95,
-      eyes: (this.dead || this.wipeoutTimer > 0 || Math.abs(this.playerU) > 1.15)
+      eyes: (this.dead || this.wipeoutTimer > 0 || Math.abs(this.playerU) > 1.02)
         ? 'squish'
         : this.speedBoostTimer > 0
           ? 'alert'
@@ -1154,8 +1394,11 @@ export class SledSurfers extends Game {
   renderHUD(ctx, W) {
     ctx.save();
     const barY = 94;
+    const ord = formatOrdinal(this.rank);
+    const tier = this.getRaceIntensity();
+    const totalRacers = (this.rivals?.length || 5) + 1;
 
-    // 1. Top Toy Bevel HUD Capsule (Rank, Distance, Coins)
+    // 1. Top Toy Bevel HUD Capsule (Placement, Distance, Coins)
     drawToyBevelRect(ctx, 14, barY, W - 28, 42, 21, '#0f172a', {
       depth: 3,
       rimColor: '#38bdf8',
@@ -1163,16 +1406,22 @@ export class SledSurfers extends Game {
       gloss: false,
     });
 
-    // Rank Badge
-    const rankCol = this.rank === 1 ? '#ffd166' : this.rank === 2 ? '#cbd5e1' : '#fb923c';
+    // Ordinal Placement Label
+    const rankCol =
+      this.rank === 1 ? '#fde047'
+      : this.rank === 2 ? '#e2e8f0'
+      : this.rank === 3 ? '#fb923c'
+      : this.rank <= 4 ? '#38bdf8'
+      : '#f472b6';
+    const rankIcon = this.rank === 1 ? '🥇' : this.rank === 2 ? '🥈' : this.rank === 3 ? '🥉' : '🏁';
     ctx.fillStyle = rankCol;
-    ctx.font = "700 15px 'Fredoka', 'Outfit', sans-serif";
+    ctx.font = "900 15px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 3;
-    ctx.strokeText(`${this.rank === 1 ? '🥇' : '🏁'} #${this.rank}`, 30, barY + 21);
-    ctx.fillText(`${this.rank === 1 ? '🥇' : '🏁'} #${this.rank}`, 30, barY + 21);
+    ctx.strokeText(`${rankIcon} ${ord.full}`, 28, barY + 21);
+    ctx.fillText(`${rankIcon} ${ord.full}`, 28, barY + 21);
 
     // Large Distance Counter in Center
     ctx.fillStyle = '#ffffff';
@@ -1187,6 +1436,48 @@ export class SledSurfers extends Game {
     ctx.textAlign = 'right';
     ctx.strokeText(`💰 ${this.coins}`, W - 28, barY + 21);
     ctx.fillText(`💰 ${this.coins}`, W - 28, barY + 21);
+
+    // 1b. Upper-Left Mario-Style CC Intensity Tier Pill (`16..126`, Y = 148)
+    drawToyBevelRect(ctx, 16, 148, 110, 38, 12, '#0f172a', {
+      depth: 2.5,
+      rimColor: tier.col,
+      lineWidth: 2,
+      gloss: false,
+    });
+    ctx.fillStyle = tier.col;
+    ctx.font = "900 14px 'Fredoka', 'Outfit', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.fillText(`${tier.cc} ${tier.tag}`, 71, 167);
+
+    // 1c. Upper-Right Mario Kart Big Placement Emblem (`W - 104 .. W - 16`, Y = 148)
+    ctx.save();
+    const popScale = 1 + (this.rankPopTimer > 0 ? Math.sin((this.rankPopTimer / 0.45) * Math.PI) * 0.22 : 0);
+    ctx.translate(W - 60, 171);
+    ctx.scale(popScale, popScale);
+    drawToyBevelRect(ctx, -44, -23, 88, 46, 14, '#0f172a', {
+      depth: 3,
+      rimColor: rankCol,
+      lineWidth: 2.4,
+      gloss: true,
+    });
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.5;
+    ctx.font = "900 26px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillStyle = rankCol;
+    ctx.strokeText(ord.num, -4, 0);
+    ctx.fillText(ord.num, -4, 0);
+
+    ctx.textAlign = 'left';
+    ctx.font = "900 11px 'Fredoka', 'Outfit', sans-serif";
+    ctx.strokeText(ord.suffix, -2, -7);
+    ctx.fillText(ord.suffix, -2, -7);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillText(`/ ${totalRacers}`, -2, 8);
+    ctx.restore();
 
     // 2. Toy Speedometer Gauge (Bottom-Left)
     const speedKmh = Math.round((this.speed / 5) * 1.8);

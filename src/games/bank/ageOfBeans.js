@@ -1,6 +1,6 @@
-import { Game } from '../engine/Game.js';
-import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { Game } from '../../engine/Game.js';
+import { FX } from '../../engine/fx.js';
+import { drawBean } from '../../engine/bean.js';
 import {
   shadeColor,
   toyRim,
@@ -11,7 +11,7 @@ import {
   drawToyPill,
   drawToyEyes,
   traceRoundRect,
-} from '../engine/toyStyle.js';
+} from '../../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));

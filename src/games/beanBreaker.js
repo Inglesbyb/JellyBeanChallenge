@@ -1,6 +1,6 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { preloadWeeblAtlas, drawHeroCharacter } from './weeblAtlas.js';
 import {
   shadeColor,
   mixColor,
@@ -49,13 +49,16 @@ export class BeanBreaker extends Game {
 
   init(saved, score = 0) {
     this.fx = new FX();
+    preloadWeeblAtlas();
     this.score = score;
 
     this.paddleW = this.diff.paddleW ?? 98;
     this.paddleH = 16;
     this.paddleX = this.W / 2;
-    this.paddleY = Game.SAFE_BOTTOM - 34;
-    this.dangerY = this.paddleY - 34;
+    this.paddleY = Game.SAFE_BOTTOM - 52;
+    this.dangerY = this.paddleY - 30;
+    this.paddleVx = 0;
+    this.bouncePopTimer = 0;
 
     this.wideTimer = 0;
     this.laserTimer = 0;
@@ -279,6 +282,7 @@ export class BeanBreaker extends Game {
     this.fx.update(dt);
 
     // Paddle control (pointer drag or keyboard)
+    const prevPaddleX = this.paddleX;
     const kv = this.input.keyVec();
     if (kv && kv.x !== 0) {
       this.paddleX += kv.x * 430 * dt;
@@ -289,9 +293,11 @@ export class BeanBreaker extends Game {
     if (this.wideTimer > 0) this.wideTimer = Math.max(0, this.wideTimer - dt);
     if (this.laserTimer > 0) this.laserTimer = Math.max(0, this.laserTimer - dt);
     if (this.fireTimer > 0) this.fireTimer = Math.max(0, this.fireTimer - dt);
+    if (this.bouncePopTimer > 0) this.bouncePopTimer = Math.max(0, this.bouncePopTimer - dt);
 
     const curW = this.wideTimer > 0 ? this.paddleW * 1.4 : this.paddleW;
     this.paddleX = clamp(this.paddleX, curW / 2 + 10, this.W - curW / 2 - 10);
+    this.paddleVx = dt > 1e-4 ? (this.paddleX - prevPaddleX) / dt : 0;
 
     // Auto-fire paddle blaster lasers when LASER capsule is active
     if (this.laserTimer > 0) {
@@ -402,6 +408,7 @@ export class BeanBreaker extends Game {
         b.vx = Math.sin(angle) * spd;
         b.vy = -Math.cos(angle) * spd;
         b.y = this.paddleY - this.paddleH / 2 - b.r - 1;
+        this.bouncePopTimer = 0.24;
         this.combo = 0;
         this.sounds.bubble(1.1);
         this.haptics.light();
@@ -711,11 +718,44 @@ export class BeanBreaker extends Game {
     drawToySphere(ctx, pLeft + 7, this.paddleY, 3.2, '#f8fafc', { rimColor: pRim, lineWidth: 0.9 });
     drawToySphere(ctx, pLeft + curW - 7, this.paddleY, 3.2, '#f8fafc', { rimColor: pRim, lineWidth: 0.9 });
 
-    drawToyShadow(ctx, this.paddleX, this.paddleY + 30, 14, 5, 0.28);
-    drawBean(ctx, this.paddleX, this.paddleY + 14, 16, {
-      eyes: this.dead ? 'squish' : 'happy',
-      walkT: this.time * 0.4,
-      dead: this.dead,
+    // Pristine HD 3D Crowned Green Hero Bean pushing & piloting the deflector paddle
+    let leadBallX = this.paddleX;
+    let lowestBrickBot = 0;
+    if (this.balls.length > 0) {
+      let bestBall = this.balls[0];
+      for (const b of this.balls) {
+        if (b.y > bestBall.y) bestBall = b;
+      }
+      leadBallX = bestBall.x;
+    }
+    for (const br of this.bricks) {
+      if (br.y + br.h > lowestBrickBot) lowestBrickBot = br.y + br.h;
+    }
+
+    const moveNorm = clamp(this.paddleVx / 380, -1, 1);
+    const lookDir = clamp((leadBallX - this.paddleX) / 90, -0.85, 0.85);
+    const dangerClose = lowestBrickBot >= this.dangerY - 48;
+    const heroState =
+      this.dead ? 'dead'
+      : this.won ? 'cheer'
+      : this.laserTimer > 0 ? 'steer_fire'
+      : this.bouncePopTimer > 0 ? 'drop_push'
+      : 'balance';
+    const heroExpr =
+      this.dead ? 'dizzy'
+      : (this.won || this.fireTimer > 0 || this.wideTimer > 0) ? 'happy'
+      : dangerClose ? 'panic'
+      : 'focus';
+
+    drawToyShadow(ctx, this.paddleX, this.paddleY + 37, 15, 4.5, 0.30);
+    drawHeroCharacter(ctx, this.paddleX, this.paddleY + 34, 40, {
+      view: 'threeQuarterFront',
+      dir: Math.abs(moveNorm) > 0.15 ? (moveNorm >= 0 ? 1 : -1) : (lookDir >= 0 ? 1 : -1),
+      state: heroState,
+      expr: heroExpr,
+      t: this.time * 4.2,
+      lean: clamp(moveNorm * 0.24, -0.26, 0.26),
+      lookX: lookDir,
     });
 
     // 10. Volumetric Energy Balls & Soft Trails

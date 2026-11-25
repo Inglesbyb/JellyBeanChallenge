@@ -1,6 +1,16 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import {
+  STYLE_TOKENS,
+  preloadWeeblAtlas,
+  drawSprite,
+  drawComicPanel,
+  drawComicStarburst,
+  drawComicText,
+  drawWeeblCelBean,
+  drawHeroCharacter,
+} from './weeblAtlas.js';
+
 import {
   shadeColor,
   mixColor,
@@ -147,7 +157,7 @@ export class VoidEater extends Game {
     hint: 'DRAG to steer · ⚡ BOOST · swallow the city!',
     baseLikes: 1420,
     isPrestige: true,
-    parScore60s: 650,
+    parScore60s: 1800,
     cue: 'SWALLOW THE CITY!',
     prestigeCue: 'FASTER RIVALS & VOID DECAY!',
     scaling: {
@@ -159,6 +169,7 @@ export class VoidEater extends Game {
 
   init(saved, score = 0) {
     this.fx = new FX();
+    preloadWeeblAtlas();
     this.score = score;
     // Prestige rank (1 = first playthrough). Set by Reel.js before init().
     this.pLevel = Math.max(1, this.prestige || 1);
@@ -316,85 +327,96 @@ export class VoidEater extends Game {
     return clamp(45 / (this.hole.r + 18), 0.16, 1.4);
   }
 
-  /* --------------------------------------------------- Real Liverpool Geographic District Engine */
+  /* --------------------------------------------------- Sunlight Weebl Liverpool District Engine */
   getDistrictInfo(x, y) {
+    // Center Spawn Intersection & Starter Snack Square (`WORLD / 2 = 9000, 9000`)
+    if (x >= 8400 && x < 10200 && y >= 8400 && y < 10200) {
+      return {
+        id: 'starterCore',
+        name: '🍩 Candy Crosswalk & Civic Corner',
+        turf: '#22c55e',
+        street: '#475569',
+        starterCore: true,
+        desc: 'Sunlit crossings, frosted Donut shops & vibrant Weebl blocks',
+      };
+    }
     if (x < 2400) {
       return {
         id: 'docks',
         name: '⚓ Royal Albert Dock & Maritime Basins',
-        turf: '#102235',
-        street: '#1c1b26',
+        turf: '#38bdf8',
+        street: '#64748b',
         cobble: true,
-        desc: 'Interlocking water basins, red-brick warehouses, quayside swing bridges',
+        desc: 'Turquoise harbor basins, brick warehouses & waterfront swing bridges',
       };
     }
     if (x >= 2400 && x < 4500 && y < 9000) {
       return {
         id: 'strand',
         name: '🏛️ Pier Head & The Strand Grand Arterial Boulevard',
-        turf: '#1e2438',
-        street: '#141622',
+        turf: '#4ade80',
+        street: '#475569',
         broadAvenue: true,
-        desc: 'The Three Graces, grand Portland stone esplanades & 8-lane boulevard',
+        desc: 'Liver Building towers, cream stone esplanades & 8-lane boulevard',
       };
     }
     if (x >= 4500 && x < 8500 && y < 8500) {
       return {
         id: 'civic',
         name: '🏛️ St. George\'s Neoclassical Plateau & Lime Street',
-        turf: '#2a223a',
-        street: '#242032',
+        turf: '#fef3c7',
+        street: '#64748b',
         stonePlaza: true,
-        desc: 'Sweeping classical terraces, bronze equestrian statues & Corinthian pillars',
+        desc: 'Sunny sandstone terraces, lion statues & St. Jelly Hall',
       };
     }
     if (x >= 8500 && x < 13500 && y < 8000) {
       return {
         id: 'cavern',
         name: '🎸 The Cavern Quarter & Mathew Street Alleys',
-        turf: '#341a24',
-        street: '#2a1620',
+        turf: '#fed7aa',
+        street: '#64748b',
         tightAlleys: true,
-        desc: 'Winding cobblestone pedestrian alleys, brick archways & neon music pub signs',
+        desc: 'Brick pedestrian alleys, Donut corners & cheerful music cafés',
       };
     }
     if (x >= 13500 && y < 7500) {
       return {
         id: 'theme',
         name: '🎡 Gummy Land & Pier Fairgrounds',
-        turf: '#381635',
-        street: '#28142c',
+        turf: '#4ade80',
+        street: '#475569',
         carnival: true,
-        desc: 'Giant Ferris wheel, candy floss pavilions & festive promenade',
+        desc: 'Giant Ferris wheel, pastel boardwalks & candy stands',
       };
     }
     if (y >= 8500 && x < 8500) {
       return {
         id: 'georgian',
         name: '🌹 Georgian Quarter, Falkner Square & Hope St Axis',
-        turf: '#163222',
-        street: '#1c2232',
+        turf: '#22c55e',
+        street: '#475569',
         gardenSquare: true,
-        desc: 'Circular garden squares, London plane trees & twin monumental Cathedrals',
+        desc: 'Circular park squares, Palm House domes & twin Cathedrals',
       };
     }
     if (y >= 8000 && x >= 8500) {
       return {
         id: 'stadium',
         name: '🏟️ Stanley Park Boating Lakes & Anfield Colosseum',
-        turf: '#123028',
-        street: '#14222a',
+        turf: '#4ade80',
+        street: '#475569',
         parkLakes: true,
-        desc: 'Curving ornamental lakes, football pitch turf markings & stadium forecourt',
+        desc: 'Curving blue lakes, brick bridges & football stadium forecourt',
       };
     }
     return {
       id: 'metro',
-      name: '🏙️ Commercial Core & Diagonal Radial Boulevards',
-      turf: '#1f223d',
-      street: '#16192a',
+      name: '🏙️ Commercial Core & Radial Boulevards',
+      turf: '#22c55e',
+      street: '#475569',
       diagonal: true,
-      desc: 'Historic radial boulevards fanning inward with triangular plazas',
+      desc: 'Crisp sunlit intersections, townhouses & bustling shops',
     };
   }
 
@@ -481,7 +503,23 @@ export class VoidEater extends Game {
     // =========================================================================
     // 🏛️ DISTRICT SPECIFIC LANDMARKS & HIGHER TIER PROPS
     // =========================================================================
-    if (dist.id === 'docks') {
+    if (dist.id === 'starterCore') {
+      // Vivid Weebl Opening Street Block right around spawn (9000, 9000)
+      addProp('donutShop', wx + 420, wy + 400, 0);
+      addProp('superlambanana', wx + 225, wy + 250, 0, '#facc15');
+      addProp('townhouse', wx + 225, wy + 455, 0, '#ef4444');
+      addProp('redPhoneBox', wx + 130, wy + 150, 0, '#ef4444');
+      addProp('mailbox', wx + 490, wy + 150, 0, '#ef4444');
+      addProp('tree', wx + 170, wy + 340, 0, '#22c55e');
+      addProp('tree', wx + 470, wy + 220, 0, '#22c55e');
+      addProp('doubleDecker', wx + 260, wy + 48, 0, '#ef4444');
+      addProp('taxi', wx + 430, wy + 48, 0, '#facc15');
+      addProp('car', wx + 48, wy + 290, Math.PI / 2, '#38bdf8');
+      addProp('bench', wx + 320, wy + 150, 0);
+      addProp('ped', wx + 185, wy + 145, 0);
+      addProp('ped', wx + 350, wy + 475, 0);
+      addProp('ped', wx + 480, wy + 300, 0);
+    } else if (dist.id === 'docks') {
       // Royal Albert Dock Basin Quayside
       addProp('anchorMonument', wx + 280, wy + 200, 0, '#1c1b24');
       addProp('albertDock', wx + 480, wy + 300, 0, '#8b263e');
@@ -700,11 +738,14 @@ export class VoidEater extends Game {
             const pull = (70 + h.r * 0.4) * dt;
             p.x += (dx / d) * pull;
             p.y += (dy / d) * pull;
+            p.sucking = true;
+            p.pullAng = Math.atan2(dy, dx);
           }
 
           if (d < h.r - p.size * 0.3) {
             p.fall = 0.001;
             p.owner = h;
+            p.pullAng = Math.atan2(h.y - p.y, h.x - p.x);
             this.fallingProps.add(p);
           }
         }
@@ -742,6 +783,7 @@ export class VoidEater extends Game {
           if (d < rv.r - p.size * 0.3) {
             p.fall = 0.001;
             p.owner = rv;
+            p.pullAng = Math.atan2(rv.y - p.y, rv.x - p.x);
             this.fallingProps.add(p);
           }
         }
@@ -887,6 +929,11 @@ export class VoidEater extends Game {
       }
     }
 
+    // Clear transient pull state before suction pass
+    for (let i = 0; i < this.activeProps.length; i++) {
+      this.activeProps[i].sucking = false;
+    }
+
     this.absorb(h, dt);
     for (const rv of this.rivals) {
       if (!rv.dead) this.absorbRival(rv, dt);
@@ -902,9 +949,11 @@ export class VoidEater extends Game {
         continue;
       }
       p.fall += dt * 3.2;
-      p.x += (o.x - p.x) * Math.min(1, dt * 8.5);
+      const pullDx = o.x - p.x;
+      p.x += pullDx * Math.min(1, dt * 8.5);
       p.y += ((o.y + p.fall * o.r * 0.28) - p.y) * Math.min(1, dt * 8.5);
-      p.rot += dt * 2.6;
+      const tiltDir = (Math.cos(p.pullAng || 0) >= 0) ? 1 : -1;
+      p.rot += tiltDir * dt * 2.9;
 
       if (p.fall >= 1) {
         p.dead = true;
@@ -974,30 +1023,30 @@ export class VoidEater extends Game {
       this.sounds.laser();
       this.haptics.heavy();
     } else if (p.size <= 8) {
-      // Micro sweets: rate-limited ring to prevent particle bloat
+      // Micro sweets: crisp gold ring burst
       if (this.ringCooldown <= 0) {
-        this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.2, 0.15, 2);
+        this.fx.ring(this.hole.x, this.hole.y, '#facc15', this.hole.r * this.zoom * 1.25, 0.16, 2.2);
         this.ringCooldown = 0.08;
       }
     } else if (p.size < 20) {
       if (this.ringCooldown <= 0) {
-        this.fx.ring(this.hole.x, this.hole.y, '#25e6ff', this.hole.r * this.zoom * 1.3, 0.2, 2.5);
+        this.fx.ring(this.hole.x, this.hole.y, '#22c55e', this.hole.r * this.zoom * 1.35, 0.2, 2.8);
         this.ringCooldown = 0.08;
       }
     } else if (p.size < 40) {
-      this.fx.ring(this.hole.x, this.hole.y, '#ffd166', this.hole.r * this.zoom * 1.45, 0.25, 3);
+      this.fx.ring(this.hole.x, this.hole.y, '#facc15', this.hole.r * this.zoom * 1.5, 0.25, 3.2);
       if (this.eatTextCooldown <= 0) {
-        this.fx.text(this.hole.x, this.hole.y - this.hole.r - 20 * k, `+${this.batchPts} PTS`, '#ffd166', 22);
+        this.fx.text(this.hole.x, this.hole.y - this.hole.r - 20 * k, `+${this.batchPts} PTS`, '#fde047', 22);
         this.batchPts = 0;
         this.eatTextCooldown = 0.32;
       }
       this.haptics.light();
     } else {
-      this.fx.ring(this.hole.x, this.hole.y, '#ff4fa3', this.hole.r * this.zoom * 1.7, 0.35, 4);
-      this.fx.burst(this.hole.x, this.hole.y, '#ffd166', 10, 130 * k, 0.45, 3);
+      this.fx.ring(this.hole.x, this.hole.y, '#22c55e', this.hole.r * this.zoom * 1.75, 0.35, 4);
+      this.fx.burst(this.hole.x, this.hole.y, '#facc15', 10, 140 * k, 0.45, 3.2);
       this.fx.shake(3.5, 0.18);
       if (this.eatTextCooldown <= 0) {
-        this.fx.text(this.hole.x, this.hole.y - this.hole.r - 24 * k, `DEVOUR! +${this.batchPts}`, '#ff4fa3', 24);
+        this.fx.text(this.hole.x, this.hole.y - this.hole.r - 24 * k, `CHOMP! +${this.batchPts}`, '#fde047', 24);
         this.batchPts = 0;
         this.eatTextCooldown = 0.35;
       }
@@ -1326,7 +1375,7 @@ export class VoidEater extends Game {
     const halfT = oy / sc + 120;
     const halfB = (H - oy) / sc + 120;
 
-    ctx.fillStyle = '#0a0d1a';
+    ctx.fillStyle = '#06b6d4';
     ctx.fillRect(0, 0, W, H);
 
     ctx.save();
@@ -1334,7 +1383,7 @@ export class VoidEater extends Game {
     ctx.scale(sc, sc);
     ctx.translate(-h.x, -h.y);
 
-    // 1. Draw 2.5D Neon Urban Map & Moving Avenue Trams
+    // 1. Draw Bright Weebl Daylight Toy Metropolis & Trams/Boats
     this.drawCityMap(ctx, h, halfW, halfT, halfB);
     this.drawAmbientTrams(ctx, h, halfW, halfT, halfB);
 
@@ -1350,17 +1399,17 @@ export class VoidEater extends Game {
       }
     }
 
-    // 3. Draw Rivals (with Threat Auras & Targeting Telegraph)
+    // 3. Draw Rivals (with Threat Auras & Inked Dash Warning)
     for (const rv of this.rivals) {
       if (rv.dead) continue;
       const isThreat = rv.r > h.r + 10;
       const isPrey = h.r >= rv.r + 2;
-      const rim = rv.surging ? '#ff0054' : isThreat ? '#ff0054' : isPrey ? '#00f5d4' : '#ffd166';
+      const rim = rv.surging ? '#ef4444' : isThreat ? '#ef4444' : isPrey ? '#22c55e' : '#facc15';
 
       if (rv.telegraphT > 0) {
         ctx.save();
-        ctx.strokeStyle = '#ff0054';
-        ctx.lineWidth = Math.max(2, 3.5 / sc);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = Math.max(2.5, 4.0 / sc);
         ctx.setLineDash([12 / sc, 8 / sc]);
         ctx.beginPath();
         ctx.moveTo(rv.x, rv.y);
@@ -1373,11 +1422,11 @@ export class VoidEater extends Game {
       this.drawHole(rv, rim, rv.color, rv.name, false, isThreat);
     }
 
-    // 4. Draw Player 2.5D Donut Hole + Mascot Peek (flash crimson ring when rim is partially tugged)
+    // 4. Draw Hero Weebl Emerald-Gold Vortex Pit + Crowned Green Jellybean Mascot
     const rimThreat = this.rimThreatPull > 0.12;
-    this.drawHole(h, rimThreat ? '#ff0054' : '#25e6ff', '#25e6ff', 'YOU', true, rimThreat);
+    this.drawHole(h, rimThreat ? '#ef4444' : (this.boosting ? '#f97316' : '#22c55e'), '#22c55e', 'YOU', true, rimThreat);
 
-    // 5. Draw 2.5D Extruded Tall Props Back-to-Front by Ground Y (fade giant roofs occluding player)
+    // 5. Draw 2.5D Upright Props Back-to-Front by Ground Y (fade towering roofs blocking Hero)
     uprightProps.sort((a, b) => a.y - b.y);
     for (let i = 0; i < uprightProps.length; i++) {
       const p = uprightProps[i];
@@ -1391,126 +1440,279 @@ export class VoidEater extends Game {
     this.fx.render(ctx, sc);
     ctx.restore();
 
-    // 5. Draw Danger Screen Vignette if hunted
+    // 6. Clean Screen-Edge Warning Pulse + Chevrons & Minimal Weebl Comic HUD Chrome
     if (this.dangerIntensity > 0.05) {
       this.drawDangerVignette(ctx, W, H);
     }
 
     this.drawRivalIndicators(ctx, ox, oy, sc, W, H);
-    this.drawLeaderboard(ctx, W, H);
-    this.drawRadar(ctx, W, H);
     this.drawDistrictHUD(ctx, W, H);
+    this.drawRadar(ctx, W, H);
     this.drawBoostButton(ctx, W, H);
 
-    // 7. Apex Invulnerability & Victory Countdown Pill
+    // 7. Cosmic Singularity Invulnerability Crown Ribbon (Cleanly clear of top HUD!)
     if (this.isMaxSize()) {
       ctx.save();
-      const bannerW = 300;
-      const bannerH = 42;
+      const bannerW = 288;
+      const bannerH = 34;
       const bannerX = W / 2 - bannerW / 2;
-      const bannerY = 82;
-
-      drawToyBevelRect(ctx, bannerX, bannerY, bannerW, bannerH, 12, '#fde047', {
-        depth: 3,
-        rimColor: '#713f12',
-        lineWidth: 2.2,
-      });
-
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = "800 12.5px 'Fredoka', 'Outfit', sans-serif";
-      ctx.fillStyle = '#451a03';
-      if (this.victoryTimer > 0) {
-        ctx.fillText(`👑 APEX VICTORY IN ${Math.max(1, Math.ceil(this.victoryTimer))}s · [TAP TO WIN]`, W / 2, bannerY + bannerH / 2);
-      } else {
-        ctx.fillText('👑 APEX SINGULARITY (INVULNERABLE) 👑', W / 2, bannerY + bannerH / 2);
-      }
+      const bannerY = 144;
+      drawComicPanel(ctx, bannerX, bannerY, bannerW, bannerH, 12, '#fde047', { lineWidth: 2.8, shadowDy: 3 });
+      const bannerTxt = this.victoryTimer > 0
+        ? `👑 VICTORY IN ${Math.max(1, Math.ceil(this.victoryTimer))}s · TAP!`
+        : '👑 APEX SINGULARITY · INVINCIBLE!';
+      drawComicText(ctx, bannerTxt, W / 2, bannerY + bannerH / 2, '900 12px "Fredoka", sans-serif', '#ffffff', { strokeWidth: 3.4 });
       ctx.restore();
     }
   }
 
-  /* --------------------------------------------------- Live Top 5 Competitor Leaderboard */
-  drawLeaderboard(ctx, W, H) {
-    const competitors = [
-      { name: 'YOU', r: this.hole.r, isPlayer: true, col: '#25e6ff', boss: false },
-      ...this.rivals.filter(r => !r.dead).map(r => ({
-        name: r.name,
-        r: r.r,
-        isPlayer: false,
-        col: r.color,
-        boss: r.boss,
-      }))
-    ];
-    competitors.sort((a, b) => b.r - a.r);
+  /* --------------------------------------------------- Danger Edge Vignette (No Blocking Center Bar) */
+  drawDangerVignette(ctx, W, H) {
+    const pulse = 0.6 + Math.sin(this.time * 9) * 0.4;
+    const alpha = this.dangerIntensity * 0.36 * pulse;
+    const g = ctx.createRadialGradient(W / 2, H / 2, W * 0.42, W / 2, H / 2, W * 0.74);
+    g.addColorStop(0, 'rgba(239, 68, 68, 0)');
+    g.addColorStop(1, `rgba(239, 68, 68, ${alpha.toFixed(2)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
 
-    const playerRank = competitors.findIndex(c => c.isPlayer) + 1;
-    const top3 = competitors.slice(0, 3);
-    const playerInTop3 = playerRank <= 3;
-
-    const lx = 12;
-    const ly = 100;
-    const lw = 136;
-    const lh = playerInTop3 ? 90 : 110;
+  drawRadar(ctx, W, H) {
+    const pad = 12;
+    const size = 66;
+    const rx = W - size - pad;
+    const ry = 98;
 
     ctx.save();
-    drawToyBevelRect(ctx, lx, ly, lw, lh, 12, '#0f172a', {
-      depth: 3,
-      rimColor: '#334155',
-      lineWidth: 2,
-      gloss: false,
-    });
+    drawComicPanel(ctx, rx, ry, size, size, 11, '#2563eb', { lineWidth: 3, shadowDx: 2, shadowDy: 3.5, glossTop: false });
 
-    ctx.fillStyle = '#ffd166';
-    ctx.font = "800 10.5px 'Fredoka', 'Outfit', sans-serif";
-    ctx.textAlign = 'left';
-    ctx.fillText('👑 TOP VOIDS', lx + 10, ly + 17);
+    // Inner bright Weebl Toy City district map inset
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(rx + 4, ry + 4, size - 8, size - 8, 7);
+    ctx.clip();
 
-    const medals = ['🥇', '🥈', '🥉'];
-    top3.forEach((c, idx) => {
-      const rowY = ly + 35 + idx * 18;
-      if (c.isPlayer) {
-        drawToyPill(ctx, lx + 6, rowY - 11, lw - 12, 15, '#0369a1', {
-          rimColor: '#38bdf8',
-          lineWidth: 1,
-          gloss: true,
-        });
-      }
-      ctx.font = "700 10px 'Fredoka', 'Outfit', sans-serif";
-      ctx.textAlign = 'left';
-      ctx.fillStyle = c.isPlayer ? '#e0f2fe' : 'rgba(255,255,255,0.9)';
-      const nm = c.name.length > 9 ? `${c.name.slice(0, 8)}…` : c.name;
-      ctx.fillText(`${medals[idx]} ${nm}`, lx + 9, rowY);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#ffd166';
-      ctx.fillText(Math.round(c.r), lx + lw - 9, rowY);
-    });
+    const innerX = rx + 4;
+    const innerY = ry + 4;
+    const innerS = size - 8;
+    ctx.fillStyle = '#4ade80';
+    ctx.fillRect(innerX, innerY, innerS, innerS);
 
-    if (!playerInTop3) {
-      const youY = ly + lh - 11;
-      drawToyPill(ctx, lx + 6, youY - 11, lw - 12, 15, '#0369a1', {
-        rimColor: '#38bdf8',
-        lineWidth: 1,
-        gloss: true,
-      });
-      ctx.font = "800 10px 'Fredoka', 'Outfit', sans-serif";
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#e0f2fe';
-      ctx.fillText(`#${playerRank} YOU`, lx + 9, youY);
-      ctx.textAlign = 'right';
-      ctx.fillText(Math.round(this.hole.r), lx + lw - 9, youY);
+    // West Mersey Harbor & Docks water strip
+    ctx.fillStyle = '#22d3ee';
+    ctx.fillRect(innerX, innerY, innerS * 0.14, innerS);
+    ctx.fillStyle = '#fde68a';
+    ctx.fillRect(innerX + innerS * 0.14, innerY, innerS * 0.08, innerS);
+
+    // Crisp city road grid lines
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.6;
+    for (const f of [0.25, 0.5, 0.75]) {
+      ctx.beginPath();
+      ctx.moveTo(innerX, innerY + innerS * f);
+      ctx.lineTo(innerX + innerS, innerY + innerS * f);
+      ctx.moveTo(innerX + innerS * f, innerY);
+      ctx.lineTo(innerX + innerS * f, innerY + innerS);
+      ctx.stroke();
     }
 
+    const scale = innerS / WORLD;
+    let maxR = this.hole.r;
+    let leaderObj = this.hole;
+    for (const rv of this.rivals) {
+      if (!rv.dead && rv.r > maxR) {
+        maxR = rv.r;
+        leaderObj = rv;
+      }
+    }
+
+    for (const rv of this.rivals) {
+      if (rv.dead) continue;
+      const x = innerX + rv.x * scale;
+      const y = innerY + rv.y * scale;
+      const isThreat = rv.r > this.hole.r + 10;
+      ctx.fillStyle = rv.boss ? '#facc15' : isThreat ? '#ef4444' : '#38bdf8';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1.8, rv.r * scale * 1.4), 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Leader Crown Beacon
+    if (leaderObj && leaderObj !== this.hole) {
+      const lx = innerX + leaderObj.x * scale;
+      const ly = innerY + leaderObj.y * scale;
+      ctx.fillStyle = '#facc15';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(lx, ly, 3.2, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Player Hero Green Crown Beacon
+    const px = clamp(innerX + this.hole.x * scale, innerX + 5, innerX + innerS - 5);
+    const py = clamp(innerY + this.hole.y * scale, innerY + 5, innerY + innerS - 5);
+    ctx.fillStyle = '#22c55e';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(4.0, this.hole.r * scale * 2), 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(px - 4, py - 4);
+    ctx.lineTo(px - 4.5, py - 9);
+    ctx.lineTo(px - 1.5, py - 6.5);
+    ctx.lineTo(px, py - 9.5);
+    ctx.lineTo(px + 1.5, py - 6.5);
+    ctx.lineTo(px + 4.5, py - 9);
+    ctx.lineTo(px + 4, py - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
     ctx.restore();
   }
 
-  /* --------------------------------------------------- Liverpool Bird's Eye Map Drawing */
+  getPlayerRank() {
+    let rank = 1;
+    const hr = this.hole.r;
+    for (let i = 0; i < this.rivals.length; i++) {
+      const rv = this.rivals[i];
+      if (!rv.dead && rv.r > hr) rank++;
+    }
+    return rank;
+  }
+
+  drawDistrictHUD(ctx, W) {
+    const t = this.getTier();
+    const nextTier = TIERS.find((x) => x.level === t.level + 1);
+    const prevReq = t.req;
+    const nextReq = nextTier ? nextTier.req : 1000;
+    const progress = nextTier ? clamp((this.hole.r - prevReq) / Math.max(1, nextReq - prevReq), 0, 1) : 1;
+    const rank = this.getPlayerRank();
+
+    ctx.save();
+    const pillW = 248;
+    const pillH = 34;
+    const px = 12;
+    const py = 98;
+    drawComicPanel(ctx, px, py, pillW, pillH, 16, '#ffffff', { lineWidth: 3, shadowDx: 2, shadowDy: 3.5, glossTop: false });
+
+    // Emerald-to-Gold Tier Progress Bar
+    const barX = px + 6;
+    const barY = py + 6;
+    const barW = 186;
+    const barH = 22;
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    const fillW = Math.max(18, Math.round(barW * progress));
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(barX + 1.5, barY + 1.5, barW - 3, barH - 3, 8.5);
+    ctx.clip();
+    const bgGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+    bgGrad.addColorStop(0, '#10b981');
+    bgGrad.addColorStop(0.65, '#22c55e');
+    bgGrad.addColorStop(1, '#facc15');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(barX, barY, fillW, barH);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fillRect(barX, barY + 1, fillW, 6);
+    ctx.restore();
+
+    drawComicText(
+      ctx,
+      `TIER ${t.level} · SIZE ${Math.round(this.hole.r)}`,
+      barX + barW / 2,
+      barY + barH / 2 + 0.5,
+      '900 11.5px "Fredoka", sans-serif',
+      '#ffffff',
+      { strokeWidth: 3.2 },
+    );
+
+    // Compact Gold Crown Rank Chip on right of HUD pill
+    const chipX = barX + barW + 5;
+    const chipW = 45;
+    drawComicPanel(ctx, chipX, barY, chipW, barH, 8, rank === 1 ? '#fde047' : '#facc15', { lineWidth: 2.2, shadowDx: 0, shadowDy: 0 });
+    drawComicText(
+      ctx,
+      `👑#${rank}`,
+      chipX + chipW / 2,
+      barY + barH / 2 + 0.5,
+      '900 10.5px "Fredoka", sans-serif',
+      '#000000',
+      { stroke: '#ffffff', strokeWidth: 0 },
+    );
+    ctx.restore();
+  }
+
+  drawRivalIndicators(ctx, ox, oy, sc, W, H) {
+    const h = this.hole;
+    for (const rv of this.rivals) {
+      if (rv.dead) continue;
+      const sx = ox + (rv.x - h.x) * sc;
+      const sy = oy + (rv.y - h.y) * sc;
+      const m = 24;
+      if (sx > m && sx < W - m && sy > 136 && sy < H - 80) continue;
+      const worldDist = Math.hypot(rv.x - h.x, rv.y - h.y);
+      if (worldDist > 2600) continue;
+
+      const px = clamp(sx, m, W - m);
+      const py = clamp(sy, 144, H - 86);
+      const ang = Math.atan2(sy - py, sx - px);
+      const isThreat = rv.r > h.r + 10;
+      const isPrey = h.r >= rv.r + 2;
+      if (!isThreat && !rv.boss && worldDist > 1600) continue;
+      const col = rv.boss ? '#facc15' : isThreat ? '#ef4444' : isPrey ? '#22c55e' : '#facc15';
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ang);
+      ctx.fillStyle = col;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.lineTo(-9, -10);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-9, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      if (isThreat && worldDist < 950) {
+        const distM = Math.max(1, Math.round(worldDist / 25));
+        drawComicText(ctx, `${distM}m`, px, py + 17, '900 9.5px "Fredoka", sans-serif', '#fca5a5', { strokeWidth: 3 });
+      }
+    }
+  }
+
+  rr(x, y, w, h, r) {
+    traceRoundRect(this.ctx, x, y, w, h, r);
+  }
+
+  /* --------------------------------------------------- Bright Weebl Toy City Streets & Districts */
   drawCityMap(ctx, h, halfW, halfT, halfB) {
     const minX = Math.max(0, h.x - halfW);
     const maxX = Math.min(WORLD, h.x + halfW);
     const minY = Math.max(0, h.y - halfT);
     const maxY = Math.min(WORLD, h.y + halfB);
 
-    ctx.fillStyle = '#0c1020';
+    ctx.fillStyle = '#475569';
     ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
 
     const startGX = Math.floor(minX / CHUNK_SIZE);
@@ -1524,70 +1726,100 @@ export class VoidEater extends Game {
         const by = gy * CHUNK_SIZE;
         const dist = this.getDistrictInfo(bx + CHUNK_SIZE / 2, by + CHUNK_SIZE / 2);
 
-        // Performance LOD: When zoomed out, draw sleek stylized block districts
-        if (this.zoom < 0.35) {
-          ctx.fillStyle = dist.turf;
+        // Performance LOD when hugely zoomed out
+        if (this.zoom < 0.32) {
+          ctx.fillStyle = '#475569';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
-          ctx.fillStyle = dist.street;
-          ctx.fillRect(bx, by, CHUNK_SIZE, 60);
-          ctx.fillRect(bx, by, 60, CHUNK_SIZE);
+          ctx.fillStyle = dist.turf;
+          ctx.fillRect(bx + 70, by + 70, CHUNK_SIZE - 90, CHUNK_SIZE - 90);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(bx + 70, by + 70, CHUNK_SIZE - 90, CHUNK_SIZE - 90);
           continue;
         }
 
-        // 1. THE RIVER MERSEY & ENCLOSED DOCK BASINS (West: bx < 2400)
+        // 1. RIVER MERSEY & ROYAL ALBERT DOCK BASINS (West: bx < 2400)
         if (bx < 2400) {
           if (bx < 800) {
-            ctx.fillStyle = '#081d32';
+            ctx.fillStyle = '#06b6d4';
             ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
-            ctx.strokeStyle = 'rgba(0, 245, 212, 0.28)';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#67e8f9';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
             for (let w = 0; w < 4; w++) {
-              const wy = by + w * 150 + Math.sin(this.time * 2.2 + w * 1.5) * 20;
+              const wy = by + w * 150 + Math.sin(this.time * 2.2 + w * 1.5) * 16;
               ctx.beginPath();
               ctx.moveTo(bx + 30, wy);
-              ctx.bezierCurveTo(bx + 180, wy - 30, bx + 360, wy + 30, bx + 570, wy);
+              ctx.bezierCurveTo(bx + 180, wy - 26, bx + 360, wy + 26, bx + 570, wy);
+              ctx.stroke();
+            }
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            for (let w = 0; w < 2; w++) {
+              const wy = by + 80 + w * 280 + Math.cos(this.time * 2 + w) * 12;
+              ctx.beginPath();
+              ctx.moveTo(bx + 120, wy);
+              ctx.quadraticCurveTo(bx + 240, wy - 14, bx + 340, wy);
               ctx.stroke();
             }
             continue;
           }
 
-          // Royal Albert Dock Rectangular Basin Quayside
-          ctx.fillStyle = '#262430';
+          // Sandstone Quay Deck + Crisp Turquoise Harbor Basin
+          ctx.fillStyle = '#fef3c7';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-          ctx.fillStyle = '#0a2338';
-          this.rr(bx + 80, by + 80, CHUNK_SIZE - 160, CHUNK_SIZE - 160, 16);
+          ctx.fillStyle = '#0ea5e9';
+          this.rr(bx + 84, by + 84, CHUNK_SIZE - 168, CHUNK_SIZE - 168, 18);
           ctx.fill();
-
-          ctx.strokeStyle = '#4a5568';
-          ctx.lineWidth = 6;
-          this.rr(bx + 80, by + 80, CHUNK_SIZE - 160, CHUNK_SIZE - 160, 16);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 4;
           ctx.stroke();
 
-          ctx.fillStyle = '#4a3728';
-          ctx.fillRect(bx + 20, by + 20, CHUNK_SIZE - 40, 50);
-          ctx.fillRect(bx + 20, by + CHUNK_SIZE - 70, CHUNK_SIZE - 40, 50);
+          ctx.strokeStyle = '#bae6fd';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(bx + 140, by + 220); ctx.lineTo(bx + 260, by + 220);
+          ctx.moveTo(bx + 320, by + 380); ctx.lineTo(bx + 450, by + 380);
+          ctx.stroke();
+
+          // Timber boardwalk piers along basin edges
+          ctx.fillStyle = '#d97706';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 3;
+          ctx.fillRect(bx + 20, by + 20, CHUNK_SIZE - 40, 44);
+          ctx.strokeRect(bx + 20, by + 20, CHUNK_SIZE - 40, 44);
+          ctx.fillRect(bx + 20, by + CHUNK_SIZE - 64, CHUNK_SIZE - 40, 44);
+          ctx.strokeRect(bx + 20, by + CHUNK_SIZE - 64, CHUNK_SIZE - 40, 44);
           continue;
         }
 
-        // 2. THE STRAND MULTI-LANE BOULEVARD (bx: 2400..3600, by < 9000)
+        // 2. THE STRAND GRAND BOULEVARD (bx: 2400..3600, y < 9000)
         if (dist.broadAvenue && (gx % 3 === 0)) {
-          ctx.fillStyle = '#181b28';
+          ctx.fillStyle = '#475569';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-          ctx.fillStyle = '#12141f';
-          ctx.fillRect(bx + 120, by, CHUNK_SIZE - 240, CHUNK_SIZE);
+          // Lush Cream Esplanade Aprons
+          ctx.fillStyle = '#fef3c7';
+          ctx.fillRect(bx, by, 108, CHUNK_SIZE);
+          ctx.fillRect(bx + CHUNK_SIZE - 108, by, 108, CHUNK_SIZE);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(bx + 108, by); ctx.lineTo(bx + 108, by + CHUNK_SIZE);
+          ctx.moveTo(bx + CHUNK_SIZE - 108, by); ctx.lineTo(bx + CHUNK_SIZE - 108, by + CHUNK_SIZE);
+          ctx.stroke();
 
-          ctx.fillStyle = '#1c3628';
-          ctx.fillRect(bx + 285, by, 30, CHUNK_SIZE);
+          // Bright Green Boulevard Center Median
+          ctx.fillStyle = '#22c55e';
+          ctx.fillRect(bx + 282, by + 18, 36, CHUNK_SIZE - 36);
+          ctx.strokeRect(bx + 282, by + 18, 36, CHUNK_SIZE - 36);
 
-          ctx.fillStyle = 'rgba(255, 209, 102, 0.22)';
-          ctx.fillRect(bx + 130, by, 35, CHUNK_SIZE);
-
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-          ctx.lineWidth = 3;
-          ctx.setLineDash([18, 22]);
-          [bx + 210, bx + 390].forEach((lx) => {
+          // Yellow lane dashes + Crosswalk bars
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 4;
+          ctx.setLineDash([18, 18]);
+          [bx + 195, bx + 405].forEach((lx) => {
             ctx.beginPath();
             ctx.moveTo(lx, by);
             ctx.lineTo(lx, by + CHUNK_SIZE);
@@ -1595,176 +1827,190 @@ export class VoidEater extends Game {
           });
           ctx.setLineDash([]);
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillStyle = '#ffffff';
           for (let z = 0; z < 14; z++) {
-            ctx.fillRect(bx + 130 + z * 24, by + 120, 14, 45);
+            ctx.fillRect(bx + 130 + z * 24, by + 110, 14, 44);
           }
           continue;
         }
 
-        // 3. FALKNER SQUARE & GEORGIAN GARDEN SQUARES (Georgian Quarter)
+        // 3. FALKNER SQUARE & GEORGIAN GARDEN SQUARES
         if (dist.gardenSquare && (gx % 2 === 1 && gy % 2 === 1)) {
-          ctx.fillStyle = dist.street;
+          ctx.fillStyle = '#475569';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-          ctx.fillStyle = '#22283a';
+          ctx.fillStyle = '#fef3c7';
           ctx.beginPath();
-          ctx.arc(bx + 300, by + 300, 220, 0, TAU);
+          ctx.arc(bx + 300, by + 300, 224, 0, TAU);
           ctx.fill();
-
-          ctx.fillStyle = '#1b4332';
-          ctx.beginPath();
-          ctx.arc(bx + 300, by + 300, 180, 0, TAU);
-          ctx.fill();
-
-          ctx.strokeStyle = toyRim('#1b4332', 0.55);
+          ctx.strokeStyle = '#000000';
           ctx.lineWidth = 4;
           ctx.stroke();
 
-          ctx.strokeStyle = '#d4a373';
-          ctx.lineWidth = 14;
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(bx + 300, by + 300, 182, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.strokeStyle = '#fde68a';
+          ctx.lineWidth = 18;
           ctx.beginPath();
           ctx.moveTo(bx + 170, by + 170); ctx.lineTo(bx + 430, by + 430);
           ctx.moveTo(bx + 430, by + 170); ctx.lineTo(bx + 170, by + 430);
           ctx.stroke();
 
-          ctx.fillStyle = '#40916c';
+          ctx.fillStyle = '#4ade80';
           ctx.beginPath();
-          ctx.arc(bx + 300, by + 300, 50, 0, TAU);
+          ctx.arc(bx + 300, by + 300, 52, 0, TAU);
           ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 3;
+          ctx.stroke();
           continue;
         }
 
-        // 4. STANLEY PARK CURVED BOATING LAKES (Anfield District)
+        // 4. STANLEY PARK BOATING LAKES
         if (dist.parkLakes && (gx % 2 === 0 && gy % 2 === 1)) {
-          ctx.fillStyle = '#12261f';
+          ctx.fillStyle = '#4ade80';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-          ctx.fillStyle = '#0d3246';
+          ctx.fillStyle = '#38bdf8';
           ctx.beginPath();
-          ctx.ellipse(bx + 300, by + 300, 240, 160, 0.35, 0, TAU);
+          ctx.ellipse(bx + 300, by + 300, 236, 158, 0.35, 0, TAU);
           ctx.fill();
-
-          ctx.strokeStyle = 'rgba(78, 205, 196, 0.4)';
-          ctx.lineWidth = 5;
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 4;
           ctx.stroke();
 
-          ctx.fillStyle = '#b2533e';
-          this.rr(bx + 260, by + 160, 80, 280, 8);
+          ctx.fillStyle = '#ea580c';
+          this.rr(bx + 260, by + 160, 80, 280, 10);
           ctx.fill();
+          ctx.stroke();
           continue;
         }
 
-        // 5. ST GEORGE'S PLATEAU & NEOCLASSICAL STONE PLAZAS
+        // 5. ST GEORGE'S CIVIC PLATEAU
         if (dist.stonePlaza) {
-          ctx.fillStyle = '#1c1828';
+          ctx.fillStyle = '#475569';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-          ctx.fillStyle = '#3d3448';
-          this.rr(bx + 60, by + 60, CHUNK_SIZE - 120, CHUNK_SIZE - 120, 18);
+          ctx.fillStyle = '#fef3c7';
+          this.rr(bx + 68, by + 68, CHUNK_SIZE - 136, CHUNK_SIZE - 136, 20);
           ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 4;
+          ctx.stroke();
 
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.strokeStyle = 'rgba(15, 23, 42, 0.16)';
           ctx.lineWidth = 2;
           for (let s = 1; s < 4; s++) {
             ctx.beginPath();
-            ctx.moveTo(bx + 60 + s * 120, by + 60);
-            ctx.lineTo(bx + 60 + s * 120, by + CHUNK_SIZE - 60);
+            ctx.moveTo(bx + 68 + s * 116, by + 68);
+            ctx.lineTo(bx + 68 + s * 116, by + CHUNK_SIZE - 68);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(bx + 60, by + 60 + s * 120);
-            ctx.lineTo(bx + CHUNK_SIZE - 60, by + 60 + s * 120);
+            ctx.moveTo(bx + 68, by + 68 + s * 116);
+            ctx.lineTo(bx + CHUNK_SIZE - 68, by + 68 + s * 116);
             ctx.stroke();
           }
 
-          ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
-          ctx.lineWidth = 4;
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 5;
           ctx.beginPath();
-          ctx.arc(bx + 300, by + 300, 90, 0, TAU);
+          ctx.arc(bx + 300, by + 300, 86, 0, TAU);
           ctx.stroke();
           continue;
         }
 
-        // 6. THE CAVERN QUARTER TIGHT COBBLESTONE ALLEYS
+        // 6. THE CAVERN QUARTER COBBLESTONE ALLEYS
         if (dist.tightAlleys) {
-          ctx.fillStyle = '#181119';
+          ctx.fillStyle = '#94a3b8';
           ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-          ctx.fillStyle = '#2d1e28';
-          ctx.fillRect(bx, by + 250, CHUNK_SIZE, 100);
-          ctx.fillRect(bx + 250, by, 100, CHUNK_SIZE);
-
-          ctx.strokeStyle = 'rgba(255, 112, 166, 0.18)';
-          ctx.lineWidth = 2;
-          for (let c = 0; c < 12; c++) {
-            ctx.beginPath();
-            ctx.moveTo(bx + c * 50, by + 250);
-            ctx.lineTo(bx + c * 50 + 40, by + 350);
-            ctx.stroke();
-          }
-
-          ctx.strokeStyle = 'rgba(255, 214, 10, 0.4)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(bx + 200, by + 250);
-          ctx.quadraticCurveTo(bx + 300, by + 280, bx + 400, by + 250);
+          ctx.fillStyle = '#fed7aa';
+          this.rr(bx + 54, by + 54, CHUNK_SIZE - 108, CHUNK_SIZE - 108, 16);
+          ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 3.5;
           ctx.stroke();
+
+          ctx.fillStyle = '#fb923c';
+          ctx.fillRect(bx, by + 258, CHUNK_SIZE, 84);
+          ctx.fillRect(bx + 258, by, 84, CHUNK_SIZE);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(bx, by + 258, CHUNK_SIZE, 84);
           continue;
         }
 
-        // 7. 2.5D NEON CITY STREETS, ZEBRA CROSSWALKS, CURBS & PARK BLOCKS
-        ctx.fillStyle = '#0e1326';
-        ctx.fillRect(bx, by, CHUNK_SIZE, 84);
-        ctx.fillRect(bx, by, 84, CHUNK_SIZE);
+        // 7. SIGNATURE WEEBL DAYLIGHT STREETS, CROSSWALKS, CREAM SIDEWALKS & PARK BLOCKS
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(bx, by, CHUNK_SIZE, CHUNK_SIZE);
 
-        // Raised sidewalk curb with 2.5D top highlight
-        ctx.fillStyle = '#1d2544';
-        ctx.fillRect(bx + 84, by + 84, CHUNK_SIZE - 84, 38);
-        ctx.fillRect(bx + 84, by + 84, 38, CHUNK_SIZE - 84);
-        ctx.fillStyle = '#2d3a66';
-        ctx.fillRect(bx + 84, by + 84, CHUNK_SIZE - 84, 4);
-        ctx.fillRect(bx + 84, by + 84, 4, CHUNK_SIZE - 84);
-
-        // White zebra crosswalk bars at every block intersection
-        ctx.fillStyle = 'rgba(245, 248, 255, 0.72)';
+        // White zebra crosswalk bars at every intersection
+        ctx.fillStyle = '#ffffff';
         for (let z = 0; z < 4; z++) {
-          ctx.fillRect(bx + 92 + z * 16, by + 16, 9, 52);
-          ctx.fillRect(bx + 16, by + 92 + z * 16, 52, 9);
+          ctx.fillRect(bx + 104 + z * 18, by + 16, 10, 56);
+          ctx.fillRect(bx + 16, by + 104 + z * 18, 56, 10);
         }
 
-        if ((gx + gy) % 4 === 0) {
-          // Lush park courtyard block with inner trimmed green turf
-          ctx.fillStyle = '#173e34';
-          this.rr(bx + 124, by + 124, CHUNK_SIZE - 144, CHUNK_SIZE - 144, 18);
+        // Sunny yellow center lane dashes
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([18, 18]);
+        ctx.beginPath();
+        ctx.moveTo(bx + 185, by + 44); ctx.lineTo(bx + CHUNK_SIZE - 16, by + 44);
+        ctx.moveTo(bx + 44, by + 185); ctx.lineTo(bx + 44, by + CHUNK_SIZE - 16);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Raised Beveled Warm Cream Sidewalk Curb Platform
+        ctx.fillStyle = '#cbd5e1';
+        this.rr(bx + 88, by + 94, CHUNK_SIZE - 104, CHUNK_SIZE - 104, 20);
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fef3c7';
+        this.rr(bx + 88, by + 88, CHUNK_SIZE - 104, CHUNK_SIZE - 104, 20);
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+
+        // Inner Lush Emerald Park Turf (or Sunny Courtyard Block)
+        const isParkBlock = dist.starterCore || ((gx + gy) % 3 === 0);
+        if (isParkBlock) {
+          ctx.fillStyle = '#22c55e';
+          this.rr(bx + 138, by + 138, CHUNK_SIZE - 204, CHUNK_SIZE - 204, 16);
           ctx.fill();
-          ctx.fillStyle = '#225e4b';
-          this.rr(bx + 150, by + 150, CHUNK_SIZE - 196, CHUNK_SIZE - 196, 12);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          ctx.fillStyle = '#4ade80';
+          this.rr(bx + 158, by + 158, CHUNK_SIZE - 244, CHUNK_SIZE - 244, 12);
           ctx.fill();
         } else {
           ctx.fillStyle = dist.turf;
-          this.rr(bx + 124, by + 124, CHUNK_SIZE - 144, CHUNK_SIZE - 144, 16);
+          this.rr(bx + 138, by + 138, CHUNK_SIZE - 204, CHUNK_SIZE - 204, 16);
           ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2.8;
+          ctx.stroke();
         }
-
-        // Electric cyan neon road lane dashes
-        ctx.strokeStyle = 'rgba(37, 230, 255, 0.38)';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([16, 18]);
-        ctx.beginPath();
-        ctx.moveTo(bx + 160, by + 42); ctx.lineTo(bx + CHUNK_SIZE, by + 42);
-        ctx.moveTo(bx + 42, by + 160); ctx.lineTo(bx + 42, by + CHUNK_SIZE);
-        ctx.stroke();
-        ctx.setLineDash([]);
       }
     }
 
-    // Outer Boundary Ring
-    ctx.strokeStyle = '#25e6ff';
+    // Bold Map Boundary Rim
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 14 / this.zoom;
     ctx.strokeRect(0, 0, WORLD, WORLD);
   }
 
-  /* --------------------------------------------------- Ambient 2.5D Avenue Trams */
+  /* --------------------------------------------------- Ambient Weebl Trams & Mersey Boats */
   drawAmbientTrams(ctx, h, halfW, halfT, halfB) {
     if (this.zoom < 0.3) return;
     const minY = h.y - halfT;
@@ -1773,710 +2019,527 @@ export class VoidEater extends Game {
     const maxX = h.x + halfW;
 
     for (let track = 1; track < CHUNKS_ACROSS; track += 3) {
-      const ty = track * CHUNK_SIZE + 42;
+      const ty = track * CHUNK_SIZE + 44;
       if (ty < minY - 60 || ty > maxY + 60) continue;
 
-      // Subtle glowing tram rail lines
-      ctx.strokeStyle = 'rgba(130, 160, 220, 0.25)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(Math.max(0, minX), ty - 7);
+      ctx.moveTo(Math.max(2400, minX), ty - 7);
       ctx.lineTo(Math.min(WORLD, maxX), ty - 7);
-      ctx.moveTo(Math.max(0, minX), ty + 7);
+      ctx.moveTo(Math.max(2400, minX), ty + 7);
       ctx.lineTo(Math.min(WORLD, maxX), ty + 7);
       ctx.stroke();
 
       const dir = (track % 2 === 0) ? 1 : -1;
       const period = 3600;
       const offset = ((this.time * 165 * dir + track * 700) % period + period) % period;
-      const startSeg = Math.floor(Math.max(0, minX) / period) * period;
+      const startSeg = Math.floor(Math.max(2400, minX) / period) * period;
 
       for (let seg = startSeg; seg <= Math.min(WORLD, maxX) + 300; seg += period) {
         const tx = seg + offset;
         if (tx < minX - 240 || tx > maxX + 240) continue;
 
         for (let car = 0; car < 3; car++) {
-          const cx = tx - dir * car * 78;
-          const roofCol = car % 2 === 1 ? '#f8fafc' : '#ff4b5c';
-          drawToyShadow(ctx, cx, ty + 14, 34, 8, 0.28);
+          const cx = tx - dir * car * 82;
+          const roofCol = car % 2 === 1 ? '#fef9c3' : '#ef4444';
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+          ctx.beginPath();
+          ctx.ellipse(cx + 3, ty + 14, 34, 9, 0, 0, TAU);
+          ctx.fill();
 
-          // 3D Toy Vinyl Tram Body with extruded lower chassis & glossy roof
-          drawToyBevelRect(ctx, cx - 33, ty - 22, 66, 26, 7, roofCol, {
-            depth: 6,
-            rimColor: toyRim(roofCol, 0.56),
-            lineWidth: 1.5,
-            gloss: true,
-          });
+          ctx.fillStyle = roofCol;
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2.6;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.roundRect(cx - 33, ty - 22, 66, 28, 7);
+          ctx.fill();
+          ctx.stroke();
 
-          // Cream accent belt stripe
-          ctx.fillStyle = car % 2 === 1 ? '#ef4444' : '#fde047';
-          ctx.fillRect(cx - 31, ty - 6, 62, 3);
+          ctx.fillStyle = car % 2 === 1 ? '#ef4444' : '#facc15';
+          ctx.fillRect(cx - 31, ty - 5, 62, 4);
 
-          // Glowing passenger windows
-          ctx.fillStyle = '#fef08a';
+          ctx.fillStyle = '#38bdf8';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 1.4;
           for (let w = -23; w <= 17; w += 12) {
-            traceRoundRect(ctx, cx + w, ty - 16, 8, 7, 2);
+            ctx.beginPath();
+            ctx.roundRect(cx + w, ty - 17, 9, 8, 2);
             ctx.fill();
+            ctx.stroke();
           }
+          ctx.restore();
         }
       }
     }
   }
 
-  /* --------------------------------------------------- Danger Screen Vignette & Warning */
-  drawDangerVignette(ctx, W, H) {
-    const pulse = 0.6 + Math.sin(this.time * 9) * 0.4;
-    const alpha = this.dangerIntensity * 0.45 * pulse;
-
-    const g = ctx.createRadialGradient(W / 2, H / 2, W * 0.35, W / 2, H / 2, W * 0.72);
-    g.addColorStop(0, 'rgba(255, 0, 84, 0)');
-    g.addColorStop(1, `rgba(255, 0, 84, ${alpha.toFixed(2)})`);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-
-    if (this.closestHunter) {
-      const h = this.hole;
-      const hunter = this.closestHunter;
-      const distM = Math.round(Math.hypot(hunter.x - h.x, hunter.y - h.y) / 25);
-
-      ctx.save();
-      drawToyPill(ctx, W / 2 - 124, 198, 248, 28, '#f43f5e', {
-        rimColor: '#881337',
-        lineWidth: 2,
-        gloss: true,
-      });
-
-      ctx.font = "800 11px 'Fredoka', 'Outfit', sans-serif";
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const label = `⚠️ HUNTER: ${hunter.name.toUpperCase()} (${distM}m)`;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#0f172a';
-      ctx.strokeText(label, W / 2, 212);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(label, W / 2, 212);
-      ctx.restore();
-    }
-  }
-
-  drawRadar(ctx, W, H) {
-    const pad = 12;
-    const size = 68;
-    const rx = W - size - pad;
-    const ry = 100;
-
-    ctx.save();
-    drawToyBevelRect(ctx, rx, ry, size, size, 13, '#0f172a', {
-      depth: 3,
-      rimColor: '#38bdf8',
-      lineWidth: 2,
-      gloss: false,
-    });
-
-    // Subtle sonar crosshairs
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(rx + size / 2, ry + 6);
-    ctx.lineTo(rx + size / 2, ry + size - 6);
-    ctx.moveTo(rx + 6, ry + size / 2);
-    ctx.lineTo(rx + size - 6, ry + size / 2);
-    ctx.stroke();
-
-    const scale = size / WORLD;
-
-    // Find current #1 leader
-    let maxR = this.hole.r;
-    let leaderObj = this.hole;
-    for (const rv of this.rivals) {
-      if (!rv.dead && rv.r > maxR) {
-        maxR = rv.r;
-        leaderObj = rv;
-      }
-    }
-
-    // Rivals on radar
-    for (const rv of this.rivals) {
-      if (rv.dead) continue;
-      const x = rx + rv.x * scale;
-      const y = ry + rv.y * scale;
-      const isThreat = rv.r > this.hole.r + 10;
-      ctx.fillStyle = rv.boss ? '#ffbe0b' : isThreat ? '#ff0054' : '#00f5d4';
-      ctx.beginPath();
-      ctx.arc(x, y, Math.max(1.8, rv.r * scale * 1.5), 0, TAU);
-      ctx.fill();
-    }
-
-    // Leader Crown Beacon on radar
-    if (leaderObj) {
-      const lx = rx + leaderObj.x * scale;
-      const ly = ry + leaderObj.y * scale;
-      drawToySphere(ctx, lx, ly, Math.max(3.2, leaderObj.r * scale * 2.0), '#ffd166', {
-        rimColor: '#92400e',
-        lineWidth: 0.9,
-        bottomBounce: false,
-      });
-      ctx.font = '10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('👑', lx, ly - 5);
-    }
-
-    // Player beacon on radar
-    const px = rx + this.hole.x * scale;
-    const py = ry + this.hole.y * scale;
-    drawToySphere(ctx, px, py, Math.max(3.2, this.hole.r * scale * 2), '#25e6ff', {
-      rimColor: '#0369a1',
-      lineWidth: 1,
-      bottomBounce: false,
-    });
-
-    ctx.restore();
-  }
-
-  drawDistrictHUD(ctx, W, H) {
-    const t = this.getTier();
-    const label = `TIER ${t.level} · SIZE ${Math.round(this.hole.r)}`;
-
-    ctx.save();
-    const pw = 124;
-    const px = W / 2 - pw / 2;
-    const py = 100;
-    drawToyBevelRect(ctx, px, py, pw, 24, 12, '#0f172a', {
-      depth: 2.5,
-      rimColor: '#38bdf8',
-      lineWidth: 1.8,
-      gloss: false,
-    });
-
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = "800 10.5px 'Fredoka', 'Outfit', sans-serif";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, W / 2, py + 12.5);
-    ctx.restore();
-  }
-
-  drawRivalIndicators(ctx, ox, oy, sc, W, H) {
-    const h = this.hole;
-    for (const rv of this.rivals) {
-      if (rv.dead) continue;
-      const sx = ox + (rv.x - h.x) * sc;
-      const sy = oy + (rv.y - h.y) * sc;
-      const m = 26;
-      if (sx > m && sx < W - m && sy > 115 && sy < H - 76) continue;
-      if (Math.hypot(rv.x - h.x, rv.y - h.y) > 2800) continue;
-
-      const px = clamp(sx, m, W - m);
-      const py = clamp(sy, 120, H - 84);
-      const ang = Math.atan2(sy - py, sx - px);
-      const isThreat = rv.r > h.r + 10;
-      const isPrey = h.r >= rv.r + 2;
-      const col = rv.boss ? '#ffbe0b' : isThreat ? '#f43f5e' : isPrey ? '#00f5d4' : '#ffe066';
-
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.fillStyle = isThreat ? 'rgba(244, 63, 94, 0.28)' : 'rgba(15, 23, 42, 0.45)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 15, 0, TAU);
-      ctx.fill();
-
-      ctx.rotate(ang);
-      const ag = ctx.createLinearGradient(-9, -11, 16, 11);
-      ag.addColorStop(0, shadeColor(col, 0.35));
-      ag.addColorStop(1, col);
-      ctx.fillStyle = ag;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.6;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(15, 0);
-      ctx.lineTo(-8, -10);
-      ctx.lineTo(-4, 0);
-      ctx.lineTo(-8, 10);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  rr(x, y, w, h, r) {
-    traceRoundRect(this.ctx, x, y, w, h, r);
-  }
-
+  /* --------------------------------------------------- Crowned Green Hero Vortex Pit & Rival Beans */
   drawHole(hl, rim, mascotCol, label, isPlayer = false, isThreat = false) {
     const ctx = this.ctx;
     const pulseScale = isPlayer && this.hole.pulse > 0 ? (1 + Math.sin(this.hole.pulse * Math.PI) * 0.16) : 1;
     const curR = hl.r * pulseScale;
-    const ry = curR * 0.85;
-    const collarW = Math.max(5.5, Math.min(20, curR * 0.16));
+    const ry = curR * 0.82;
+    const collarW = Math.max(6, Math.min(24, curR * 0.18));
+    const inkW = clamp(2.8 / Math.max(0.28, this.zoom), 1.8, 12);
 
     if (isThreat) {
-      const ringPulse = 1.12 + Math.sin(this.time * 8) * 0.12;
-      ctx.strokeStyle = 'rgba(244, 63, 94, 0.58)';
-      ctx.lineWidth = Math.max(3, 4 / this.zoom);
+      const ringPulse = 1.15 + Math.sin(this.time * 8) * 0.12;
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.72)';
+      ctx.lineWidth = inkW * 1.4;
       ctx.beginPath();
       ctx.ellipse(hl.x, hl.y, curR * ringPulse, ry * ringPulse, 0, 0, TAU);
       ctx.stroke();
     }
 
-    // Soft ambient grounding shadow halo around collar base
-    drawToyShadow(ctx, hl.x, hl.y + ry * 0.12, curR * 1.24, ry * 1.2, 0.34);
+    // Crisp outer pavement drop rim
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+    ctx.beginPath();
+    ctx.ellipse(hl.x + collarW * 0.14, hl.y + collarW * 0.28, curR + collarW * 0.68, ry + collarW * 0.65, 0, 0, TAU);
+    ctx.fill();
 
-    // Recessed 2.5D pit shaft (rich plum-to-void inner wall)
-    const pitGrad = ctx.createLinearGradient(hl.x, hl.y - ry, hl.x, hl.y + ry * 0.85);
-    pitGrad.addColorStop(0, '#3b0764');
-    pitGrad.addColorStop(0.32, '#1e0632');
-    pitGrad.addColorStop(0.72, '#070212');
-    pitGrad.addColorStop(1, '#020005');
-    ctx.fillStyle = pitGrad;
+    // Abyss Pit + Animated Swirling Violet/Indigo Vortex Ripples
+    ctx.fillStyle = '#070312';
     ctx.beginPath();
     ctx.ellipse(hl.x, hl.y, curR, ry, 0, 0, TAU);
     ctx.fill();
 
-    // Inner depth rings so the drop looks carved into the street
-    ctx.strokeStyle = 'rgba(192, 132, 252, 0.22)';
-    ctx.lineWidth = Math.max(1.5, 2.5 / this.zoom);
-    ctx.beginPath();
-    ctx.ellipse(hl.x, hl.y + ry * 0.1, curR * 0.82, ry * 0.78, 0, 0, TAU);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(12, 20, 42, 0.55)';
-    ctx.beginPath();
-    ctx.ellipse(hl.x, hl.y + ry * 0.18, curR * 0.62, ry * 0.58, 0, 0, TAU);
-    ctx.stroke();
-
-    // Clipped tumbling props spiraling into the pit
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(hl.x, hl.y, curR, ry, 0, 0, TAU);
     ctx.clip();
+
+    const swirlSpin = this.time * (isPlayer && this.boosting ? 5.2 : 2.6);
+    ctx.strokeStyle = '#312e81';
+    ctx.lineWidth = Math.max(2.5, curR * 0.14);
+    ctx.lineCap = 'round';
+    for (let s = 0; s < 3; s++) {
+      const a0 = swirlSpin + (s * TAU) / 3;
+      ctx.beginPath();
+      ctx.ellipse(hl.x, hl.y + ry * 0.06, curR * (0.78 - s * 0.18), ry * (0.72 - s * 0.16), 0, a0, a0 + Math.PI * 0.9);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.ellipse(hl.x, hl.y + ry * 0.08, curR * 0.42, ry * 0.36, 0, 0, TAU);
+    ctx.fill();
+
+    // Tucked-in props tumbling into the crater pit
     for (const p of this.fallingProps) {
       if (p.owner === hl) {
-        this.drawProp(p, Math.max(0.15, 1 - p.fall * 0.72), Math.max(0, 1 - p.fall * 0.48));
+        this.drawProp(p, Math.max(0.18, 1 - p.fall * 0.72), Math.max(0, 1 - p.fall * 0.48));
       }
     }
     ctx.restore();
 
-    // 3D Volumetric Vinyl Toy Donut Collar (bottom depth lip + tinted outer rim + glossy studio gradient)
-    ctx.lineWidth = collarW + Math.max(2.2, 2.6 / this.zoom);
-    ctx.strokeStyle = toyRim(rim, 0.58);
-    ctx.beginPath();
-    ctx.ellipse(hl.x, hl.y + collarW * 0.2, curR, ry, 0, 0, TAU);
-    ctx.stroke();
+    // Bold Weebl-Inked Crater Rim Ring (Emerald + Sunny Gold on Hero!)
+    if (isPlayer && !isThreat) {
+      // Gold inner trim ring
+      ctx.lineWidth = collarW * 0.45 + inkW * 0.6;
+      ctx.strokeStyle = '#facc15';
+      ctx.beginPath();
+      ctx.ellipse(hl.x, hl.y, curR - collarW * 0.18, ry - collarW * 0.16, 0, 0, TAU);
+      ctx.stroke();
+    }
 
-    const collarGrad = ctx.createLinearGradient(hl.x, hl.y - ry, hl.x, hl.y + ry);
-    collarGrad.addColorStop(0, shadeColor(rim, 0.36));
-    collarGrad.addColorStop(0.5, rim);
-    collarGrad.addColorStop(1, shadeColor(rim, -0.22));
     ctx.lineWidth = collarW;
-    ctx.strokeStyle = collarGrad;
+    ctx.strokeStyle = rim;
     ctx.beginPath();
     ctx.ellipse(hl.x, hl.y, curR, ry, 0, 0, TAU);
     ctx.stroke();
 
-    // Outer hairline tinted rim
-    ctx.lineWidth = toyLineW(curR * 2, 0.028, 1.0, 2.4);
-    ctx.strokeStyle = toyRim(rim, 0.56);
+    // Crisp outer and inner #000000 black ink contour rings
+    ctx.lineWidth = inkW;
+    ctx.strokeStyle = '#000000';
     ctx.beginPath();
-    ctx.ellipse(hl.x, hl.y, curR + collarW * 0.48, ry + collarW * 0.48, 0, 0, TAU);
+    ctx.ellipse(hl.x, hl.y, curR + collarW * 0.5, ry + collarW * 0.5, 0, 0, TAU);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(hl.x, hl.y, Math.max(4, curR - collarW * 0.5), Math.max(3, ry - collarW * 0.5), 0, 0, TAU);
     ctx.stroke();
 
-    // Specular upper-lip highlight on collar
-    ctx.lineWidth = Math.max(1.8, collarW * 0.3);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.58)';
+    // Sharp top-left white comic gloss crescent
+    ctx.lineWidth = Math.max(2, collarW * 0.24);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.ellipse(hl.x, hl.y - collarW * 0.18, curR - collarW * 0.1, ry - collarW * 0.1, 0, Math.PI * 1.08, Math.PI * 1.92);
+    ctx.ellipse(hl.x, hl.y, curR + collarW * 0.04, ry + collarW * 0.04, 0, Math.PI * 1.08, Math.PI * 1.46);
     ctx.stroke();
 
-    // Mascot perched cleanly on the upper rim lip so center pit stays open
-    const beanSize = Math.max(22, Math.min(48, curR * 0.62));
-    drawBean(ctx, hl.x, hl.y - ry * 0.96, beanSize, {
-      ufo: false,
-      color: mascotCol || (isPlayer ? '#25e6ff' : '#ff4fa3'),
-      bellyColor: isPlayer ? '#ff758f' : '#ffe066',
-      walkT: this.time * 2.8,
-      squash: isPlayer ? this.beanSquash : 1,
-      dir: (hl.vx || 0) < -1 ? -1 : 1,
-      eyes: isThreat ? (isPlayer ? 'alert' : 'angry') : 'happy',
-      hat: hl.boss ? 'crown' : isPlayer && this.hole.r >= 54 ? 'crown' : null,
-    });
+    // Mascot perched at upper pit rim (Hero = Crowned Green Jellybean Star!)
+    const beanSize = clamp(curR * 0.92, 32, 74);
+    const beanY = hl.y - ry * 0.88;
+    const tilt = clamp((hl.vx || 0) * 0.0012, -0.18, 0.18);
 
-    if (!isPlayer && label) {
-      ctx.save();
-      ctx.font = `800 ${Math.max(11, Math.round(14 / this.zoom))}px 'Fredoka', 'Outfit', sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = Math.max(2.5, 3.5 / this.zoom);
-      ctx.strokeStyle = '#0f172a';
-      const labelY = hl.y - ry - beanSize * 1.15 - 6;
-      ctx.strokeText(label, hl.x, labelY);
-      ctx.fillStyle = isThreat ? '#fda4af' : '#f8fafc';
-      ctx.fillText(label, hl.x, labelY);
-      ctx.restore();
+    if (isPlayer) {
+      const hop = Math.abs(Math.sin(this.time * (this.boosting ? 9 : 4.2))) * (beanSize * 0.05);
+      const bank = clamp((hl.vx || 0) * 0.0022, -0.35, 0.35);
+      drawHeroCharacter(ctx, hl.x, beanY + beanSize * 0.14 - hop, beanSize * 0.96, {
+        view: 'threeQuarterFront',
+        dir: (hl.vx || 0) < -4 ? -1 : 1,
+        state: isThreat ? 'hurt' : 'pilot',
+        expr: isThreat ? 'panic' : this.boosting ? 'happy' : 'focus',
+        t: this.time * (this.boosting ? 7 : 3.8),
+        lean: bank,
+        lookX: clamp((hl.vx || 0) * 0.008, -0.8, 0.8),
+        squashX: 2 - this.beanSquash,
+        squashY: this.beanSquash,
+      });
+    } else {
+      // Rival Angry Weebl Bean peaking from enemy pit
+      drawWeeblCelBean(ctx, hl.x, beanY + beanSize * 0.12, beanSize * 0.72, {
+        color: hl.boss ? '#ef4444' : (mascotCol || '#f43f5e'),
+        shadeColor: shadeHex(hl.boss ? '#ef4444' : (mascotCol || '#f43f5e'), -0.32),
+        hatId: hl.boss ? 'crown' : null,
+        crownColor: '#facc15',
+        eyes: isThreat || hl.boss ? 'angry' : 'panic',
+        waveT: this.time + hl.x * 0.01,
+        dir: (hl.vx || 0) < -1 ? -1 : 1,
+        legs: false,
+      });
+
+      if (label) {
+        const fontPx = Math.max(10.5, Math.round(13 / Math.max(0.32, this.zoom)));
+        const labelY = beanY - beanSize * 0.95 - fontPx * 0.4;
+        drawComicText(ctx, label, hl.x, labelY, `900 ${fontPx}px "Fredoka", sans-serif`, isThreat ? '#fde047' : '#ffffff', {
+          strokeWidth: Math.max(2.6, fontPx * 0.28),
+        });
+      }
     }
   }
 
-  /* --------------------------------------------------- 2.5D Extruded Building Helper */
+  /* --------------------------------------------------- Crisp Weebl 2.5D Cel Building Extruder */
   drawExtrudedBox(w, d, h, topCol, opts = {}) {
     const ctx = this.ctx;
     const hw = w * 0.5;
     const hd = d * 0.5;
     const zoom = this.zoom;
-    const wallCol = opts.wallCol || shadeColor(topCol, -0.3);
-    const darkWall = opts.darkWall || shadeColor(topCol, -0.52);
-    const trimCol = opts.trimCol || shadeColor(topCol, 0.24);
-    const padCol = opts.padCol || shadeColor(topCol, -0.14);
-    const rim = toyRim(wallCol, 0.56);
-    const lw = toyLineW(Math.min(w, h), 0.036, 0.75, 1.8);
+    const wallCol = opts.wallCol || shadeHex(topCol, -0.18);
+    const darkWall = opts.darkWall || shadeHex(topCol, -0.36);
+    const trimCol = opts.trimCol || '#fef3c7';
+    const padCol = opts.padCol || shadeHex(topCol, -0.12);
+    const lw = Math.max(1.5, Math.min(3.4, Math.min(w, h) * 0.055));
 
-    // Diagonal bottom-right oblique diorama shadow
-    ctx.fillStyle = 'rgba(12, 20, 42, 0.30)';
+    // Clean comic diagonal drop shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
     ctx.beginPath();
     ctx.moveTo(hw, -hd);
-    ctx.lineTo(hw + h * 0.34, -hd + h * 0.24);
-    ctx.lineTo(hw + h * 0.34, hd + h * 0.24);
-    ctx.lineTo(-hw + h * 0.2, hd + h * 0.24);
+    ctx.lineTo(hw + h * 0.3, -hd + h * 0.22);
+    ctx.lineTo(hw + h * 0.3, hd + h * 0.22);
+    ctx.lineTo(-hw + h * 0.16, hd + h * 0.22);
     ctx.lineTo(-hw, hd);
     ctx.closePath();
     ctx.fill();
 
-    // Right chamfered 3D side strip (subtle depth cue)
-    const sideW = Math.min(w * 0.14, 10);
+    // Right 2-tone cel shadow wall strip
+    const sideW = Math.min(w * 0.18, 12);
     ctx.fillStyle = darkWall;
     ctx.fillRect(hw - sideW, hd - h, sideW, h);
 
-    // Front extruded facade wall
-    const frontGrad = ctx.createLinearGradient(0, hd - h, 0, hd);
-    frontGrad.addColorStop(0, shadeColor(wallCol, 0.12));
-    frontGrad.addColorStop(1, darkWall);
-    ctx.fillStyle = frontGrad;
-    ctx.fillRect(-hw, hd - h, w - sideW * 0.45, h);
+    // Flat sunlit front facade wall
+    ctx.fillStyle = wallCol;
+    ctx.fillRect(-hw, hd - h, w - sideW, h);
 
-    // Subtle side-strip vertical divider
-    ctx.fillStyle = 'rgba(12, 20, 42, 0.18)';
-    ctx.fillRect(hw - sideW, hd - h, 1.2, h);
+    // Inked vertical corner seam
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(hw - sideW, hd - h, Math.max(1.2, lw * 0.5), h);
 
-    // Lit window grid on front facade (skip when tiny on screen)
+    // Crisp #000-outlined comic windows
     const facadeW = w - sideW;
     if (h >= 12 && facadeW * zoom > 8) {
-      const floors = opts.floors ?? clamp(Math.floor((h - 8) / 16), 1, 7);
-      const cols = opts.cols ?? clamp(Math.floor((facadeW - 8) / 18), 2, 8);
+      const floors = opts.floors ?? clamp(Math.floor((h - 8) / 16), 1, 6);
+      const cols = opts.cols ?? clamp(Math.floor((facadeW - 8) / 18), 2, 7);
       const winW = clamp((facadeW - 10) / (cols * 2.0), 3, 13);
       const winH = clamp((h - 10) / (floors * 1.75), 3, 14);
       const stepX = (facadeW - 8) / cols;
       const stepY = (h - 8) / floors;
-      const warmWin = opts.winCol || '#ffe89c';
-      const coolWin = opts.winAltCol || '#8be9fd';
+      const warmWin = opts.winCol || '#fde047';
+      const coolWin = opts.winAltCol || '#7dd3fc';
 
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(0.8, lw * 0.45);
       for (let r = 0; r < floors; r++) {
         for (let c = 0; c < cols; c++) {
           if (opts.door !== false && r === floors - 1 && cols >= 3 && c === Math.floor(cols / 2)) continue;
           const wx = -hw + 4 + c * stepX + (stepX - winW) * 0.5;
           const wy = hd - h + 4 + r * stepY + (stepY - winH) * 0.5;
           ctx.fillStyle = (r + c) % 3 === 0 ? warmWin : coolWin;
-          traceRoundRect(ctx, wx, wy, winW, winH, Math.min(2, winW * 0.25));
+          ctx.beginPath();
+          ctx.roundRect(wx, wy, winW, winH, Math.min(2, winW * 0.2));
           ctx.fill();
+          ctx.stroke();
         }
       }
     }
 
-    // Crisp tinted rim outline around facade base so buildings pop like 3D toys
-    ctx.strokeStyle = rim;
+    // Thick #000000 outer facade ink outline
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = lw;
+    ctx.lineJoin = 'round';
     ctx.strokeRect(-hw, hd - h, w, h);
 
-    // Ground-floor lobby doorway or colorful awning
+    // Doorway & colorful shop awning
     if (opts.door !== false && w >= 16 && h >= 14) {
       const dw = Math.min(w * 0.24, 11);
       const dh = Math.min(h * 0.34, 10);
-      ctx.fillStyle = opts.doorCol || '#1e293b';
-      traceRoundRect(ctx, -dw * 0.5 - sideW * 0.25, hd - dh, dw, dh, 2);
+      ctx.fillStyle = opts.doorCol || '#475569';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(1, lw * 0.6);
+      ctx.beginPath();
+      ctx.roundRect(-dw * 0.5 - sideW * 0.25, hd - dh, dw, dh, 2);
       ctx.fill();
+      ctx.stroke();
       if (opts.awningCol) {
-        drawToyBevelRect(ctx, -dw * 0.8 - sideW * 0.25, hd - dh - 3, dw * 1.6, 4.5, 2, opts.awningCol, {
-          depth: 1.5,
-          rimColor: toyRim(opts.awningCol),
-          lineWidth: 0.8,
-          gloss: true,
-        });
+        ctx.fillStyle = opts.awningCol;
+        ctx.beginPath();
+        ctx.roundRect(-dw * 0.85 - sideW * 0.25, hd - dh - 4, dw * 1.7, 5.5, 2);
+        ctx.fill();
+        ctx.stroke();
       }
     }
 
-    // Parapet cornice trim between facade and roof
+    // Parapet cornice trim + Flat cel roof top
     ctx.fillStyle = trimCol;
-    ctx.fillRect(-hw - 1, hd - h - 2, w + 2, 3.5);
+    ctx.fillRect(-hw - 1, hd - h - 2.5, w + 2, 4);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = lw * 0.7;
+    ctx.strokeRect(-hw - 1, hd - h - 2.5, w + 2, 4);
 
-    // Roof top face with soft studio gradient
     const rY = -hd - h;
-    const roofGrad = ctx.createLinearGradient(-hw, rY, hw, rY + d);
-    roofGrad.addColorStop(0, shadeColor(topCol, 0.22));
-    roofGrad.addColorStop(0.55, topCol);
-    roofGrad.addColorStop(1, shadeColor(topCol, -0.14));
-    ctx.fillStyle = roofGrad;
+    ctx.fillStyle = topCol;
     this.rr(-hw - 1, rY, w + 2, d, Math.min(6, w * 0.12));
     ctx.fill();
-    ctx.strokeStyle = toyRim(topCol, 0.54);
+
+    // Top-left cel highlight band on roof
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+    this.rr(-hw + 1, rY + 1, w - 3, Math.min(5, d * 0.25), 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = lw;
+    this.rr(-hw - 1, rY, w + 2, d, Math.min(6, w * 0.12));
     ctx.stroke();
 
-    // Inner recessed roof pad
-    const inset = Math.max(2.5, Math.min(w, d) * 0.14);
-    if (w > inset * 2.4 && d > inset * 2.4) {
+    const inset = Math.max(2.5, Math.min(w, d) * 0.15);
+    if (w > inset * 2.5 && d > inset * 2.5) {
       ctx.fillStyle = padCol;
-      this.rr(-hw + inset, rY + inset, w - inset * 2, d - inset * 2, Math.min(4, inset * 0.6));
+      this.rr(-hw + inset, rY + inset, w - inset * 2, d - inset * 2, Math.min(4, inset * 0.5));
       ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(0.9, lw * 0.45);
+      ctx.stroke();
     }
 
-    // Optional HVAC / AC boxes on roof
     if (opts.acUnits && w >= 24 && d >= 20) {
-      drawToyBevelRect(ctx, -hw + inset + 2, rY + inset + 2, w * 0.22, d * 0.22, 2.5, '#e2e8f0', {
-        depth: 2,
-        rimColor: '#64748b',
-        lineWidth: 0.75,
-        gloss: true,
-      });
-      if (w >= 34) {
-        drawToyBevelRect(ctx, hw - inset - w * 0.24, rY + d - inset - d * 0.28, w * 0.2, d * 0.2, 2.5, '#cbd5e1', {
-          depth: 2,
-          rimColor: '#64748b',
-          lineWidth: 0.75,
-          gloss: true,
-        });
-      }
+      ctx.fillStyle = '#cbd5e1';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(1, lw * 0.5);
+      ctx.fillRect(-hw + inset + 2, rY + inset + 2, w * 0.2, d * 0.2);
+      ctx.strokeRect(-hw + inset + 2, rY + inset + 2, w * 0.2, d * 0.2);
     }
-
-    // Crisp specular top-left edge highlight on parapet
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-hw - 0.5, rY + d * 0.7);
-    ctx.lineTo(-hw - 0.5, rY + 2);
-    ctx.lineTo(hw - 1, rY + 2);
-    ctx.stroke();
   }
 
-  /* --------------------------------------------------- Prop Drawing Library */
+  /* --------------------------------------------------- Weebl Cel Prop Drawing Library */
   drawProp(p, alpha, scale) {
     const ctx = this.ctx;
     const s = p.size * scale;
-    // Sub-pixel culling: when zoomed out, skip full path geometry for sub-pixel debris
     if (s * this.zoom < 1.3) {
       ctx.fillStyle = p.col;
       ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
       return;
     }
     const col = p.col;
-    const lw = toyLineW(s * 2, 0.04, 0.75, 2.0);
+    const lw = Math.max(1.2, Math.min(2.8, s * 0.085));
+    const isSpriteIso = p.kind === 'donutShop' || p.kind === 'superlambanana' || p.kind === 'doubleDecker'
+      || p.kind === 'taxi' || p.kind === 'liverBuilding' || p.kind === 'metroCathedral'
+      || p.kind === 'stJellyHall' || p.kind === 'palmHouse';
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(p.x, p.y);
-    // Only tilt upright structures while spiraling into the hole; keep street landmarks strictly vertical
-    const isRotProp = p.kind === 'car' || p.kind === 'taxi' || p.kind === 'truck' || p.kind === 'doubleDecker' || p.kind === 'sugarDrop' || p.kind === 'sweetWrapper';
-    if (isRotProp || p.fall > 0) {
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // Suction Speed Streaks & Leaning Pull when dragged toward Pit Crater!
+    if (p.sucking && p.fall <= 0 && p.size >= 14) {
+      const ang = p.pullAng || 0;
+      ctx.save();
+      ctx.rotate(ang);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1.8, lw * 0.9);
+      for (const oy of [-s * 0.45, s * 0.45]) {
+        ctx.beginPath();
+        ctx.moveTo(-s * 1.15, oy);
+        ctx.lineTo(-s * 1.95, oy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    const isFlatSpin = p.kind === 'car' || p.kind === 'truck' || p.kind === 'sugarDrop' || p.kind === 'sweetWrapper';
+    if (p.fall > 0) {
+      ctx.rotate(p.rot * 0.55);
+    } else if (isFlatSpin) {
       ctx.rotate(p.rot);
     }
 
-    // Grounding toy shadow (skip for buildings since drawExtrudedBox casts its own 2.5D shadow)
-    if (p.fall <= 0 && !EXTRUDED_PROP_KINDS.has(p.kind)) {
-      drawToyShadow(ctx, s * 0.14, s * 0.28, s * 0.96, s * 0.56, 0.26);
+    // Crisp dark ground shadow (skip on 2.5D sprites & boxes casting their own)
+    if (p.fall <= 0 && !EXTRUDED_PROP_KINDS.has(p.kind) && !isSpriteIso) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(s * 0.14, s * 0.28, s * 0.95, s * 0.54, 0, 0, TAU);
+      ctx.fill();
     }
+
+    const flipVehicle = (p.kind === 'doubleDecker' || p.kind === 'taxi') && Math.cos(p.rot || 0) > 0.1;
 
     switch (p.kind) {
       case 'sugarDrop': {
-        // Plump glossy 3D vinyl jellybean drop
-        const beanGrad = ctx.createRadialGradient(-s * 0.32, -s * 0.28, s * 0.08, 0, -s * 0.1, s * 1.15);
-        beanGrad.addColorStop(0, shadeColor(col, 0.48));
-        beanGrad.addColorStop(0.45, col);
-        beanGrad.addColorStop(1, shadeColor(col, -0.34));
-        ctx.fillStyle = beanGrad;
-        ctx.strokeStyle = toyRim(col, 0.56);
-        ctx.lineWidth = lw * 0.85;
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
         ctx.beginPath();
-        ctx.ellipse(0, -s * 0.1, s * 1.12, s * 0.8, -0.25, 0, TAU);
+        ctx.ellipse(0, -s * 0.1, s * 1.15, s * 0.82, -0.25, 0, TAU);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.ellipse(-s * 0.34, -s * 0.36, s * 0.38, s * 0.15, -0.35, 0, TAU);
+        ctx.ellipse(-s * 0.36, -s * 0.36, s * 0.36, s * 0.14, -0.35, 0, TAU);
         ctx.fill();
         break;
       }
 
       case 'sweetWrapper': {
-        // Glossy candy wrapper with twisted bowtie ends
-        const wRim = toyRim(col, 0.54);
-        ctx.fillStyle = shadeColor(col, 0.18);
-        ctx.strokeStyle = wRim;
-        ctx.lineWidth = lw * 0.85;
+        ctx.fillStyle = shadeHex(col, 0.18);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
         ctx.beginPath();
-        ctx.moveTo(-s * 1.2, -s * 0.5); ctx.lineTo(-s * 0.5, 0); ctx.lineTo(-s * 1.2, s * 0.5);
+        ctx.moveTo(-s * 1.25, -s * 0.52); ctx.lineTo(-s * 0.5, 0); ctx.lineTo(-s * 1.25, s * 0.52);
         ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(s * 1.2, -s * 0.5); ctx.lineTo(s * 0.5, 0); ctx.lineTo(s * 1.2, s * 0.5);
+        ctx.moveTo(s * 1.25, -s * 0.52); ctx.lineTo(s * 0.5, 0); ctx.lineTo(s * 1.25, s * 0.52);
         ctx.closePath(); ctx.fill(); ctx.stroke();
-        drawToyBevelRect(ctx, -s * 0.62, -s * 0.52, s * 1.24, s * 1.04, 3, col, {
-          depth: 1.5,
-          rimColor: wRim,
-          lineWidth: lw * 0.85,
-          gloss: true,
-        });
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-        ctx.fillRect(-s * 0.16, -s * 0.5, s * 0.32, s * 1.0);
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.roundRect(-s * 0.64, -s * 0.54, s * 1.28, s * 1.08, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-s * 0.16, -s * 0.48, s * 0.32, s * 0.96);
         break;
       }
 
       case 'sodaCan': {
-        drawToyBevelRect(ctx, -s * 0.7, -s * 1.25, s * 1.4, s * 2.05, 3, col, {
-          depth: 2,
-          rimColor: toyRim(col, 0.56),
-          lineWidth: lw * 0.9,
-          gloss: true,
-        });
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
+        ctx.beginPath(); ctx.roundRect(-s * 0.7, -s * 1.25, s * 1.4, s * 2.05, 3); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#e2e8f0';
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 0.85;
-        ctx.beginPath(); ctx.ellipse(0, -s * 1.15, s * 0.65, s * 0.25, 0, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#334155';
-        ctx.beginPath(); ctx.arc(0, -s * 1.15, s * 0.16, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, -s * 1.15, s * 0.68, s * 0.28, 0, 0, TAU); ctx.fill(); ctx.stroke();
         break;
       }
 
       case 'pigeon': {
-        const pRim = toyRim('#94a3b8', 0.55);
-        const pg = ctx.createRadialGradient(-s * 0.2, -s * 0.2, s * 0.1, 0, 0, s * 1.1);
-        pg.addColorStop(0, '#e2e8f0');
-        pg.addColorStop(0.6, '#94a3b8');
-        pg.addColorStop(1, '#64748b');
-        ctx.fillStyle = pg;
-        ctx.strokeStyle = pRim;
-        ctx.lineWidth = lw * 0.85;
+        ctx.fillStyle = '#cbd5e1';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
         ctx.beginPath(); ctx.ellipse(0, 0, s * 1.1, s * 0.74, 0, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#64748b';
-        ctx.beginPath(); ctx.ellipse(-s * 0.12, -s * 0.16, s * 0.58, s * 0.32, 0.35, 0, TAU); ctx.fill();
-        drawToySphere(ctx, s * 0.68, -s * 0.35, s * 0.42, '#f8fafc', { rimColor: pRim, lineWidth: lw * 0.8 });
-        ctx.fillStyle = '#ff9f1c';
-        ctx.beginPath(); ctx.moveTo(s * 1.05, -s * 0.38); ctx.lineTo(s * 1.46, -s * 0.33); ctx.lineTo(s * 1.05, -s * 0.14); ctx.closePath(); ctx.fill();
-        drawToyEyes(ctx, s * 0.78, -s * 0.4, s * 0.12, { spacing: 0, lookX: 0.4 });
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath(); ctx.arc(s * 0.68, -s * 0.35, s * 0.42, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath(); ctx.moveTo(s * 1.05, -s * 0.38); ctx.lineTo(s * 1.46, -s * 0.3); ctx.lineTo(s * 1.05, -s * 0.12); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#000000';
+        ctx.beginPath(); ctx.arc(s * 0.8, -s * 0.42, s * 0.12, 0, TAU); ctx.fill();
         break;
       }
 
       case 'flowerPot':
-        drawToyBevelRect(ctx, -s * 0.75, -s * 0.2, s * 1.5, s * 1.2, 3, '#b45309', {
-          depth: 2,
-          rimColor: toyRim('#b45309'),
-          lineWidth: lw * 0.85,
-          gloss: false,
-        });
-        drawToyBevelRect(ctx, -s * 0.85, -s * 0.42, s * 1.7, s * 0.42, 2.5, '#d97706', {
-          depth: 1.5,
-          rimColor: toyRim('#d97706'),
-          lineWidth: lw * 0.8,
-        });
-        drawToySphere(ctx, 0, -s * 0.58, s * 0.68, '#10b981', { lineWidth: lw * 0.85 });
-        drawToySphere(ctx, 0, -s * 0.8, s * 0.38, col, { lineWidth: lw * 0.85 });
+        ctx.fillStyle = '#ea580c';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
+        ctx.beginPath(); ctx.roundRect(-s * 0.78, -s * 0.3, s * 1.56, s * 1.3, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath(); ctx.arc(0, -s * 0.58, s * 0.68, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(0, -s * 0.85, s * 0.38, 0, TAU); ctx.fill(); ctx.stroke();
         break;
 
       case 'coffeeCup':
-        drawToyBevelRect(ctx, -s * 0.65, -s * 1.1, s * 1.3, s * 1.95, 3, '#f8fafc', {
-          depth: 2,
-          rimColor: '#64748b',
-          lineWidth: lw * 0.85,
-        });
-        ctx.fillStyle = '#b45309';
-        ctx.fillRect(-s * 0.63, -s * 0.35, s * 1.26, s * 0.7);
-        drawToyBevelRect(ctx, -s * 0.75, -s * 1.26, s * 1.5, s * 0.36, 2.5, '#e2e8f0', {
-          depth: 1.5,
-          rimColor: '#64748b',
-          lineWidth: lw * 0.8,
-        });
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
+        ctx.beginPath(); ctx.roundRect(-s * 0.65, -s * 1.1, s * 1.3, s * 1.95, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#d97706';
+        ctx.fillRect(-s * 0.6, -s * 0.32, s * 1.2, s * 0.68);
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath(); ctx.roundRect(-s * 0.76, -s * 1.28, s * 1.52, s * 0.38, 2); ctx.fill(); ctx.stroke();
         break;
 
       case 'streetSign':
         ctx.fillStyle = '#94a3b8';
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = lw * 0.75;
-        ctx.fillRect(-s * 0.12, -s * 0.8, s * 0.24, s * 1.8);
-        ctx.strokeRect(-s * 0.12, -s * 0.8, s * 0.24, s * 1.8);
-        drawToySphere(ctx, 0, -s * 1.05, s * 0.82, col, { lineWidth: lw * 0.9 });
-        drawToySphere(ctx, 0, -s * 1.05, s * 0.46, '#ffffff', { rimColor: toyRim(col), lineWidth: lw * 0.6, bottomBounce: false });
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.85);
+        ctx.fillRect(-s * 0.14, -s * 0.8, s * 0.28, s * 1.8);
+        ctx.strokeRect(-s * 0.14, -s * 0.8, s * 0.28, s * 1.8);
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(0, -s * 1.05, s * 0.84, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(0, -s * 1.05, s * 0.44, 0, TAU); ctx.fill();
         break;
 
-      case 'cone': {
-        drawToyBevelRect(ctx, -s * 0.9, s * 0.15, s * 1.8, s * 0.58, 3, col, {
-          depth: 2,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.85,
-        });
-        const cg = ctx.createLinearGradient(-s * 0.6, -s * 1.2, s * 0.6, s * 0.3);
-        cg.addColorStop(0, shadeColor(col, 0.35));
-        cg.addColorStop(0.5, col);
-        cg.addColorStop(1, shadeColor(col, -0.25));
-        ctx.fillStyle = cg;
-        ctx.strokeStyle = toyRim(col);
-        ctx.lineWidth = lw * 0.85;
-        ctx.lineJoin = 'round';
+      case 'cone':
+        ctx.fillStyle = '#f97316';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.9);
+        ctx.beginPath(); ctx.roundRect(-s * 0.85, s * 0.18, s * 1.7, s * 0.55, 2.5); ctx.fill(); ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(-s * 0.7, s * 0.35);
-        ctx.lineTo(-s * 0.18, -s * 1.35);
-        ctx.lineTo(s * 0.18, -s * 1.35);
-        ctx.lineTo(s * 0.7, s * 0.35);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#f8fafc';
+        ctx.moveTo(-s * 0.68, s * 0.3); ctx.lineTo(-s * 0.18, -s * 1.35);
+        ctx.lineTo(s * 0.18, -s * 1.35); ctx.lineTo(s * 0.68, s * 0.3);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.moveTo(-s * 0.48, -s * 0.25);
-        ctx.lineTo(-s * 0.33, -s * 0.75);
-        ctx.lineTo(s * 0.33, -s * 0.75);
-        ctx.lineTo(s * 0.48, -s * 0.25);
-        ctx.closePath();
-        ctx.fill();
+        ctx.moveTo(-s * 0.46, -s * 0.25); ctx.lineTo(-s * 0.32, -s * 0.72);
+        ctx.lineTo(s * 0.32, -s * 0.72); ctx.lineTo(s * 0.46, -s * 0.25);
+        ctx.closePath(); ctx.fill();
         break;
-      }
 
       case 'hydrant':
-        drawToyBevelRect(ctx, -s * 0.52, -s * 0.95, s * 1.04, s * 1.25, 3.5, col, {
-          depth: 2,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.9,
-        });
-        drawToyPill(ctx, -s * 0.75, -s * 0.48, s * 1.5, s * 0.3, '#e2e8f0', { rimColor: '#475569', lineWidth: lw * 0.75 });
-        drawToySphere(ctx, 0, -s * 0.96, s * 0.42, '#ffd166', { rimColor: '#92400e', lineWidth: lw * 0.8 });
+        ctx.fillStyle = '#ef4444';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.2, lw * 0.95);
+        ctx.beginPath(); ctx.roundRect(-s * 0.52, -s * 0.95, s * 1.04, s * 1.25, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#cbd5e1';
+        ctx.beginPath(); ctx.roundRect(-s * 0.78, -s * 0.52, s * 1.56, s * 0.34, 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(0, -s * 0.98, s * 0.42, 0, TAU); ctx.fill(); ctx.stroke();
         break;
 
       case 'trash':
-        this.drawExtrudedBox(s * 1.7, s * 1.2, s * 1.1, shadeColor(col, 0.14), { wallCol: col, door: false });
+        this.drawExtrudedBox(s * 1.7, s * 1.2, s * 1.1, '#22c55e', { wallCol: '#16a34a', door: false });
         break;
 
       case 'barrel':
-        drawToyBevelRect(ctx, -s * 0.72, -s * 1.1, s * 1.44, s * 1.7, s * 0.3, col, {
-          depth: 2.5,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.9,
-        });
-        ctx.fillStyle = shadeColor(col, 0.24);
-        ctx.strokeStyle = toyRim(col);
-        ctx.lineWidth = lw * 0.8;
-        ctx.beginPath(); ctx.ellipse(0, -s * 1.0, s * 0.72, s * 0.32, 0, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(-s * 0.71, -s * 0.42, s * 1.42, s * 0.18);
+        ctx.fillStyle = '#b45309';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.2, lw * 0.95);
+        ctx.beginPath(); ctx.roundRect(-s * 0.72, -s * 1.1, s * 1.44, s * 1.7, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(-s * 0.7, -s * 0.42, s * 1.4, s * 0.26);
         break;
 
       case 'bollard':
-        drawToyPill(ctx, -s * 0.46, -s * 1.1, s * 0.92, s * 1.55, '#334155', {
-          rimColor: '#0f172a',
-          lineWidth: lw * 0.9,
-        });
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(-s * 0.44, -s * 0.65, s * 0.88, s * 0.28);
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.2, lw * 0.95);
+        ctx.beginPath(); ctx.roundRect(-s * 0.46, -s * 1.1, s * 0.92, s * 1.55, 4); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#facc15';
+        ctx.fillRect(-s * 0.42, -s * 0.65, s * 0.84, s * 0.3);
         break;
 
       case 'redPhoneBox':
-        this.drawExtrudedBox(s * 1.15, s * 1.15, s * 1.9, '#e63946', {
-          wallCol: '#d90429',
-          winCol: '#ffffff',
-          winAltCol: '#dbeafe',
+        this.drawExtrudedBox(s * 1.15, s * 1.15, s * 1.95, '#ef4444', {
+          wallCol: '#dc2626',
+          winCol: '#bae6fd',
+          winAltCol: '#ffffff',
           floors: 3,
           cols: 2,
           door: false,
@@ -2484,580 +2547,509 @@ export class VoidEater extends Game {
         break;
 
       case 'mailbox':
-        this.drawExtrudedBox(s * 1.1, s * 1.0, s * 1.4, shadeColor(col, 0.14), {
-          wallCol: col,
+        this.drawExtrudedBox(s * 1.1, s * 1.0, s * 1.4, '#ef4444', {
+          wallCol: '#dc2626',
           door: false,
           floors: 1,
         });
         break;
 
-      case 'ped':
-        drawBean(ctx, 0, -s * 0.25, s * 1.75, {
-          color: col,
-          bellyColor: '#ffffff',
-          walkT: p.animT * 4,
-          dir: p.vx < 0 ? -1 : 1,
-          eyes: p.fall > 0 ? 'squish' : 'happy',
-        });
+      case 'ped': {
+        // Tiny Inked Weebl Jellybean Citizen
+        const dirP = p.vx < 0 ? -1 : 1;
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.2, lw);
+        ctx.beginPath();
+        ctx.roundRect(-s * 0.62, -s * 1.25, s * 1.24, s * 1.55, s * 0.6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(dirP * s * 0.14 - s * 0.22, -s * 0.72, s * 0.22, 0, TAU);
+        ctx.arc(dirP * s * 0.14 + s * 0.22, -s * 0.72, s * 0.22, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(dirP * s * 0.18 - s * 0.22, -s * 0.72, s * 0.1, 0, TAU);
+        ctx.arc(dirP * s * 0.18 + s * 0.22, -s * 0.72, s * 0.1, 0, TAU);
+        ctx.fill();
         break;
+      }
 
       case 'bench':
-        drawToyBevelRect(ctx, -s, -s * 0.5, s * 2, s * 0.9, 3, '#8b5a2b', {
-          depth: 2.5,
-          rimColor: toyRim('#8b5a2b'),
-          lineWidth: lw * 0.9,
-        });
-        ctx.fillStyle = '#d4a373';
-        ctx.fillRect(-s * 0.88, -s * 0.65, s * 1.76, s * 0.24);
-        ctx.fillRect(-s * 0.88, -s * 0.2, s * 1.76, s * 0.22);
+        ctx.fillStyle = '#d97706';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.2, lw * 0.95);
+        ctx.beginPath(); ctx.roundRect(-s, -s * 0.55, s * 2, s * 0.95, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(-s * 0.85, -s * 0.35, s * 1.7, s * 0.22);
         break;
 
       case 'lamp':
-        drawToyBevelRect(ctx, -s * 0.14, -s * 2.2, s * 0.28, s * 2.3, 2, '#64748b', {
-          depth: 0,
-          rimColor: '#334155',
-          lineWidth: lw * 0.75,
-        });
-        drawToyBevelRect(ctx, -s * 0.14, -s * 2.2, s * 0.72, s * 0.2, 2, '#64748b', {
-          depth: 0,
-          rimColor: '#334155',
-          lineWidth: lw * 0.75,
-        });
-        ctx.fillStyle = 'rgba(255, 224, 102, 0.26)';
-        ctx.beginPath(); ctx.arc(s * 0.45, -s * 1.95, s * 0.78, 0, TAU); ctx.fill();
-        drawToySphere(ctx, s * 0.45, -s * 1.95, s * 0.36, '#ffe066', { rimColor: '#b45309', lineWidth: lw * 0.7 });
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.1, lw * 0.85);
+        ctx.fillRect(-s * 0.16, -s * 2.2, s * 0.32, s * 2.3);
+        ctx.strokeRect(-s * 0.16, -s * 2.2, s * 0.32, s * 2.3);
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath(); ctx.arc(s * 0.45, -s * 2.0, s * 0.42, 0, TAU); ctx.fill(); ctx.stroke();
         break;
 
       case 'tree': {
-        drawToyBevelRect(ctx, -s * 0.2, -s * 0.55, s * 0.4, s * 0.75, 2, '#8b5a2b', {
-          depth: 0,
-          rimColor: toyRim('#8b5a2b'),
-          lineWidth: lw * 0.8,
-        });
-        drawToySphere(ctx, 0, -s * 0.55, s * 0.88, shadeColor(col, -0.22), { lineWidth: lw });
-        drawToySphere(ctx, -s * 0.08, -s * 0.92, s * 0.76, col, { lineWidth: lw });
-        drawToySphere(ctx, -s * 0.18, -s * 1.24, s * 0.5, shadeColor(col, 0.22), { lineWidth: lw });
+        // Inked Weebl Lollipop Park Tree
+        ctx.fillStyle = '#92400e';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.4, lw * 0.9);
+        ctx.fillRect(-s * 0.22, -s * 0.55, s * 0.44, s * 0.82);
+        ctx.strokeRect(-s * 0.22, -s * 0.55, s * 0.44, s * 0.82);
+        ctx.fillStyle = '#16a34a';
+        ctx.beginPath(); ctx.arc(0, -s * 0.78, s * 0.92, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath(); ctx.arc(-s * 0.1, -s * 1.05, s * 0.78, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4ade80';
+        ctx.beginPath(); ctx.arc(-s * 0.28, -s * 1.3, s * 0.35, 0, TAU); ctx.fill();
         break;
       }
 
       case 'lionStatue':
-        this.drawExtrudedBox(s * 1.9, s * 1.1, s * 0.8, '#94a3b8', { door: false });
-        drawToySphere(ctx, s * 0.32, -s * 1.05, s * 0.48, '#ffd166', { rimColor: '#92400e', lineWidth: lw });
-        drawToyEyes(ctx, s * 0.42, -s * 1.08, s * 0.1, { spacing: s * 0.24, style: 'bright' });
+        this.drawExtrudedBox(s * 1.9, s * 1.1, s * 0.8, '#cbd5e1', { door: false });
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.4, lw);
+        ctx.beginPath(); ctx.arc(s * 0.3, -s * 1.05, s * 0.48, 0, TAU); ctx.fill(); ctx.stroke();
         break;
 
       case 'swingBridge':
-        drawToyBevelRect(ctx, -s * 0.4, -s * 1.2, s * 0.8, s * 2.4, 4, '#334155', {
-          depth: 3,
-          rimColor: '#0f172a',
-          lineWidth: lw,
-        });
-        ctx.fillStyle = '#e63946';
-        ctx.fillRect(-s * 0.35, -s * 0.1, s * 0.7, s * 0.2);
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.6, lw);
+        ctx.beginPath(); ctx.roundRect(-s * 0.44, -s * 1.25, s * 0.88, s * 2.5, 4); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-s * 0.36, -s * 0.12, s * 0.72, s * 0.24);
         break;
 
       case 'superlambanana': {
-        drawToyBevelRect(ctx, -s * 0.9, s * 0.3, s * 1.8, s * 0.65, 4, '#94a3b8', {
-          depth: 3,
-          rimColor: '#475569',
-          lineWidth: lw,
+        drawSprite(ctx, 'city_superlambanana', 0, 0, s * 1.95, s * 2.7, {
+          anchorY: 0.74,
+          fallback: () => {
+            this.drawExtrudedBox(s * 1.7, s * 1.0, s * 0.55, '#cbd5e1', { door: false });
+            ctx.fillStyle = '#facc15';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = lw;
+            ctx.beginPath(); ctx.ellipse(0, -s * 0.45, s * 0.85, s * 0.46, -0.25, 0, TAU); ctx.fill(); ctx.stroke();
+          },
         });
-        const bg = ctx.createRadialGradient(-s * 0.2, -s * 0.35, s * 0.1, 0, -s * 0.2, s * 0.9);
-        bg.addColorStop(0, '#fef08a');
-        bg.addColorStop(0.55, '#ffd000');
-        bg.addColorStop(1, '#ca8a04');
-        ctx.fillStyle = bg;
-        ctx.strokeStyle = toyRim('#ffd000');
-        ctx.lineWidth = lw;
-        ctx.beginPath();
-        ctx.ellipse(0, -s * 0.2, s * 0.85, s * 0.45, -0.25, 0, TAU);
-        ctx.fill();
-        ctx.stroke();
-        drawToySphere(ctx, -s * 0.55, -s * 0.5, s * 0.35, '#ff4fa3', { rimColor: toyRim('#ff4fa3'), lineWidth: lw * 0.9 });
-        drawToyEyes(ctx, -s * 0.62, -s * 0.52, s * 0.09, { spacing: s * 0.18, style: 'happy' });
-        ctx.fillStyle = 'rgba(255,255,255,0.65)';
-        ctx.beginPath(); ctx.ellipse(0, -s * 0.4, s * 0.38, s * 0.1, -0.2, 0, TAU); ctx.fill();
         break;
       }
 
       case 'beatleBeans':
-        drawToySphere(ctx, 0, 0, s * 0.92, '#78350f', { rimColor: '#ffd166', lineWidth: lw * 1.2 });
-        [-s * 0.45, -s * 0.15, s * 0.15, s * 0.45].forEach((bx, idx) => {
-          drawBean(ctx, bx, -s * 0.1, s * 0.48, {
-            color: '#b08968',
-            bellyColor: '#d4a373',
-            eyes: 'happy',
-            squash: 1,
-            hat: idx === 0 ? 'crown' : null,
+        ctx.fillStyle = '#fde68a';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.8, lw);
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.94, 0, TAU); ctx.fill(); ctx.stroke();
+        [-s * 0.46, -s * 0.16, s * 0.16, s * 0.46].forEach((bx, idx) => {
+          drawWeeblCelBean(ctx, bx, s * 0.15, s * 0.56, {
+            color: idx === 0 ? '#22c55e' : '#38bdf8',
+            shadeColor: idx === 0 ? '#15803d' : '#0284c7',
+            hatId: idx === 0 ? 'crown' : null,
+            legs: false,
           });
         });
         break;
 
       case 'fountain':
-        drawToySphere(ctx, 0, 0, s * 0.92, '#64748b', { rimColor: '#334155', lineWidth: lw * 1.1 });
-        drawToySphere(ctx, 0, 0, s * 0.72, '#38bdf8', { rimColor: '#0369a1', lineWidth: lw * 0.9 });
-        drawToySphere(ctx, 0, 0, s * 0.3, '#ffd166', { rimColor: '#92400e', lineWidth: lw * 0.8 });
+        ctx.fillStyle = '#e2e8f0';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.8, lw);
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.94, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.74, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.3, 0, TAU); ctx.fill(); ctx.stroke();
         for (let b = 0; b < 4; b++) {
-          const a = (b * Math.PI) / 2 + this.time * 2;
-          drawToySphere(ctx, Math.cos(a) * s * 0.45, Math.sin(a) * s * 0.45, s * 0.09, '#e0f2fe', {
-            rimColor: '#0284c7',
-            lineWidth: 0.8,
-            bottomBounce: false,
-          });
+          const a = (b * Math.PI) / 2 + this.time * 2.2;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(Math.cos(a) * s * 0.48, Math.sin(a) * s * 0.48, s * 0.1, 0, TAU); ctx.fill();
         }
         break;
 
       case 'anchorMonument':
-        drawToyBevelRect(ctx, -s * 0.13, -s * 0.9, s * 0.26, s * 1.8, 3, '#334155', {
-          depth: 0,
-          rimColor: '#0f172a',
-          lineWidth: lw,
-        });
-        drawToyBevelRect(ctx, -s * 0.7, -s * 0.5, s * 1.4, s * 0.26, 3, '#475569', {
-          depth: 0,
-          rimColor: '#0f172a',
-          lineWidth: lw,
-        });
-        ctx.beginPath();
-        ctx.arc(0, s * 0.3, s * 0.75, 0.1, Math.PI - 0.1);
-        ctx.lineWidth = s * 0.22;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#334155';
-        ctx.stroke();
-        ctx.lineWidth = s * 0.08;
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.stroke();
+        ctx.fillStyle = '#475569';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.6, lw);
+        ctx.fillRect(-s * 0.15, -s * 0.9, s * 0.3, s * 1.8); ctx.strokeRect(-s * 0.15, -s * 0.9, s * 0.3, s * 1.8);
+        ctx.fillRect(-s * 0.7, -s * 0.5, s * 1.4, s * 0.28); ctx.strokeRect(-s * 0.7, -s * 0.5, s * 1.4, s * 0.28);
+        ctx.beginPath(); ctx.arc(0, s * 0.3, s * 0.75, 0.1, Math.PI - 0.1);
+        ctx.lineWidth = s * 0.22; ctx.strokeStyle = '#000000'; ctx.stroke();
+        ctx.lineWidth = s * 0.12; ctx.strokeStyle = '#94a3b8'; ctx.stroke();
         break;
 
       case 'cavernClub':
-        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.05, col, {
-          awningCol: '#f72585',
+        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.05, '#fb7185', {
+          wallCol: '#e11d48',
+          awningCol: '#facc15',
           floors: 2,
           cols: 3,
           acUnits: true,
         });
-        drawToyPill(ctx, -s * 0.68, -s * 1.25, s * 1.36, s * 0.32, '#f72585', {
-          rimColor: '#831843',
-          lineWidth: lw * 0.9,
-        });
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `800 ${Math.max(8, Math.round(s * 0.2))}px 'Fredoka', 'Outfit', sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('CAVERN', 0, -s * 1.09);
+        ctx.fillStyle = '#ec4899';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.6, lw);
+        ctx.beginPath(); ctx.roundRect(-s * 0.68, -s * 1.25, s * 1.36, s * 0.34, 6); ctx.fill(); ctx.stroke();
+        drawComicText(ctx, 'CAVERN', 0, -s * 1.08, `900 ${Math.max(8, Math.round(s * 0.2))}px "Fredoka", sans-serif`, '#ffffff', { strokeWidth: 2.5 });
         break;
 
       case 'shed':
-        this.drawExtrudedBox(s * 1.7, s * 1.3, s * 0.78, col, {
-          floors: 1,
-          cols: 2,
-        });
+        this.drawExtrudedBox(s * 1.7, s * 1.3, s * 0.78, col, { floors: 1, cols: 2 });
         break;
 
       case 'cottage':
-        this.drawExtrudedBox(s * 1.85, s * 1.45, s * 0.92, col, {
-          awningCol: '#ffbe0b',
-          floors: 2,
-          cols: 2,
-        });
-        // Cozy gable roof ridge highlight
-        drawToyBevelRect(ctx, -s * 0.85, -s * 1.06, s * 1.7, s * 0.22, 3, shadeColor(col, 0.24), {
-          depth: 1.5,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.8,
-        });
+        this.drawExtrudedBox(s * 1.85, s * 1.45, s * 0.92, col, { awningCol: '#facc15', floors: 2, cols: 2 });
         break;
 
       case 'gasStation':
-        this.drawExtrudedBox(s * 2.1, s * 1.4, s * 0.78, '#22b8cf', {
-          wallCol: '#16778a',
-          trimCol: '#ff4fa3',
+        this.drawExtrudedBox(s * 2.1, s * 1.4, s * 0.78, '#38bdf8', {
+          wallCol: '#0284c7',
+          trimCol: '#facc15',
           door: false,
           floors: 1,
           cols: 3,
         });
-        drawToyBevelRect(ctx, -s * 0.75, s * 0.1, s * 0.35, s * 0.45, 3, '#ffd166', { depth: 2, rimColor: '#92400e', lineWidth: lw * 0.75 });
-        drawToyBevelRect(ctx, s * 0.4, s * 0.1, s * 0.35, s * 0.45, 3, '#ffd166', { depth: 2, rimColor: '#92400e', lineWidth: lw * 0.75 });
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.3, lw);
+        ctx.fillRect(-s * 0.75, s * 0.1, s * 0.35, s * 0.45); ctx.strokeRect(-s * 0.75, s * 0.1, s * 0.35, s * 0.45);
+        ctx.fillRect(s * 0.4, s * 0.1, s * 0.35, s * 0.45); ctx.strokeRect(s * 0.4, s * 0.1, s * 0.35, s * 0.45);
         break;
 
       case 'warehouse':
-        this.drawExtrudedBox(s * 2.1, s * 1.55, s * 0.85, col, {
-          floors: 1,
-          cols: 4,
-          acUnits: true,
-        });
+        this.drawExtrudedBox(s * 2.1, s * 1.55, s * 0.85, col, { floors: 1, cols: 4, acUnits: true });
         break;
 
       case 'townhouse':
-        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.15, col, {
-          awningCol: '#ffe066',
-          floors: 3,
-          cols: 3,
-        });
+        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.15, col, { awningCol: '#facc15', floors: 3, cols: 3 });
         break;
 
       case 'apt':
-        this.drawExtrudedBox(s * 1.9, s * 1.5, s * 1.38, col, {
-          acUnits: true,
-        });
+        this.drawExtrudedBox(s * 1.9, s * 1.5, s * 1.38, col, { acUnits: true });
         break;
 
-      case 'palmHouse': {
-        drawToySphere(ctx, 0, -s * 0.15, s * 0.92, '#52b788', { rimColor: '#1b4332', lineWidth: lw });
-        const glassG = ctx.createRadialGradient(-s * 0.24, -s * 0.55, s * 0.08, 0, -s * 0.32, s * 0.78);
-        glassG.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
-        glassG.addColorStop(0.5, 'rgba(216, 243, 220, 0.65)');
-        glassG.addColorStop(1, 'rgba(116, 198, 157, 0.55)');
-        ctx.fillStyle = glassG;
-        ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = lw * 0.9;
-        ctx.beginPath(); ctx.ellipse(0, -s * 0.32, s * 0.78, s * 0.62, 0, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#1b4332';
-        for (let pt = 0; pt < 6; pt++) {
-          const a = (pt * Math.PI) / 3;
-          ctx.fillRect(Math.cos(a) * s * 0.25, -s * 0.32 + Math.sin(a) * s * 0.2, s * 0.12, s * 0.35);
-        }
+      case 'palmHouse':
+        drawSprite(ctx, 'city_palm_house', 0, 0, s * 2.35, s * 2.5, {
+          anchorY: 0.68,
+          fallback: () => {
+            ctx.fillStyle = '#22c55e';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = lw;
+            ctx.beginPath(); ctx.arc(0, -s * 0.15, s * 0.9, 0, TAU); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#bae6fd';
+            ctx.beginPath(); ctx.ellipse(0, -s * 0.32, s * 0.74, s * 0.58, 0, 0, TAU); ctx.fill(); ctx.stroke();
+          },
+        });
         break;
-      }
 
       case 'albertDock':
-        this.drawExtrudedBox(s * 2.0, s * 1.4, s * 1.05, col, {
-          acUnits: true,
-        });
+        this.drawExtrudedBox(s * 2.0, s * 1.4, s * 1.05, '#ea580c', { wallCol: '#c2410c', acUnits: true });
         break;
 
       case 'stJellyHall':
-        this.drawExtrudedBox(s * 2.0, s * 1.4, s * 1.1, col, {
-          trimCol: '#ffffff',
-          winCol: '#3d405b',
-          winAltCol: '#25e6ff',
+        drawSprite(ctx, 'city_st_jelly_hall', 0, 0, s * 2.45, s * 2.45, {
+          anchorY: 0.66,
+          fallback: () => {
+            this.drawExtrudedBox(s * 2.0, s * 1.4, s * 1.1, '#fef3c7', { trimCol: '#ffffff', wallCol: '#fde68a' });
+          },
         });
         break;
 
       case 'liverBuilding':
-        this.drawExtrudedBox(s * 1.95, s * 1.35, s * 1.42, col);
-        [-s * 0.52, s * 0.52].forEach((tx) => {
-          drawToyBevelRect(ctx, tx - s * 0.22, -s * 1.92, s * 0.44, s * 0.54, 4, shadeColor(col, -0.15), {
-            depth: 2,
-            rimColor: toyRim(col),
-            lineWidth: lw * 0.85,
-          });
-          drawToySphere(ctx, tx, -s * 1.66, s * 0.13, '#ffd166', { rimColor: '#92400e', lineWidth: 0.9, bottomBounce: false });
-          drawToySphere(ctx, tx, -s * 1.92, s * 0.22, '#20c997', { rimColor: '#065f46', lineWidth: 0.9 });
+        drawSprite(ctx, 'city_liver_building', 0, 0, s * 2.35, s * 2.84, {
+          anchorY: 0.68,
+          fallback: () => {
+            this.drawExtrudedBox(s * 1.95, s * 1.35, s * 1.42, '#fcd34d');
+          },
         });
         break;
 
       case 'cathedral':
-        this.drawExtrudedBox(s * 1.95, s * 1.45, s * 1.35, '#6c757d');
-        drawToyBevelRect(ctx, -s * 0.34, -s * 1.92, s * 0.68, s * 0.62, 4, '#64748b', {
-          depth: 2,
-          rimColor: '#334155',
-          lineWidth: lw * 0.9,
-        });
-        drawToySphere(ctx, 0, -s * 0.72, s * 0.28, '#f72585', { rimColor: '#831843', lineWidth: lw * 0.8 });
-        drawToySphere(ctx, 0, -s * 0.72, s * 0.16, '#4cc9f0', { rimColor: '#0369a1', lineWidth: lw * 0.7, bottomBounce: false });
+        this.drawExtrudedBox(s * 1.95, s * 1.45, s * 1.35, '#fb923c', { wallCol: '#ea580c' });
+        ctx.fillStyle = '#cbd5e1';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = lw;
+        ctx.beginPath(); ctx.roundRect(-s * 0.34, -s * 1.92, s * 0.68, s * 0.62, 4); ctx.fill(); ctx.stroke();
         break;
 
       case 'metroCathedral':
-        drawToySphere(ctx, 0, 0, s * 0.88, '#475569', { rimColor: '#1e293b', lineWidth: lw });
-        drawToySphere(ctx, 0, -s * 0.35, s * 0.52, '#4cc9f0', { rimColor: '#0284c7', lineWidth: lw * 0.9 });
-        drawToySphere(ctx, 0, -s * 0.65, s * 0.18, '#ffd166', { rimColor: '#92400e', lineWidth: lw * 0.75 });
+        drawSprite(ctx, 'city_metro_cathedral', 0, 0, s * 2.4, s * 2.62, {
+          anchorY: 0.68,
+          fallback: () => {
+            ctx.fillStyle = '#94a3b8';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = lw;
+            ctx.beginPath(); ctx.arc(0, 0, s * 0.88, 0, TAU); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath(); ctx.arc(0, -s * 0.35, s * 0.52, 0, TAU); ctx.fill(); ctx.stroke();
+          },
+        });
         break;
 
-      case 'doubleDecker': {
+      case 'doubleDecker':
+        drawSprite(ctx, 'city_double_decker', 0, 0, s * 2.35, s * 2.56, {
+          anchorY: 0.6,
+          flipX: flipVehicle,
+          fallback: () => {
+            drawToyBevelRect(ctx, -s * 1.18, -s * 0.58, s * 2.36, s * 1.16, s * 0.24, '#ef4444', {
+              depth: s * 0.28,
+              rimColor: '#000000',
+              lineWidth: lw,
+              gloss: true,
+            });
+          },
+        });
+        break;
+
+      case 'car': {
         const ux = -Math.sin(p.rot);
         const uy = -Math.cos(p.rot);
-        drawToyBevelRect(ctx, -s * 1.18, -s * 0.58, s * 2.36, s * 1.16, s * 0.24, '#e63946', {
-          depth: s * 0.28,
-          rimColor: toyRim('#e63946'),
-          lineWidth: lw,
-          gloss: true,
-        });
-        drawToyBevelRect(ctx, -s * 1.05 + ux * s * 0.35, -s * 0.48 + uy * s * 0.35, s * 2.1, s * 0.96, s * 0.2, '#ff5c6c', {
-          depth: s * 0.16,
-          rimColor: toyRim('#e63946'),
-          lineWidth: lw * 0.85,
-          gloss: true,
-        });
-        ctx.fillStyle = '#ffe066';
-        for (let w = -3; w <= 3; w++) {
-          ctx.fillRect(w * s * 0.26 - s * 0.08 + ux * s * 0.35, -s * 0.36 + uy * s * 0.35, s * 0.16, s * 0.22);
-          ctx.fillRect(w * s * 0.26 - s * 0.08 + ux * s * 0.35, s * 0.12 + uy * s * 0.35, s * 0.16, s * 0.22);
-        }
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.2, lw);
+        ctx.beginPath(); ctx.roundRect(-s * 1.08, -s * 0.54, s * 2.16, s * 1.08, s * 0.26); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath(); ctx.roundRect(-s * 0.46 + ux * s * 0.24, -s * 0.42 + uy * s * 0.24, s * 1.0, s * 0.84, s * 0.16); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(s * 0.92 + ux * s * 0.12, -s * 0.4 + uy * s * 0.12, s * 0.14, s * 0.2);
+        ctx.fillRect(s * 0.92 + ux * s * 0.12, s * 0.2 + uy * s * 0.12, s * 0.14, s * 0.2);
         break;
       }
 
-      case 'car':
       case 'taxi': {
-        const ux = -Math.sin(p.rot);
-        const uy = -Math.cos(p.rot);
-        drawToyBevelRect(ctx, -s * 1.08, -s * 0.54, s * 2.16, s * 1.08, s * 0.26, col, {
-          depth: s * 0.18,
-          rimColor: toyRim(col, 0.58),
-          lineWidth: lw * 0.95,
-          gloss: true,
+        drawSprite(ctx, 'city_yellow_taxi', 0, 0, s * 2.25, s * 1.85, {
+          anchorY: 0.58,
+          flipX: flipVehicle,
+          fallback: () => {
+            ctx.fillStyle = '#facc15';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = lw;
+            ctx.beginPath(); ctx.roundRect(-s * 1.08, -s * 0.54, s * 2.16, s * 1.08, s * 0.26); ctx.fill(); ctx.stroke();
+          },
         });
-        // Elevated cabin & glossy windshield
-        drawToyBevelRect(ctx, -s * 0.46 + ux * s * 0.26, -s * 0.43 + uy * s * 0.26, s * 1.02, s * 0.86, s * 0.16, '#0284c7', {
-          depth: s * 0.1,
-          rimColor: '#0f172a',
-          lineWidth: lw * 0.75,
-          gloss: true,
-        });
-        drawToyBevelRect(ctx, -s * 0.3 + ux * s * 0.34, -s * 0.38 + uy * s * 0.34, s * 0.68, s * 0.76, s * 0.12, shadeColor(col, 0.22), {
-          depth: 0,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.7,
-          gloss: true,
-        });
-        // Headlights + taxi beacon
-        ctx.fillStyle = '#fef08a';
-        ctx.fillRect(s * 0.92 + ux * s * 0.12, -s * 0.4 + uy * s * 0.12, s * 0.14, s * 0.2);
-        ctx.fillRect(s * 0.92 + ux * s * 0.12, s * 0.2 + uy * s * 0.12, s * 0.14, s * 0.2);
-        if (p.kind === 'taxi') {
-          drawToyBevelRect(ctx, -s * 0.1 + ux * s * 0.38, -s * 0.2 + uy * s * 0.38, s * 0.2, s * 0.4, 2, '#ffd166', {
-            depth: 1,
-            rimColor: '#92400e',
-            lineWidth: 0.7,
-          });
-        }
         break;
       }
 
       case 'truck': {
-        const ux = -Math.sin(p.rot);
-        const uy = -Math.cos(p.rot);
-        drawToyBevelRect(ctx, -s * 1.18, -s * 0.6, s * 1.62, s * 1.2, 4, '#f8fafc', {
-          depth: s * 0.22,
-          rimColor: '#64748b',
-          lineWidth: lw * 0.95,
-          gloss: true,
-        });
-        drawToyBevelRect(ctx, s * 0.48 + ux * s * 0.14, -s * 0.54 + uy * s * 0.14, s * 0.7, s * 1.08, 4, col, {
-          depth: s * 0.18,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.95,
-          gloss: true,
-        });
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1.3, lw);
+        ctx.beginPath(); ctx.roundRect(-s * 1.18, -s * 0.6, s * 1.62, s * 1.2, 4); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.roundRect(s * 0.48, -s * 0.54, s * 0.7, s * 1.08, 4); ctx.fill(); ctx.stroke();
         break;
       }
 
       case 'donutShop':
-        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.05, col, {
-          awningCol: '#ff4fa3',
-          floors: 2,
-          cols: 3,
+        drawSprite(ctx, 'city_donut_shop', 0, 0, s * 2.45, s * 2.68, {
+          anchorY: 0.64,
+          fallback: () => {
+            this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.05, '#fef3c7', { awningCol: '#fb7185', floors: 2, cols: 3 });
+            ctx.fillStyle = '#fb7185';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = lw;
+            ctx.beginPath(); ctx.arc(0, -s * 1.05, s * 0.46, 0, TAU); ctx.fill(); ctx.stroke();
+          },
         });
-        drawToySphere(ctx, 0, -s * 1.05, s * 0.48, '#ff70a6', { rimColor: toyRim('#ff70a6'), lineWidth: lw });
-        drawToySphere(ctx, 0, -s * 1.05, s * 0.18, '#fdf0d5', { rimColor: '#92400e', lineWidth: lw * 0.7, bottomBounce: false });
         break;
 
       case 'tower':
-        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.62, col, {
-          acUnits: true,
-        });
+        this.drawExtrudedBox(s * 1.9, s * 1.45, s * 1.62, col, { acUnits: true });
         break;
 
       case 'sky':
-        this.drawExtrudedBox(s * 1.95, s * 1.5, s * 1.95, col, {
-          acUnits: true,
-        });
-        drawToyBevelRect(ctx, -s * 0.42, -s * 2.33, s * 0.84, s * 0.65, 4, shadeColor(col, 0.22), {
-          depth: 2,
-          rimColor: toyRim(col),
-          lineWidth: lw * 0.85,
-        });
-        drawToySphere(ctx, 0, -s * 2.07, s * 0.15, '#25e6ff', { rimColor: '#0369a1', lineWidth: 0.9 });
+        this.drawExtrudedBox(s * 1.95, s * 1.5, s * 1.95, col, { acUnits: true });
+        ctx.fillStyle = shadeHex(col, 0.2);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = lw;
+        ctx.beginPath(); ctx.roundRect(-s * 0.42, -s * 2.33, s * 0.84, s * 0.65, 4); ctx.fill(); ctx.stroke();
         break;
 
       case 'stadium':
-        this.drawExtrudedBox(s * 2.1, s * 1.45, s * 0.85, col, {
-          floors: 2,
-          cols: 5,
-          door: false,
-        });
-        drawToyBevelRect(ctx, -s * 0.72, -s * 1.23, s * 1.44, s * 0.78, s * 0.18, '#20c997', {
-          depth: 0,
-          rimColor: '#065f46',
-          lineWidth: lw * 0.9,
-          gloss: true,
-        });
-        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-        ctx.lineWidth = 1.5;
+        this.drawExtrudedBox(s * 2.1, s * 1.45, s * 0.85, '#ef4444', { wallCol: '#dc2626', floors: 2, cols: 5, door: false });
+        ctx.fillStyle = '#22c55e';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = lw;
+        ctx.beginPath(); ctx.roundRect(-s * 0.72, -s * 1.23, s * 1.44, s * 0.78, s * 0.18); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
         ctx.strokeRect(-s * 0.52, -s * 1.1, s * 1.04, s * 0.52);
         break;
 
       case 'wheel':
-        ctx.strokeStyle = toyRim(col);
-        ctx.lineWidth = Math.max(5, s * 0.075);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(7, s * 0.1);
         ctx.beginPath(); ctx.arc(0, 0, s * 0.85, 0, TAU); ctx.stroke();
-        ctx.strokeStyle = col;
-        ctx.lineWidth = Math.max(3, s * 0.05);
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = Math.max(4, s * 0.055);
         ctx.stroke();
         for (let i = 0; i < 8; i++) {
           const a = (i * Math.PI) / 4 + this.time * 0.5;
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2.5;
           ctx.beginPath();
           ctx.moveTo(0, 0);
           ctx.lineTo(Math.cos(a) * s * 0.85, Math.sin(a) * s * 0.85);
           ctx.stroke();
-          drawToySphere(ctx, Math.cos(a) * s * 0.85, Math.sin(a) * s * 0.85, s * 0.1, i % 2 === 0 ? '#ffd166' : '#38bdf8', {
-            rimColor: '#0f172a',
-            lineWidth: lw * 0.7,
-          });
+          ctx.fillStyle = i % 2 === 0 ? '#ef4444' : '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * s * 0.85, Math.sin(a) * s * 0.85, s * 0.11, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
         }
-        drawToySphere(ctx, 0, 0, s * 0.16, '#ffd166', { rimColor: '#92400e', lineWidth: lw });
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.16, 0, TAU); ctx.fill(); ctx.stroke();
         break;
 
       case 'electricSubstation': {
-        drawToyBevelRect(ctx, -s * 1.1, -s * 0.9, s * 2.2, s * 1.8, 5, '#334155', {
-          depth: 3,
-          rimColor: '#0f172a',
-          lineWidth: lw,
-          gloss: true,
-        });
-        ctx.fillStyle = '#ffd166';
+        ctx.fillStyle = '#475569';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(2, lw);
+        ctx.beginPath(); ctx.roundRect(-s * 1.1, -s * 0.9, s * 2.2, s * 1.8, 5); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#facc15';
         ctx.fillRect(-s * 0.9, -s * 0.7, s * 1.8, s * 0.4);
-        ctx.fillStyle = '#0f172a';
-        for (let i = 0; i < 4; i++) {
-          ctx.beginPath();
-          ctx.moveTo(-s * 0.8 + i * s * 0.45, -s * 0.7);
-          ctx.lineTo(-s * 0.6 + i * s * 0.45, -s * 0.3);
-          ctx.lineTo(-s * 0.7 + i * s * 0.45, -s * 0.3);
-          ctx.lineTo(-s * 0.9 + i * s * 0.45, -s * 0.7);
-          ctx.fill();
-        }
-        ctx.strokeStyle = '#25e6ff';
-        ctx.lineWidth = Math.max(1.6, s * 0.08);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        const arcPhase = this.time * 14;
-        ctx.moveTo(-s * 0.6, s * 0.1);
-        ctx.lineTo(-s * 0.2 + Math.sin(arcPhase) * s * 0.2, s * 0.3);
-        ctx.lineTo(s * 0.2 + Math.cos(arcPhase) * s * 0.2, s * 0.1);
-        ctx.lineTo(s * 0.6, s * 0.3);
-        ctx.stroke();
-        ctx.fillStyle = '#ffd166';
-        ctx.font = `800 ${Math.round(s * 0.55)}px 'Fredoka', 'Outfit', sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('⚡', 0, s * 0.7);
+        ctx.strokeRect(-s * 0.9, -s * 0.7, s * 1.8, s * 0.4);
+        drawComicText(ctx, '⚡', 0, s * 0.35, `900 ${Math.round(s * 0.65)}px "Fredoka", sans-serif`, '#fde047', { strokeWidth: 2.5 });
         break;
       }
 
       case 'voidMine': {
         for (let i = 0; i < 8; i++) {
           const a = (i * Math.PI) / 4;
-          ctx.fillStyle = '#6d28d9';
-          ctx.strokeStyle = '#3b0764';
-          ctx.lineWidth = lw * 0.85;
-          ctx.lineJoin = 'round';
+          ctx.fillStyle = '#ef4444';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = Math.max(1.5, lw);
           ctx.beginPath();
           ctx.moveTo(Math.cos(a - 0.2) * s * 0.65, Math.sin(a - 0.2) * s * 0.65);
-          ctx.lineTo(Math.cos(a) * s * 1.15, Math.sin(a) * s * 1.15);
+          ctx.lineTo(Math.cos(a) * s * 1.18, Math.sin(a) * s * 1.18);
           ctx.lineTo(Math.cos(a + 0.2) * s * 0.65, Math.sin(a + 0.2) * s * 0.65);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
+          ctx.closePath(); ctx.fill(); ctx.stroke();
         }
-        drawToySphere(ctx, 0, 0, s * 0.75, '#334155', { rimColor: '#0f172a', lineWidth: lw });
+        ctx.fillStyle = '#334155';
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.75, 0, TAU); ctx.fill(); ctx.stroke();
         const blink = Math.sin(this.time * 10) > 0;
-        drawToySphere(ctx, 0, 0, s * 0.36, blink ? '#f43f5e' : '#881337', {
-          rimColor: '#4c0519',
-          lineWidth: lw * 0.8,
-          shine: blink ? 0.85 : 0.3,
-        });
+        ctx.fillStyle = blink ? '#facc15' : '#ef4444';
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.36, 0, TAU); ctx.fill(); ctx.stroke();
         break;
       }
 
       default:
-        drawToyBevelRect(ctx, -s, -s, s * 2, s * 2, s * 0.2, col, { depth: 2, rimColor: toyRim(col), lineWidth: lw });
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = lw;
+        ctx.beginPath(); ctx.roundRect(-s, -s, s * 2, s * 2, s * 0.2); ctx.fill(); ctx.stroke();
         break;
     }
     ctx.restore();
   }
 
-  /* --------------------------------------------------- Cybernetic Turbo Boost HUD Button */
+  /* --------------------------------------------------- Chunky Weebl Arcade Boost Button */
   drawBoostButton(ctx, W, H) {
     const bx = W - 46;
     const by = H - 118;
-    const r = 27;
+    const r = 28;
     const h = this.hole;
     const canBoost = h.r > 16.5;
 
     ctx.save();
-    drawToyShadow(ctx, bx, by + r * 0.88, r * 0.85, r * 0.28, 0.3);
+    // Hard offset black drop shadow matching Lord Brim UI Chrome
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(bx, by + 4.5, r, 0, TAU);
+    ctx.fill();
 
+    const grad = ctx.createLinearGradient(bx, by - r, bx, by + r);
     if (this.boosting) {
-      drawToySphere(ctx, bx, by, r, '#f97316', {
-        rimColor: '#ffd166',
-        lineWidth: 2.6,
-        shine: 0.78,
-      });
+      grad.addColorStop(0, '#fb923c');
+      grad.addColorStop(1, '#dc2626');
     } else if (canBoost) {
-      drawToySphere(ctx, bx, by, r, '#0284c7', {
-        rimColor: '#38bdf8',
-        lineWidth: 2.2,
-        shine: 0.65,
-      });
+      grad.addColorStop(0, '#fde047');
+      grad.addColorStop(0.55, '#facc15');
+      grad.addColorStop(1, '#f97316');
     } else {
-      drawToySphere(ctx, bx, by, r, '#334155', {
-        rimColor: '#475569',
-        lineWidth: 1.8,
-        shine: 0.28,
-      });
+      grad.addColorStop(0, '#e2e8f0');
+      grad.addColorStop(1, '#94a3b8');
     }
 
-    ctx.font = "800 13px 'Fredoka', 'Outfit', sans-serif";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+
+    // Sharp white curved gloss highlight on upper-left rim
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
     ctx.lineWidth = 3;
-    ctx.strokeStyle = '#0f172a';
-    ctx.fillStyle = this.boosting ? '#fef08a' : canBoost ? '#ffffff' : 'rgba(255, 255, 255, 0.5)';
-    ctx.strokeText('⚡', bx, by - 6);
-    ctx.fillText('⚡', bx, by - 6);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(bx, by, r - 6, Math.PI * 1.12, Math.PI * 1.56);
+    ctx.stroke();
 
-    ctx.font = "800 8.5px 'Fredoka', 'Outfit', sans-serif";
-    ctx.strokeText('BOOST', bx, by + 9);
-    ctx.fillText('BOOST', bx, by + 9);
-
+    drawComicText(
+      ctx,
+      '⚡',
+      bx,
+      by - 7,
+      '900 16px "Fredoka", sans-serif',
+      canBoost ? '#ffffff' : '#cbd5e1',
+      { strokeWidth: 3.4 },
+    );
+    drawComicText(
+      ctx,
+      'BOOST',
+      bx,
+      by + 10,
+      '900 9.5px "Fredoka", sans-serif',
+      '#ffffff',
+      { strokeWidth: 3.2 },
+    );
     ctx.restore();
   }
 }
 
 function pickColor(kind, seed) {
   const p = pseudoRandom(seed);
-  if (kind === 'electricSubstation') return '#ffd166';
-  if (kind === 'voidMine') return '#ff0054';
-  if (kind === 'sugarDrop') return pick(['#ff3366', '#06d6a0', '#ffbe0b', '#4cc9f0', '#9b5de5', '#ff70a6'], p);
-  if (kind === 'sweetWrapper') return pick(['#ff0054', '#7209b7', '#f72585', '#4361ee', '#ffd166'], p);
-  if (kind === 'sodaCan') return pick(['#e63946', '#3a86ff', '#52b788', '#ff70a6', '#ffbe0b'], p);
-  if (kind === 'pigeon') return '#adb5bd';
-  if (kind === 'flowerPot') return pick(['#ff4b5c', '#ffd166', '#ff70a6', '#7209b7'], p);
+  if (kind === 'electricSubstation') return '#facc15';
+  if (kind === 'voidMine') return '#ef4444';
+  if (kind === 'sugarDrop') return pick(['#fb7185', '#22c55e', '#facc15', '#38bdf8', '#c084fc', '#fb923c'], p);
+  if (kind === 'sweetWrapper') return pick(['#ef4444', '#a855f7', '#ec4899', '#3b82f6', '#facc15'], p);
+  if (kind === 'sodaCan') return pick(['#ef4444', '#38bdf8', '#22c55e', '#ec4899', '#facc15'], p);
+  if (kind === 'pigeon') return '#cbd5e1';
+  if (kind === 'flowerPot') return pick(['#ef4444', '#facc15', '#ec4899', '#38bdf8'], p);
   if (kind === 'coffeeCup') return '#ffffff';
-  if (kind === 'streetSign') return pick(['#1d3557', '#e63946', '#2a9d8f'], p);
-  if (kind === 'cone') return '#ff8a3d';
-  if (kind === 'hydrant') return '#ff4b5c';
-  if (kind === 'trash') return '#4a4e69';
-  if (kind === 'barrel') return '#8b5a2b';
-  if (kind === 'ped') return pick(['#ff5b6e', '#3ddc84', '#25e6ff', '#ffd166', '#ff70a6'], p);
-  if (kind === 'car') return pick(['#ff5d73', '#4cc9f0', '#f9c74f', '#b388ff', '#ffffff'], p);
-  if (kind === 'taxi') return '#1e293b';
-  if (kind === 'shed') return pick(['#ffd166', '#2ec4b6', '#ff9f1c', '#e76f51'], p);
-  if (kind === 'cottage') return pick(['#ff8fab', '#ffe3b3', '#74c0fc', '#63e6be'], p);
-  if (kind === 'warehouse') return pick(['#5c677d', '#4ea8de', '#748cab'], p);
-  if (kind === 'townhouse') return pick(['#ff6b81', '#e07a5f', '#20c997', '#f06595'], p);
-  if (kind === 'donutShop') return '#ff99c8';
-  if (kind === 'cavernClub') return '#9d4edd';
-  if (kind === 'apt') return pick(['#845ef7', '#5c7cfa', '#22b8cf', '#f06595'], p);
-  if (kind === 'tower') return pick(['#5c7cfa', '#4cc9f0', '#7950f2', '#38d9a9'], p);
-  if (kind === 'sky') return pick(['#22b8cf', '#4dabf7', '#748ffc', '#f783ac'], p);
-  if (kind === 'albertDock') return '#e05a6d';
-  if (kind === 'liverBuilding') return '#748cab';
-  if (kind === 'stJellyHall') return '#ffe3b3';
-  if (kind === 'stadium') return '#ff4d6d';
-  if (kind === 'wheel') return '#ff4fa3';
-  if (kind === 'tree') return pick(['#2ec4b6', '#2bb673', '#20c997'], p);
-  return '#2bb673';
+  if (kind === 'streetSign') return pick(['#2563eb', '#ef4444', '#16a34a'], p);
+  if (kind === 'cone') return '#f97316';
+  if (kind === 'hydrant') return '#ef4444';
+  if (kind === 'trash') return '#22c55e';
+  if (kind === 'barrel') return '#b45309';
+  if (kind === 'ped') return pick(['#ef4444', '#22c55e', '#38bdf8', '#facc15', '#ec4899'], p);
+  if (kind === 'car') return pick(['#ef4444', '#38bdf8', '#facc15', '#a855f7', '#22c55e'], p);
+  if (kind === 'taxi') return '#facc15';
+  if (kind === 'shed') return pick(['#facc15', '#2dd4bf', '#fb923c', '#f87171'], p);
+  if (kind === 'cottage') return pick(['#fda4af', '#fef3c7', '#7dd3fc', '#86efac'], p);
+  if (kind === 'warehouse') return pick(['#ea580c', '#60a5fa', '#cbd5e1'], p);
+  if (kind === 'townhouse') return pick(['#fb7185', '#fb923c', '#4ade80', '#fef08a'], p);
+  if (kind === 'donutShop') return '#f472b6';
+  if (kind === 'cavernClub') return '#fb7185';
+  if (kind === 'apt') return pick(['#fb923c', '#60a5fa', '#34d399', '#f472b6'], p);
+  if (kind === 'tower') return pick(['#60a5fa', '#38bdf8', '#a78bfa', '#34d399'], p);
+  if (kind === 'sky') return pick(['#38bdf8', '#60a5fa', '#c084fc', '#fb7185'], p);
+  if (kind === 'albertDock') return '#ea580c';
+  if (kind === 'liverBuilding') return '#fcd34d';
+  if (kind === 'stJellyHall') return '#fef3c7';
+  if (kind === 'stadium') return '#ef4444';
+  if (kind === 'wheel') return '#facc15';
+  if (kind === 'tree') return '#22c55e';
+  return '#22c55e';
 }
 
 function pick(arr, val) {

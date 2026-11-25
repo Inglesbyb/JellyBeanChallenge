@@ -61,7 +61,7 @@ export class BeanHelix extends Game {
     hint: 'DRAG left/right to rotate tower · DROP through gaps · SMASH with multi-floor combos!',
     baseLikes: 8940,
     isPrestige: true,
-    parScore60s: 1500,
+    parScore60s: 5500,
     roundLen: 60,
     cue: 'DROP THROUGH THE GAPS!',
     prestigeCue: 'TALLER TOWER · MORE HAZARDS!',

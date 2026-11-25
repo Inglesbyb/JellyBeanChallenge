@@ -1,18 +1,18 @@
 import Matter from 'matter-js';
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
 import {
-  shadeColor,
-  toyRim,
-  toyLineW,
-  drawToyShadow,
-  drawToySphere,
-  drawToyBevelRect,
-  drawToyPill,
-  drawToyEyes,
-  traceRoundRect,
-} from '../engine/toyStyle.js';
+  STYLE_TOKENS,
+  preloadWeeblAtlas,
+  drawSprite,
+  drawSunburst,
+  drawComicPanel,
+  drawComicStarburst,
+  drawWeeblEyeCluster,
+  drawHeroCharacter,
+} from './weeblAtlas.js';
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 const { Engine, Composite, Bodies, Body, Events } = Matter;
 const TAU = Math.PI * 2;
@@ -169,7 +169,7 @@ export class SaveTheBean extends Game {
     hint: 'DRAW a shield to protect the Bean from the angry bee swarm!',
     baseLikes: 5420,
     isPrestige: false,
-    parScore60s: 650,
+    parScore60s: 4800,
     cue: 'DRAW A SHIELD!',
     prestigeCue: 'FIERCER BEES · LESS INK!',
     scaling: {
@@ -181,12 +181,13 @@ export class SaveTheBean extends Game {
 
   init(saved, score = 0) {
     this.fx = new FX();
+    preloadWeeblAtlas();
     this.score = score;
     this.levelIdx = (saved && Number.isFinite(saved.levelIdx)) ? Math.max(0, saved.levelIdx) : 0;
     this.totalStars = (saved && Number.isFinite(saved.totalStars)) ? Math.max(0, saved.totalStars) : 0;
 
-    // Reset button bounds (top right, comfortably below Reel header)
-    this.resetBtn = { x: 405, y: 108, r: 20, pressed: false };
+    // Reset button bounds cleanly below Reel SAFE_TOP header (`Y >= 130`)
+    this.resetBtn = { x: 410, y: 144, r: 19, pressed: false };
 
     // Collision listener
     this.onCollide = (ev) => this.handleCollision(ev);
@@ -802,8 +803,8 @@ export class SaveTheBean extends Game {
     ctx.save();
     ctx.translate(shake.x, shake.y);
 
-    // 1. Graph Paper Notebook Background
-    this.renderNotebook(ctx, W, H);
+    // 1. Sunlit Weebl HD Park Diorama Background
+    this.renderWeeblParkBackground(ctx, W, H);
 
     // 2. Hazards (Lava / Spikes)
     this.renderHazards(ctx);
@@ -817,152 +818,229 @@ export class SaveTheBean extends Game {
     // 5. Drawn Ink Line (Under construction OR dynamic rigid body)
     this.renderDrawnLine(ctx);
 
-    // 6. The Bean Mascot
+    // 6. The Pristine HD 3D Crowned Green Hero Bean
     this.renderBean(ctx);
 
-    // 7. Beehives
+    // 7. Tree-Branch Beehives
     this.renderHives(ctx);
 
-    // 8. Swarming Bees
+    // 8. Swarming #000-Inked Bees
     this.renderBees(ctx);
 
     // 9. Particles and FX
     this.fx.render(ctx);
 
-    // 10. Top HUD: Level Title, Ink Gauge, Stars, Reset Button, and Countdown
+    // 10. Comic HUD (Safely below Reel SAFE_TOP)
     this.renderHUD(ctx, W, H);
 
     ctx.restore();
   }
 
-  renderNotebook(ctx, W, H) {
-    // Warm sunlit diorama paper gradient
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#fffef9');
-    bg.addColorStop(0.6, '#fffaf0');
-    bg.addColorStop(1, '#f8efe0');
-    ctx.fillStyle = bg;
+  renderWeeblParkBackground(ctx, W, H) {
+    const t = this.stateTimer || 0;
+
+    // 1. Crisp Weebl Cartoon Blue-Sky -> Horizon Glow
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, STYLE_TOKENS.skyTop);
+    sky.addColorStop(0.32, STYLE_TOKENS.skyMid);
+    sky.addColorStop(0.68, STYLE_TOKENS.skyLow);
+    sky.addColorStop(1, STYLE_TOKENS.skyHorizon);
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
-    // Faint horizontal ruled notebook lines
-    ctx.strokeStyle = 'rgba(74, 144, 226, 0.12)';
-    ctx.lineWidth = 1.5;
-    for (let y = 110; y < H; y += 28) {
+    // 2. Gentle Weebl Sunburst Glow in mid-sky (high readability behind ink shields)
+    drawSunburst(ctx, W * 0.5, H * 0.58, 460, t * 0.08, 18, 0.16, false);
+
+    // 3. Slowly drifting #000-outlined Fluffy Clouds
+    const c1X = ((t * 9 + 45) % (W + 160)) - 80;
+    const c2X = ((t * 6 + 260) % (W + 180)) - 90;
+    drawSprite(ctx, 'cloud_1', c1X, 178, 92, 54, {
+      fallback: (cctx) => {
+        cctx.fillStyle = '#ffffff';
+        cctx.strokeStyle = STYLE_TOKENS.ink;
+        cctx.lineWidth = 2.4;
+        cctx.beginPath();
+        cctx.arc(-14, 4, 14, 0, TAU);
+        cctx.arc(6, -2, 18, 0, TAU);
+        cctx.arc(24, 6, 12, 0, TAU);
+        cctx.fill();
+        cctx.stroke();
+      },
+    });
+    drawSprite(ctx, 'cloud_2', c2X, 232, 78, 45, { fallback: () => {} });
+
+    // 4. Soft Hazy Distant Park Horizon Hills + Toy City Landmarks on outer horizons
+    ctx.save();
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.24)';
+    ctx.beginPath();
+    ctx.moveTo(0, 560);
+    ctx.quadraticCurveTo(95, 504, 195, 540);
+    ctx.quadraticCurveTo(295, 496, 370, 534);
+    ctx.quadraticCurveTo(420, 514, W, 542);
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.88;
+    drawSprite(ctx, 'city_palm_house', 52, 566, 76, 80, { fallback: () => {} });
+    drawSprite(ctx, 'city_donut_shop', 398, 574, 70, 76, { fallback: () => {} });
+    ctx.restore();
+
+    // 5. Rolling #000-Inked Emerald Meadow Hills
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#16a34a';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-10, 592);
+    ctx.quadraticCurveTo(115, 544, 240, 586);
+    ctx.quadraticCurveTo(360, 622, W + 10, 576);
+    ctx.lineTo(W + 10, H);
+    ctx.lineTo(-10, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = STYLE_TOKENS.grassTop;
+    ctx.beginPath();
+    ctx.moveTo(-10, 626);
+    ctx.quadraticCurveTo(135, 596, 285, 628);
+    ctx.quadraticCurveTo(385, 646, W + 10, 616);
+    ctx.lineTo(W + 10, H);
+    ctx.lineTo(-10, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Rich deep emerald turf shading below ground platforms for grounded bottom HUD contrast
+    const meadowGrad = ctx.createLinearGradient(0, 668, 0, H);
+    meadowGrad.addColorStop(0, '#16a34a');
+    meadowGrad.addColorStop(1, '#14532d');
+    ctx.fillStyle = meadowGrad;
+    ctx.fillRect(0, 668, W, H - 668);
+
+    // Subtle sunlit grass blades across foreground meadow
+    ctx.strokeStyle = '#4ade80';
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+    for (let gx = 28; gx < W; gx += 76) {
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
+      ctx.moveTo(gx, 722);
+      ctx.lineTo(gx - 4, 712);
+      ctx.moveTo(gx + 3, 722);
+      ctx.lineTo(gx + 6, 713);
       ctx.stroke();
     }
 
-    // Soft rose vertical margin rule on the left
-    ctx.strokeStyle = 'rgba(239, 71, 111, 0.22)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(42, 100);
-    ctx.lineTo(42, H);
-    ctx.stroke();
+    // Charming white #000-inked park fence rails along lower meadow
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.0;
+    ctx.fillRect(0, 618, W, 5);
+    ctx.strokeRect(-2, 618, W + 4, 5);
+    for (let px = 14; px < W; px += 34) {
+      ctx.beginPath();
+      ctx.roundRect(px, 608, 8, 28, 3);
+      ctx.fill();
+      ctx.stroke();
+    }
 
-    // Soft 3D vinyl margin sticker doodles
-    ctx.save();
-    ctx.globalAlpha = 0.42;
-    drawToyBevelRect(ctx, 13, 116, 20, 22, 5, '#ffd166', {
-      depth: 2,
-      rimColor: toyRim('#fb8500', 0.45),
-      lineWidth: 1.2,
-      gloss: true,
-    });
-    drawToyPill(ctx, 10, 112, 26, 5, '#d97706', {
-      rimColor: toyRim('#92400e', 0.5),
-      lineWidth: 1.0,
-      gloss: true,
-    });
-    drawToySphere(ctx, 23, 760, 7, '#ff758f', {
-      rimColor: toyRim('#ef476f', 0.45),
-      lineWidth: 1.1,
-      shine: 0.55,
-    });
-    ctx.restore();
+    // 6. Side Oak Foliage Shoulders cleanly below the top HUD band
+    ctx.fillStyle = '#15803d';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.6;
+    for (const canopy of [
+      [-14, 186, 26],
+      [-4, 212, 20],
+      [W + 14, 186, 26],
+      [W + 4, 212, 20],
+    ]) {
+      ctx.beginPath();
+      ctx.arc(canopy[0], canopy[1], canopy[2], 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#4ade80';
+    ctx.lineWidth = 2.0;
+    for (const leaf of [
+      [2, 178, 12],
+      [W - 2, 178, 12],
+    ]) {
+      ctx.beginPath();
+      ctx.arc(leaf[0], leaf[1], leaf[2], 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   renderHazards(ctx) {
     const t = this.stateTimer;
     for (const h of this.hazards) {
       if (h.type === 'lava') {
-        // Candy Lava Pit with glossy glowing upper crust
         const left = h.x - h.w / 2;
         const top = h.y - h.h / 2;
-        const lg = ctx.createLinearGradient(0, top, 0, h.y + h.h / 2);
-        lg.addColorStop(0, '#ff6d00');
-        lg.addColorStop(0.38, '#ff4800');
-        lg.addColorStop(1, '#9d0208');
 
+        // #000-Inked Lava Gorge Pit
+        const lg = ctx.createLinearGradient(0, top, 0, h.y + h.h / 2);
+        lg.addColorStop(0, '#f97316');
+        lg.addColorStop(0.45, '#ea580c');
+        lg.addColorStop(1, '#991b1b');
         ctx.fillStyle = lg;
         ctx.fillRect(left, top, h.w, h.h);
 
-        // Animated glowing lava surface ripples
-        const surfG = ctx.createLinearGradient(0, top - 4, 0, top + 14);
-        surfG.addColorStop(0, '#fde047');
-        surfG.addColorStop(1, '#ff9e00');
-        ctx.fillStyle = surfG;
+        // Inked bright molten top wave crest
+        ctx.fillStyle = '#fde047';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.moveTo(left, top);
         for (let x = left; x <= h.x + h.w / 2; x += 15) {
-          const wy = top + Math.sin(x * 0.05 + t * 4) * 4;
-          ctx.lineTo(x, wy);
+          ctx.lineTo(x, top + Math.sin(x * 0.05 + t * 4) * 4.2);
         }
         ctx.lineTo(h.x + h.w / 2, top + 12);
         ctx.lineTo(left, top + 12);
         ctx.closePath();
         ctx.fill();
-
-        // Top glossy lava highlight line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let x = left; x <= h.x + h.w / 2; x += 15) {
-          const wy = top + Math.sin(x * 0.05 + t * 4) * 4;
-          if (x === left) ctx.moveTo(x, wy + 1);
-          else ctx.lineTo(x, wy + 1);
-        }
         ctx.stroke();
 
-        // Rising glossy lava bubbles
+        // Rising #000-inked lava bubbles
+        ctx.fillStyle = '#fde047';
+        ctx.lineWidth = 2.0;
         for (let i = 0; i < 4; i++) {
           const bx = left + 35 + ((i * 90 + t * 40) % h.w);
-          const by = top + 8 - ((t * 25 + i * 15) % 35);
-          drawToySphere(ctx, bx, by, 3.2 + (i % 3), '#ffd166', {
-            rimColor: toyRim('#ff6d00', 0.5),
-            lineWidth: 0.9,
-            shine: 0.8,
-            bottomBounce: false,
-          });
+          const by = top + 8 - ((t * 25 + i * 15) % 32);
+          ctx.beginPath();
+          ctx.arc(bx, by, 3.6 + (i % 3), 0, TAU);
+          ctx.fill();
+          ctx.stroke();
         }
       } else if (h.type === 'spikes') {
-        // 3D Beveled Candy Spike Trap
         const spikeW = 16;
         const count = Math.floor(h.w / spikeW);
         const startX = h.x - h.w / 2;
         const topY = h.y - h.h / 2;
         const botY = h.y + h.h / 2;
-        const spikeRim = toyRim('#e63946', 0.62);
-        const spikeLw = toyLineW(spikeW, 0.08, 1.0, 1.7);
 
-        // Beveled metallic base bar under spikes
-        drawToyBevelRect(ctx, startX, botY - 12, h.w, 12, 4, '#334155', {
-          depth: 2,
-          rimColor: '#0f172a',
-          lineWidth: 1.5,
-          gloss: true,
-        });
+        // Heavy #000-inked steel base bar
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.roundRect(startX, botY - 12, h.w, 12, 4);
+        ctx.fill();
+        ctx.stroke();
 
         ctx.lineJoin = 'round';
         for (let i = 0; i < count; i++) {
           const sx = startX + i * spikeW;
           const midX = sx + spikeW / 2;
-          const baseCol = i % 2 === 0 ? '#e63946' : '#f8fafc';
+          const baseCol = i % 2 === 0 ? '#ef4444' : '#f8fafc';
+          const shadeCol = i % 2 === 0 ? '#b91c1c' : '#cbd5e1';
 
-          // Left sunlit bevel face
-          ctx.fillStyle = shadeColor(baseCol, 0.25);
+          ctx.fillStyle = baseCol;
           ctx.beginPath();
           ctx.moveTo(sx, botY - 8);
           ctx.lineTo(midX, topY + 4);
@@ -970,8 +1048,7 @@ export class SaveTheBean extends Game {
           ctx.closePath();
           ctx.fill();
 
-          // Right shaded bevel face
-          ctx.fillStyle = shadeColor(baseCol, -0.18);
+          ctx.fillStyle = shadeCol;
           ctx.beginPath();
           ctx.moveTo(midX, botY - 8);
           ctx.lineTo(midX, topY + 4);
@@ -979,9 +1056,8 @@ export class SaveTheBean extends Game {
           ctx.closePath();
           ctx.fill();
 
-          // Crisp tinted rim
-          ctx.strokeStyle = i % 2 === 0 ? spikeRim : toyRim('#94a3b8', 0.55);
-          ctx.lineWidth = spikeLw;
+          ctx.strokeStyle = STYLE_TOKENS.ink;
+          ctx.lineWidth = 2.2;
           ctx.beginPath();
           ctx.moveTo(sx, botY - 8);
           ctx.lineTo(midX, topY + 4);
@@ -1001,85 +1077,93 @@ export class SaveTheBean extends Game {
 
       const hw = p.w / 2;
       const hh = p.h / 2;
-      const depth = Math.min(6, Math.max(2.5, p.h * 0.14));
-      const blockLw = toyLineW(Math.min(p.w, p.h), 0.045, 1.1, 2.0);
 
-      // Soft grounding diorama drop shadow
-      ctx.fillStyle = 'rgba(12, 20, 42, 0.14)';
-      traceRoundRect(ctx, -hw + 2, -hh + depth + 4, p.w, p.h, 9);
+      // Grounding comic offset drop shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+      ctx.beginPath();
+      ctx.roundRect(-hw + 3, -hh + 5, p.w, p.h, 9);
       ctx.fill();
 
-      // Tactile 3D extruded chocolate earth block
-      drawToyBevelRect(ctx, -hw, -hh, p.w, p.h, 9, '#7c5c46', {
-        depth,
-        rimColor: toyRim('#7c5c46', 0.6),
-        lineWidth: blockLw,
-        gloss: false,
-      });
-
-      // Plush 3D grass trim on top
-      const grassH = Math.min(15, p.h * 0.45);
-      const gg = ctx.createLinearGradient(0, -hh, 0, -hh + grassH);
-      gg.addColorStop(0, '#74c64b');
-      gg.addColorStop(0.6, '#588157');
-      gg.addColorStop(1, '#3a5a40');
-      ctx.fillStyle = gg;
-      traceRoundRect(ctx, -hw + 1, -hh + 0.5, p.w - 2, grassH, 7);
+      // Solid earth slab + #000 ink contour
+      ctx.fillStyle = '#78350f';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      ctx.roundRect(-hw, -hh, p.w, p.h, 9);
       ctx.fill();
 
-      // Glossy top grass specular highlight
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.34)';
-      traceRoundRect(ctx, -hw + 4, -hh + 2, Math.max(4, p.w - 8), Math.max(2, grassH * 0.28), 3);
-      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(-hw, -hh, p.w, Math.min(26, p.h * 0.6));
 
-      // Scalloped vinyl grass fringe
-      ctx.fillStyle = '#487544';
-      for (let x = -hw + 10; x < hw - 10; x += 14) {
-        ctx.beginPath();
-        ctx.arc(x, -hh + grassH - 1, 3.2, 0, Math.PI);
-        ctx.fill();
+      // Vibrant 2-tone Weebl grass overhang cap
+      const grassH = Math.min(18, Math.max(11, p.h * 0.42));
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(-hw, -hh, p.w, grassH);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(-hw, -hh, p.w, grassH * 0.65);
+      ctx.fillStyle = '#86efac';
+      ctx.fillRect(-hw + 6, -hh + 2, Math.max(4, p.w - 12), 3);
+
+      // Inked scalloped turf divider
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-hw, -hh + grassH);
+      for (let x = -hw; x <= hw; x += 14) {
+        ctx.quadraticCurveTo(x + 7, -hh + grassH + 5, Math.min(hw, x + 14), -hh + grassH);
       }
+      ctx.stroke();
+      ctx.restore();
+
+      // Re-stroke bold outer comic contour
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      ctx.roundRect(-hw, -hh, p.w, p.h, 9);
+      ctx.stroke();
 
       ctx.restore();
     }
 
-    // Pegs (3D Vinyl Wooden Anchor Posts with metallic screw head)
+    // #000-Inked Anchor Pegs
     for (const peg of this.pegs) {
       ctx.save();
       ctx.translate(peg.x, peg.y);
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.beginPath();
+      ctx.arc(2, 4, peg.r, 0, TAU);
+      ctx.fill();
 
-      const lw = toyLineW(peg.r * 2, 0.048, 1.0, 1.9);
-      drawToyShadow(ctx, 2, 4, peg.r * 1.02, peg.r * 0.9, 0.2);
+      ctx.fillStyle = '#d97706';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, peg.r, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
 
-      drawToySphere(ctx, 0, 0, peg.r, '#bc6c25', {
-        rimColor: toyRim('#bc6c25', 0.6),
-        lineWidth: lw,
-        shine: 0.55,
-      });
+      ctx.fillStyle = '#e2e8f0';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(0, 0, peg.r * 0.48, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
 
-      drawToySphere(ctx, 0, 0, peg.r * 0.45, '#cbd5e1', {
-        rimColor: toyRim('#64748b', 0.58),
-        lineWidth: lw * 0.75,
-        shine: 0.75,
-      });
-
-      // Crosshead screw indent
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = Math.max(1.5, peg.r * 0.14);
-      ctx.lineCap = 'round';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.0;
       ctx.beginPath();
       ctx.moveTo(-peg.r * 0.22, 0);
       ctx.lineTo(peg.r * 0.22, 0);
       ctx.moveTo(0, -peg.r * 0.22);
       ctx.lineTo(0, peg.r * 0.22);
       ctx.stroke();
-
       ctx.restore();
     }
   }
 
   renderObstacles(ctx) {
-    // Rotators
     for (const rot of this.rotators) {
       ctx.save();
       ctx.translate(rot.x, rot.y);
@@ -1088,65 +1172,62 @@ export class SaveTheBean extends Game {
       const hw = rot.w / 2;
       const hh = rot.h / 2;
 
-      // 3D beveled candy paddle
-      drawToyBevelRect(ctx, -hw, -hh, rot.w, rot.h, 7, '#f46036', {
-        depth: 3,
-        rimColor: toyRim('#f46036', 0.6),
-        lineWidth: toyLineW(rot.h, 0.08, 1.1, 2.0),
-        gloss: true,
-      });
+      ctx.fillStyle = '#f97316';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.roundRect(-hw, -hh, rot.w, rot.h, 7);
+      ctx.fill();
+      ctx.stroke();
 
-      // Center Axle Pin
-      drawToySphere(ctx, 0, 0, 8.5, '#ffd166', {
-        rimColor: toyRim('#d97706', 0.6),
-        lineWidth: 1.4,
-        shine: 0.8,
-      });
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(-hw + 6, -hh + 2.5, Math.max(4, rot.w - 12), 3);
+
+      ctx.fillStyle = '#facc15';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8.5, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
 
       ctx.restore();
     }
 
-    // Boulders
     for (const b of this.boulders) {
       const pos = b.body.position;
       const angle = b.body.angle;
-      const baseCol = b.color || '#e63946';
+      const baseCol = b.color || '#ef4444';
 
       ctx.save();
       ctx.translate(pos.x, pos.y);
-      drawToyShadow(ctx, 2, 4, b.r * 0.98, b.r * 0.9, 0.18);
+      ctx.fillStyle = 'rgba(0,0,0,0.26)';
+      ctx.beginPath();
+      ctx.arc(2, 4, b.r, 0, TAU);
+      ctx.fill();
+
       ctx.rotate(angle);
+      ctx.fillStyle = baseCol;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, b.r, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
 
-      drawToySphere(ctx, 0, 0, b.r, baseCol, {
-        rimColor: toyRim(baseCol, 0.6),
-        lineWidth: toyLineW(b.r * 2, 0.042, 1.2, 2.2),
-        shine: 0.82,
-      });
-
-      // Jawbreaker candy speckles
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.62)';
-      [
-        { x: b.r * 0.36, y: -b.r * 0.18, r: b.r * 0.11 },
-        { x: -b.r * 0.12, y: b.r * 0.42, r: b.r * 0.09 },
-        { x: b.r * 0.25, y: b.r * 0.3, r: b.r * 0.07 },
-      ].forEach((sp) => {
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, sp.r, 0, TAU);
-        ctx.fill();
-      });
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.ellipse(-b.r * 0.34, -b.r * 0.34, b.r * 0.24, b.r * 0.14, -0.5, 0, TAU);
+      ctx.fill();
 
       ctx.restore();
     }
   }
 
   renderDrawnLine(ctx) {
-    // Case A: Still actively drawing (render user path directly)
     if (this.state === 'drawing' && this.points.length > 0) {
       this.drawStrokePath(ctx, this.points);
       return;
     }
-
-    // Case B: Dynamic Rigid Body (render via body transform)
     if (this.drawnBody && this.drawnRelPoints) {
       const pos = this.drawnBody.position;
       const angle = this.drawnBody.angle;
@@ -1178,34 +1259,34 @@ export class SaveTheBean extends Game {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // 0. Soft 3D diorama shadow below drawn vinyl shield
-    tracePath(3);
-    ctx.strokeStyle = 'rgba(15, 23, 42, 0.2)';
-    ctx.lineWidth = 15;
+    // 0. Crisp comic offset shadow
+    tracePath(3.5);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
+    ctx.lineWidth = 17;
     ctx.stroke();
 
-    // 1. Tinted vinyl rim
+    // 1. Solid #000000 comic outer ink contour
     tracePath(0);
-    ctx.strokeStyle = toyRim('#4361ee', 0.62);
-    ctx.lineWidth = 14.5;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 16.5;
     ctx.stroke();
 
-    // 2. Deep shaded royal blue plastic underside
+    // 2. Deep cobalt cel under-band
     tracePath(0.6);
-    ctx.strokeStyle = shadeColor('#4361ee', -0.2);
-    ctx.lineWidth = 11.5;
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth = 11.2;
     ctx.stroke();
 
-    // 3. Vibrant Royal Blue vinyl core
+    // 3. Bright electric cyan-blue core
     tracePath(-0.4);
-    ctx.strokeStyle = '#4f6ef7';
-    ctx.lineWidth = 9.2;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 8.4;
     ctx.stroke();
 
-    // 4. Glossy upper studio specular ribbon
+    // 4. Crisp upper #ffffff highlight ribbon
     tracePath(-2.2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.56)';
-    ctx.lineWidth = 3.0;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.lineWidth = 2.6;
     ctx.stroke();
 
     ctx.restore();
@@ -1216,74 +1297,108 @@ export class SaveTheBean extends Game {
     const isStung = this.state === 'stung';
     const isWon = this.state === 'won';
     const isDefending = this.state === 'defending';
+    const isSketching = this.state === 'drawing' && this.points.length > 0;
 
-    // Soft grounding shadow beneath Bean
-    drawToyShadow(ctx, b.x, b.y + 22, 18, 5.5, 0.16);
+    // Grounding comic shadow cleanly beneath Bean feet
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.y + 22, 20, 6, 0, 0, TAU);
+    ctx.fill();
+
+    // Find closest bee threat or active target for live eye-tracking & reaction intensity
+    let nearestBeeDist = Infinity;
+    let lookTargetX = this.hives?.[0]?.x ?? b.x;
+    for (const bee of this.bees || []) {
+      const bp = bee.body.position;
+      const d = Math.hypot(bp.x - b.x, bp.y - b.y);
+      if (d < nearestBeeDist) {
+        nearestBeeDist = d;
+        lookTargetX = bp.x;
+      }
+    }
+    if (isSketching) {
+      lookTargetX = this.points[this.points.length - 1].x;
+    }
+    const lookDir = clamp((lookTargetX - b.x) / 90, -0.85, 0.85);
 
     ctx.save();
-    ctx.translate(b.x, b.y);
+    ctx.translate(b.x, b.y + 22);
     ctx.rotate(b.angle);
 
-    const scale = isStung ? 1.0 + Math.min(0.35, b.stungAnim * 0.4) : 1.0;
-    ctx.scale(scale, scale);
-
-    // Mascot options
-    let eyeExpr = 'happy';
-    if (isStung) eyeExpr = 'squish';
-    else if (isWon) eyeExpr = 'wink';
-    else if (isDefending) eyeExpr = 'alert';
-
-    drawBean(ctx, 0, 0, 28, {
-      color: isStung ? '#ff758f' : '#25e6ff',
-      bellyColor: isStung ? '#ff4d6d' : '#1ec0db',
-      eyes: eyeExpr,
-      hat: isWon ? 'crown' : null,
-      dead: isStung,
-    });
-
-    // Anxious Sweat Drop during Defending
-    if (isDefending && !isStung && !isWon) {
-      const dropY = -18 + Math.sin(this.stateTimer * 8) * 3;
-      drawToySphere(ctx, 16, dropY, 3.4, '#4cc9f0', {
-        rimColor: toyRim('#0284c7', 0.55),
-        lineWidth: 1.0,
-        shine: 0.8,
-        bottomBounce: false,
-      });
+    if (isWon) {
+      drawComicStarburst(ctx, 0, -24, 38, 17, 10, '#fef08a', STYLE_TOKENS.ink, this.stateTimer * 5, 2.2);
     }
 
-    // Comical Stung Features: 3D Vinyl Welts & Bandage
-    if (isStung) {
-      const weltRim = toyRim('#ef233c', 0.58);
-      drawToySphere(ctx, -14, -20, 7, '#ef233c', { rimColor: weltRim, lineWidth: 1.3, shine: 0.72 });
-      drawToySphere(ctx, 15, -4, 8, '#ef233c', { rimColor: weltRim, lineWidth: 1.3, shine: 0.72 });
+    const scale = isStung ? 1.0 + Math.min(0.32, (b.stungAnim || 0) * 0.4) : 1.0;
+    const heroState =
+      isStung ? 'hurt'
+      : isWon ? 'cheer'
+      : isDefending ? (nearestBeeDist < 135 ? 'wobble' : 'balance')
+      : 'stand_alert';
+    const heroExpr =
+      isStung ? 'dizzy'
+      : isWon ? 'happy'
+      : isDefending && nearestBeeDist < 135 ? 'panic'
+      : isSketching ? 'happy'
+      : 'focus';
 
-      // Adhesive Bandage across face
-      ctx.save();
-      ctx.rotate(0.2);
-      drawToyBevelRect(ctx, -10, -8, 20, 8, 2.5, '#ffbe0b', {
-        depth: 1,
-        rimColor: toyRim('#d97706', 0.55),
-        lineWidth: 1.0,
-        gloss: true,
-      });
-      ctx.fillStyle = '#b45309';
-      [-4, 0, 4].forEach((dx) => {
+    drawHeroCharacter(ctx, 0, 0, 50, {
+      view: 'front',
+      state: heroState,
+      expr: heroExpr,
+      t: this.stateTimer * (isDefending && nearestBeeDist < 135 ? 6 : 4),
+      lookX: lookDir,
+      lean: clamp(lookDir * 0.16, -0.2, 0.2),
+      squashX: scale,
+      squashY: scale,
+    });
+
+    // #000-Inked Anxious Sweat Drops during swarm siege
+    if (isDefending && !isStung && !isWon) {
+      const dropY = -38 + Math.sin(this.stateTimer * 9) * 3.5;
+      ctx.fillStyle = '#38bdf8';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(20, dropY, 4.2, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Comical #000-Inked Stung Welts, Bandage & Tears
+    if (isStung) {
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.0;
+      for (const [wx, wy, wr] of [[-15, -40, 6], [17, -26, 6.5]]) {
         ctx.beginPath();
-        ctx.arc(dx, -4, 1, 0, TAU);
+        ctx.arc(wx, wy, wr, 0, TAU);
         ctx.fill();
-      });
+        ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.translate(0, -24);
+      ctx.rotate(0.2);
+      ctx.fillStyle = '#fde047';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.roundRect(-10, -4, 20, 8, 2.5);
+      ctx.fill();
+      ctx.stroke();
       ctx.restore();
 
-      // Tear Fountains splashing out
       const tearT = this.stateTimer * 12;
-      ctx.fillStyle = 'rgba(76, 201, 240, 0.85)';
-      [-18, 18].forEach((tx, idx) => {
-        const dir = idx === 0 ? -1 : 1;
+      ctx.fillStyle = '#38bdf8';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.4;
+      for (const dir of [-1, 1]) {
         ctx.beginPath();
-        ctx.arc(tx + dir * (tearT % 12), -10 + (tearT % 14), 3, 0, TAU);
+        ctx.arc(dir * (18 + (tearT % 10)), -28 + (tearT % 14), 3.2, 0, TAU);
         ctx.fill();
-      });
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
@@ -1296,20 +1411,40 @@ export class SaveTheBean extends Game {
       const shakeY = (Math.random() - 0.5) * 6 * h.shake;
       ctx.translate(h.x + shakeX, h.y + shakeY);
 
-      // Hanging vine / branch from ceiling with soft highlight
+      // Sturdy #000-Inked Arching Oak Branch from park side (keeps top HUD 100% clear)
+      const fromRight = h.x >= this.W * 0.5;
+      const edgeRelX = fromRight ? this.W - h.x + 16 : -h.x - 16;
+      const anchorRelY = Math.min(-34, 174 - h.y);
       ctx.lineCap = 'round';
-      ctx.strokeStyle = toyRim('#40916c', 0.55);
-      ctx.lineWidth = 4.6;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 10.5;
       ctx.beginPath();
-      ctx.moveTo(0, -h.y);
-      ctx.quadraticCurveTo(8, -h.y / 2, 0, -26);
+      ctx.moveTo(edgeRelX, anchorRelY);
+      ctx.quadraticCurveTo(edgeRelX * 0.36, anchorRelY - 12, 0, -34);
+      ctx.lineTo(0, -24);
       ctx.stroke();
 
-      ctx.strokeStyle = '#52b788';
-      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 5.4;
       ctx.stroke();
 
-      // Beehive layered 3D glossy honey dome
+      // Green #000-inked leaves along branch + hive crown
+      ctx.fillStyle = '#22c55e';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.2;
+      for (const [lx, ly, ang] of [
+        [-10, -34, -0.45],
+        [11, -34, 0.45],
+        [edgeRelX * 0.38, anchorRelY - 8, fromRight ? -0.3 : 0.3],
+      ]) {
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 9.5, 4.8, ang, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // #000-Inked Golden Cel Honey Skep Coils
       const layers = [
         { y: -22, rx: 14, ry: 7 },
         { y: -12, rx: 24, ry: 9 },
@@ -1317,57 +1452,55 @@ export class SaveTheBean extends Game {
         { y: 12, rx: 24, ry: 9 },
         { y: 22, rx: 16, ry: 7 },
       ];
-      const hiveRim = toyRim('#f59e0b', 0.6);
 
       for (const lyr of layers) {
-        const hg = ctx.createLinearGradient(-lyr.rx, lyr.y - lyr.ry, lyr.rx, lyr.y + lyr.ry);
-        hg.addColorStop(0, '#fde047');
-        hg.addColorStop(0.45, '#ffbe0b');
-        hg.addColorStop(1, '#d97706');
-
-        ctx.fillStyle = hg;
-        ctx.strokeStyle = hiveRim;
-        ctx.lineWidth = toyLineW(lyr.rx * 2, 0.04, 1.1, 1.8);
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.6;
         ctx.beginPath();
         ctx.ellipse(0, lyr.y, lyr.rx, lyr.ry, 0, 0, TAU);
         ctx.fill();
-        ctx.stroke();
 
-        // Soft glossy shine on upper left of each skep coil
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
+        ctx.save();
+        ctx.clip();
+        ctx.fillStyle = '#d97706';
+        ctx.fillRect(-lyr.rx, lyr.y + 1, lyr.rx * 2, lyr.ry);
+        ctx.fillStyle = '#fef9c3';
         ctx.beginPath();
-        ctx.ellipse(-lyr.rx * 0.34, lyr.y - lyr.ry * 0.32, lyr.rx * 0.34, lyr.ry * 0.22, -0.2, 0, TAU);
+        ctx.ellipse(-lyr.rx * 0.35, lyr.y - lyr.ry * 0.32, lyr.rx * 0.32, lyr.ry * 0.24, -0.15, 0, TAU);
         ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.ellipse(0, lyr.y, lyr.rx, lyr.ry, 0, 0, TAU);
+        ctx.stroke();
       }
 
-      // Recessed Entrance Doorway Hole
-      ctx.fillStyle = '#1e130b';
-      ctx.strokeStyle = toyRim('#b45309', 0.6);
-      ctx.lineWidth = 1.6;
+      // Hive Entrance Doorway
+      ctx.fillStyle = '#1e1b4b';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.arc(0, 8, 9, 0, Math.PI, false);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      // Glossy Honey Dripping droplet
-      const dripY = 16 + Math.sin(this.stateTimer * 3 + h.x) * 4;
-      drawToySphere(ctx, 0, dripY, 3.4, '#ffbe0b', {
-        rimColor: hiveRim,
-        lineWidth: 0.9,
-        shine: 0.85,
-        bottomBounce: false,
-      });
+      // Golden #000-inked Honey Droplet
+      const dripY = 17 + Math.sin(this.stateTimer * 3 + h.x) * 4;
+      ctx.fillStyle = '#facc15';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(0, dripY, 4.0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
 
-      // 3D Golden Queen Bee Crown on Hive
       if (h.isQueen) {
-        const cg = ctx.createLinearGradient(-12, -42, 12, -28);
-        cg.addColorStop(0, '#fff3b0');
-        cg.addColorStop(0.5, '#ffd166');
-        cg.addColorStop(1, '#d97706');
-        ctx.fillStyle = cg;
-        ctx.strokeStyle = toyRim('#d97706', 0.6);
-        ctx.lineWidth = 1.6;
+        ctx.fillStyle = '#fde047';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.2;
         ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(-12, -28);
@@ -1380,13 +1513,6 @@ export class SaveTheBean extends Game {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-
-        drawToySphere(ctx, 0, -33, 2.5, '#ef233c', {
-          rimColor: toyRim('#ef233c', 0.55),
-          lineWidth: 0.7,
-          shine: 0.8,
-          bottomBounce: false,
-        });
       }
 
       ctx.restore();
@@ -1403,16 +1529,13 @@ export class SaveTheBean extends Game {
       ctx.translate(pos.x, pos.y);
       ctx.rotate(angle);
 
-      const br = bee.isQueen ? 11 : 8.5;
-      const beeRim = toyRim('#f59e0b', 0.62);
-      const beeLw = toyLineW(br * 2, 0.05, 0.95, 1.7);
-
-      // Flapping Translucent Gossamer Wings
+      const br = bee.isQueen ? 11.5 : 8.8;
       const wingSpread = Math.sin(bee.wingPhase) * 10;
-      ctx.fillStyle = 'rgba(235, 248, 255, 0.78)';
-      ctx.strokeStyle = 'rgba(96, 165, 250, 0.75)';
-      ctx.lineWidth = 1.1;
 
+      // #000-Inked Translucent Cartoon Wings
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.88)';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.ellipse(-2, -7 - wingSpread * 0.3, 7, 4 + Math.abs(wingSpread * 0.2), -0.3, 0, TAU);
       ctx.fill();
@@ -1423,55 +1546,39 @@ export class SaveTheBean extends Game {
       ctx.fill();
       ctx.stroke();
 
-      // Volumetric 3D Vinyl Bee Body
-      const bg = ctx.createRadialGradient(-br * 0.25, -br * 0.35, 1, 0, 0, br * 1.25);
-      bg.addColorStop(0, '#fef08a');
-      bg.addColorStop(0.45, '#ffbe0b');
-      bg.addColorStop(1, '#d97706');
-
-      ctx.fillStyle = bg;
+      // #000-Inked Striped Bumblebee Body
+      ctx.fillStyle = '#facc15';
       ctx.beginPath();
       ctx.ellipse(0, 0, br * 1.25, br, 0, 0, TAU);
       ctx.fill();
 
-      // Clipped soft vinyl stripes
       ctx.save();
       ctx.beginPath();
       ctx.ellipse(0, 0, br * 1.25, br, 0, 0, TAU);
       ctx.clip();
-      ctx.fillStyle = '#1e1b4b';
-      [-3.5, 0, 3.5].forEach((sx) => {
-        ctx.fillRect(sx - 1.1, -br, 2.2, br * 2);
-      });
+      ctx.fillStyle = '#0f172a';
+      [-3.8, 0, 3.8].forEach((sx) => ctx.fillRect(sx - 1.2, -br, 2.4, br * 2));
       ctx.restore();
 
-      // Top glossy sheen on bee body
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
-      ctx.beginPath();
-      ctx.ellipse(-br * 0.15, -br * 0.42, br * 0.55, br * 0.2, -0.1, 0, TAU);
-      ctx.fill();
-
-      // Crisp tinted outer rim
-      ctx.strokeStyle = beeRim;
-      ctx.lineWidth = beeLw;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.ellipse(0, 0, br * 1.25, br, 0, 0, TAU);
       ctx.stroke();
 
-      // Sleek Stinger at tail
-      ctx.fillStyle = '#1e1b4b';
+      // Tail Stinger
+      ctx.fillStyle = STYLE_TOKENS.ink;
       ctx.beginPath();
-      ctx.moveTo(-br * 1.22, -2);
-      ctx.lineTo(-br * 1.22 - 4.5, 0);
-      ctx.lineTo(-br * 1.22, 2);
+      ctx.moveTo(-br * 1.22, -2.5);
+      ctx.lineTo(-br * 1.22 - 5, 0);
+      ctx.lineTo(-br * 1.22, 2.5);
       ctx.closePath();
       ctx.fill();
 
-      // Expressive Toy Eye at front
-      drawToyEyes(ctx, br * 0.64, -2.2, Math.max(2.0, br * 0.26), {
-        spacing: 0,
-        style: this.state === 'won' ? 'dizzy' : 'angry',
+      drawWeeblEyeCluster(ctx, br * 0.64, -2.0, Math.max(2.6, br * 0.32), {
         lookX: 0.35,
+        mood: this.state === 'won' ? 'dizzy' : 'angry',
+        lineW: 1.8,
       });
 
       ctx.restore();
@@ -1479,49 +1586,47 @@ export class SaveTheBean extends Game {
   }
 
   renderHUD(ctx, W) {
-    // 1. Level Header Bevel Pill (comfortably below Reel header bar)
+    // 1. Weebl #000-Inked Level Panel safely below SAFE_TOP (`Y = 128..160`)
     ctx.save();
-    drawToyPill(ctx, 18, 92, 180, 32, '#1e293b', {
-      rimColor: '#334155',
-      lineWidth: 1.8,
-      gloss: true,
+    drawComicPanel(ctx, 16, 128, 174, 32, 12, '#0f172a', {
+      lineWidth: 2.6,
+      shadowDx: 0,
+      shadowDy: 3,
     });
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = "700 12px 'Fredoka', 'Outfit', sans-serif";
+    ctx.font = "900 12px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`LVL ${this.levelIdx + 1}: ${this.curLevel.name}`, 30, 108);
+    ctx.fillText(`LVL ${this.levelIdx + 1}: ${this.curLevel.name}`, 28, 144);
 
-    // 2. Ink Gauge / Tube
+    // 2. #000-Inked Ink Gauge Bar + Star Thresholds
     const inkX = 224;
-    const inkY = 98;
-    const inkW = 145;
+    const inkY = 134;
+    const inkW = 148;
     const inkH = 20;
     const inkFraction = Math.max(0, 1 - this.inkUsed / this.maxInk);
 
-    drawToyPill(ctx, inkX, inkY, inkW, inkH, '#e2e8f0', {
-      rimColor: '#334155',
-      lineWidth: 2,
-      gloss: false,
+    drawComicPanel(ctx, inkX, inkY, inkW, inkH, 10, '#e2e8f0', {
+      lineWidth: 2.4,
+      shadowDx: 0,
+      shadowDy: 2.5,
     });
 
-    // Ink Liquid Fill
     if (inkFraction > 0) {
-      const fillW = Math.max(8, (inkW - 4) * inkFraction);
-      drawToyPill(ctx, inkX + 2, inkY + 2, fillW, inkH - 4, '#4361ee', {
-        rimColor: toyRim('#4361ee', 0.48),
-        lineWidth: 0.9,
-        gloss: true,
-      });
+      const fillW = Math.max(10, (inkW - 6) * inkFraction);
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.roundRect(inkX + 3, inkY + 3, fillW, inkH - 6, 7);
+      ctx.fill();
+      ctx.fillStyle = '#bae6fd';
+      ctx.fillRect(inkX + 6, inkY + 4.5, Math.max(2, fillW - 6), 3);
     }
 
-    // 3 Stars Threshold Indicators
     const s1X = inkX + inkW * 0.3;
     const s2X = inkX + inkW * 0.6;
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.0;
     [s1X, s2X].forEach((sx) => {
       ctx.beginPath();
       ctx.moveTo(sx, inkY + 2);
@@ -1529,98 +1634,101 @@ export class SaveTheBean extends Game {
       ctx.stroke();
     });
 
-    // Star icons above ink bar
     const stars = inkFraction > 0.6 ? 3 : inkFraction > 0.3 ? 2 : 1;
-    ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+    ctx.font = "900 13px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     for (let i = 0; i < 3; i++) {
-      const starActive = i < stars;
-      ctx.fillStyle = starActive ? '#ffd166' : 'rgba(15, 23, 42, 0.22)';
-      ctx.fillText('⭐', inkX + 25 + i * 46, inkY - 7);
+      ctx.fillStyle = i < stars ? '#facc15' : 'rgba(15, 23, 42, 0.25)';
+      ctx.fillText('★', inkX + 24 + i * 48, inkY - 8);
     }
 
-    // Pencil Icon next to ink
-    ctx.font = "700 14px 'Fredoka', 'Outfit', sans-serif";
+    ctx.font = "900 14px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'right';
-    ctx.fillText('✏️', inkX - 4, inkY + 11);
+    ctx.fillText('✏️', inkX - 6, inkY + 11);
 
-    // 3. Tactile 3D Reset Button (↺)
+    // 3. #000-Bordered Comic Reset Button (`x: 410, y: 144`)
     const btn = this.resetBtn;
     ctx.save();
     ctx.translate(btn.x, btn.y);
-    drawToyShadow(ctx, 1, 4, btn.r * 0.95, btn.r * 0.85, 0.18);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 3, btn.r, 0, TAU);
+    ctx.fill();
     if (btn.pressed) ctx.scale(0.92, 0.92);
 
-    drawToySphere(ctx, 0, 0, btn.r, '#f8fafc', {
-      rimColor: '#334155',
-      lineWidth: 2,
-      shine: 0.65,
-    });
+    ctx.fillStyle = '#facc15';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, btn.r, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
 
-    ctx.fillStyle = '#0f172a';
-    ctx.font = "700 20px 'Fredoka', 'Outfit', sans-serif";
+    ctx.fillStyle = STYLE_TOKENS.ink;
+    ctx.font = "900 19px 'Fredoka', 'Outfit', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('↺', 0, 1);
     ctx.restore();
 
-    // 4. Circular Countdown Badge (Defending State)
+    // 4. Circular Defend Countdown Badge
     if (this.state === 'defending') {
       const timerSec = Math.max(0, this.defendTimer);
       const pulse = 1.0 + Math.max(0, (1 - (this.defendTimer % 1)) * 0.12);
 
       ctx.save();
-      ctx.translate(W / 2, 160);
-      drawToyShadow(ctx, 1, 5, 28 * pulse, 24 * pulse, 0.18);
+      ctx.translate(W / 2, 194);
       ctx.scale(pulse, pulse);
 
-      drawToySphere(ctx, 0, 0, 28, '#ffffff', {
-        rimColor: '#cbd5e1',
-        lineWidth: 2,
-        shine: 0.55,
-      });
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      ctx.beginPath();
+      ctx.arc(0, 4, 28, 0, TAU);
+      ctx.fill();
 
-      // Soft warning track ring
-      ctx.strokeStyle = 'rgba(239, 35, 60, 0.24)';
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 28, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(0, 0, 25, 0, TAU);
+      ctx.arc(0, 0, 22, 0, TAU);
       ctx.stroke();
 
-      // Circular Ring Progress
       const prog = timerSec / this.totalDefendTime;
-      ctx.strokeStyle = timerSec <= 2 ? '#ef233c' : '#4361ee';
-      ctx.lineWidth = 4.2;
+      ctx.strokeStyle = timerSec <= 2 ? '#ef4444' : '#2563eb';
+      ctx.lineWidth = 4.5;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.arc(0, 0, 25, -Math.PI / 2, -Math.PI / 2 + TAU * prog, false);
+      ctx.arc(0, 0, 22, -Math.PI / 2, -Math.PI / 2 + TAU * prog, false);
       ctx.stroke();
 
-      // Time Text (Seconds remaining)
       ctx.fillStyle = '#0f172a';
-      ctx.font = "700 18px 'Fredoka', 'Outfit', sans-serif";
+      ctx.font = "900 17px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${Math.ceil(timerSec)}s`, 0, 1);
-
       ctx.restore();
     }
 
-    // 5. Drawing Tutorial Prompt Pill
-    if (this.state === 'drawing' && this.points.length === 0) {
-      const bob = Math.sin(this.stateTimer * 4) * 4;
-      const py = 144 + bob;
-      drawToyBevelRect(ctx, W / 2 - 138, py, 276, 30, 15, '#1e293b', {
-        depth: 2.5,
-        rimColor: '#38bdf8',
-        lineWidth: 2,
-        gloss: true,
+    // 5. Drawing Prompt Pill (appears gently after opening Reel cue fades)
+    if (this.state === 'drawing' && this.points.length === 0 && this.stateTimer > 1.8) {
+      const bob = Math.sin(this.stateTimer * 4) * 3;
+      const py = 172 + bob;
+      drawComicPanel(ctx, W / 2 - 134, py, 268, 30, 15, '#0f172a', {
+        lineWidth: 2.6,
+        shadowDx: 0,
+        shadowDy: 3,
       });
-      ctx.fillStyle = '#ffffff';
-      ctx.font = "700 13px 'Fredoka', 'Outfit', sans-serif";
+      ctx.fillStyle = '#fde047';
+      ctx.font = "900 13px 'Fredoka', 'Outfit', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('DRAW TO SHIELD THE BEAN! ✏️', W / 2, py + 15);
+      ctx.fillText('DRAW A SHIELD ABOVE THE BEAN! ✏️', W / 2, py + 15);
     }
 
     ctx.restore();

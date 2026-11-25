@@ -1,6 +1,6 @@
-import { Game } from '../engine/Game.js';
-import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { Game } from '../../engine/Game.js';
+import { FX } from '../../engine/fx.js';
+import { drawBean } from '../../engine/bean.js';
 import {
   shadeColor,
   toyRim,
@@ -10,7 +10,7 @@ import {
   drawToyBevelRect,
   drawToyPill,
   drawToyEyes,
-} from '../engine/toyStyle.js';
+} from '../../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 
@@ -22,7 +22,7 @@ export class MeteorSmasher extends Game {
     hint: 'TAP meteors before they hit!',
     baseLikes: 2710,
     isPrestige: true,
-    parScore60s: 2200,
+    parScore60s: 2600,
     roundLen: 60,
     cue: 'TAP METEORS FAST!',
     prestigeCue: 'FASTER METEORS · TANKY BOSS!',

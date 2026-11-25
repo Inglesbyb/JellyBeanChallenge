@@ -42,59 +42,32 @@ export function handleAndroidBack(reel) {
     return;
   }
 
-  // 1. Mystery Pack Reveal Modal
-  const packRevealModal = $('#packRevealModal');
-  if (packRevealModal && !packRevealModal.classList.contains('hidden')) {
-    reel.closePackRevealModal();
-    return;
-  }
-
-  // 2. Game Packs Vault Modal
-  const packsModal = $('#packsModal');
-  if (packsModal && !packsModal.classList.contains('hidden')) {
-    reel.closePacksModal();
-    return;
-  }
-
-  // 3. Share Card Preview Modal
+  // 1. Share Card Preview Modal
   const shareModal = $('#shareModal');
   if (shareModal && !shareModal.classList.contains('hidden')) {
     reel.closeShareModal();
     return;
   }
 
-  // 2. Captain's Closet Modal
-  const closetModal = $('#closetModal');
-  if (closetModal && !closetModal.classList.contains('hidden')) {
-    reel.closeCloset();
-    return;
-  }
-
-  // 3. Commander Dossier Profile Modal
+  // 2. Commander Dossier Profile Modal
   const profileModal = $('#profileModal');
   if (profileModal && !profileModal.classList.contains('hidden')) {
     reel.closeProfile();
     return;
   }
 
-  // 4. Daily Gauntlet Summary Modal
-  const dailySummary = $('#dailySummaryModal');
-  if (dailySummary && !dailySummary.classList.contains('hidden')) {
-    reel.closeDailySummary();
-    return;
-  }
-
-  // 5. Settings / Pause Modal
+  // 3. Settings / Pause Modal
   const settingsModal = $('#settingsModal');
   if (settingsModal && !settingsModal.classList.contains('hidden')) {
     reel.closeSettings();
     return;
   }
 
-  // 5b. How To Play Modal
+  // 5b. Story / How To Play Comic Modal
   const howToModal = $('#howToModal');
   if (howToModal && !howToModal.classList.contains('hidden')) {
-    reel.closeHowTo();
+    if (typeof reel.handleHowToBack === 'function') reel.handleHowToBack();
+    else reel.closeHowTo();
     return;
   }
 

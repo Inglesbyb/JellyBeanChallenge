@@ -110,12 +110,13 @@ export class Motherload extends Game {
     hint: 'STEER & DRILL: A/D or ARROWS · FLY: W or UP · Return to surface to refuel & upgrade!',
     baseLikes: 8420,
     isPrestige: false,
-    parScore60s: 1900,
+    parScore60s: 1500,
     cue: 'DRILL ORE, REFUEL!',
-    prestigeCue: 'HIGHER FUEL BURN & HAZARDS!',
+    prestigeCue: 'TOUGHER ROCK · FASTER FUEL BURN!',
     scaling: {
-      fuelBurnMult:  { base: 1.0, rate: 0.16, cap: 1.45, mode: 'up', label: 'Fuel Burn' },
-      hazardDmgMult: { base: 1.0, rate: 0.18, cap: 1.65, mode: 'up', label: 'Hazard Dmg' },
+      fuelBurnMult:     { base: 1.0, rate: 0.22, cap: 1.85, mode: 'up', label: 'Fuel Burn' },
+      rockHardnessMult: { base: 1.0, rate: 0.22, cap: 1.75, mode: 'up', label: 'Rock Toughness' },
+      hazardDmgMult:    { base: 1.0, rate: 0.24, cap: 2.00, mode: 'up', label: 'Hazard Dmg' },
     },
   };
 
@@ -124,7 +125,9 @@ export class Motherload extends Game {
     this.score = score;
     this.grid = [];
     this.minedTiles = new Set();
+    this.initialBoulders = new Set();
     this.boulders = [];
+    this.boulderStepCd = 0;
 
     // Equipment Upgrades indices
     this.upgrades = {
@@ -179,26 +182,68 @@ export class Motherload extends Game {
     if (saved) {
       if (saved.upgrades) Object.assign(this.upgrades, saved.upgrades);
       if (saved.cash !== undefined) this.cash = saved.cash;
-      if (saved.cargo) this.cargo = [...saved.cargo];
+      if (Array.isArray(saved.cargo)) this.cargo = saved.cargo.map((c) => ({ ...c }));
       if (saved.inventory) Object.assign(this.inventory, saved.inventory);
       if (saved.pod) {
-        this.pod.x = saved.pod.x ?? this.pod.x;
-        this.pod.y = saved.pod.y ?? this.pod.y;
+        this.pod.x = Number.isFinite(saved.pod.x) ? saved.pod.x : this.pod.x;
+        this.pod.y = Number.isFinite(saved.pod.y) ? saved.pod.y : this.pod.y;
+        this.pod.vx = Number.isFinite(saved.pod.vx) ? saved.pod.vx : 0;
+        this.pod.vy = Number.isFinite(saved.pod.vy) ? saved.pod.vy : 0;
+        this.pod.dir = saved.pod.dir === -1 ? -1 : 1;
+        this.pod.grounded = typeof saved.pod.grounded === 'boolean' ? saved.pod.grounded : true;
+        this.pod.flying = Boolean(saved.pod.flying);
         const maxFuel = UPGRADES.fuelTank[this.upgrades.fuelTank].cap;
         const maxHull = UPGRADES.hull[this.upgrades.hull].hp;
-        this.pod.fuel = (saved.pod.fuel && saved.pod.fuel > 0.5) ? saved.pod.fuel : maxFuel;
-        this.pod.hull = (saved.pod.hull && saved.pod.hull > 0) ? saved.pod.hull : maxHull;
+        this.pod.fuel = Number.isFinite(saved.pod.fuel) ? clamp(saved.pod.fuel, 0, maxFuel) : maxFuel;
+        this.pod.hull = (Number.isFinite(saved.pod.hull) && saved.pod.hull > 0) ? Math.min(maxHull, saved.pod.hull) : maxHull;
+        if (saved.pod.drilling && typeof saved.pod.drilling === 'object') {
+          this.pod.drilling = { ...saved.pod.drilling };
+        }
       }
-      if (saved.mined) {
+      if (Array.isArray(saved.mined)) {
         for (const key of saved.mined) {
-          const [c, r] = key.split(',').map(Number);
-          // Protect station foundation from ever being mined/corrupted in saved data
+          let c;
+          let r;
+          if (typeof key === 'number' && Number.isInteger(key) && key >= 0) {
+            r = Math.floor(key / COLS);
+            c = key % COLS;
+          } else if (typeof key === 'string') {
+            [c, r] = key.split(',').map(Number);
+          } else {
+            continue;
+          }
+          if (!Number.isInteger(c) || !Number.isInteger(r) || r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+          // Protect station foundation and bedrock from ever being mined/corrupted in saved data
+          if (c === 0 || c === COLS - 1 || r === ROWS - 1) continue;
           if (r === SURFACE_ROW && ((c >= 2 && c <= 7) || (c >= 9 && c <= 13) || (c >= 15 && c <= 19) || (c >= 21 && c <= 26))) {
             continue;
           }
-          this.minedTiles.add(key);
+          const idx = r * COLS + c;
+          this.minedTiles.add(idx);
           if (this.grid[r] && this.grid[r][c] !== undefined) {
             this.grid[r][c] = 0;
+          }
+        }
+      }
+      if (saved.boulders && typeof saved.boulders === 'object') {
+        if (Array.isArray(saved.boulders.removed)) {
+          for (const idx of saved.boulders.removed) {
+            const r = Math.floor(idx / COLS);
+            const c = idx % COLS;
+            if (this.grid[r] && this.grid[r][c] === 32) {
+              this.grid[r][c] = 0;
+            }
+          }
+        }
+        if (Array.isArray(saved.boulders.added)) {
+          for (const idx of saved.boulders.added) {
+            const r = Math.floor(idx / COLS);
+            const c = idx % COLS;
+            if (this.grid[r] && r >= SURFACE_ROW && r < ROWS - 1 && c > 0 && c < COLS - 1) {
+              if (this.grid[r][c] !== 98 && this.grid[r][c] !== 99) {
+                this.grid[r][c] = 32;
+              }
+            }
           }
         }
       }
@@ -208,8 +253,20 @@ export class Motherload extends Game {
           if (this.grid[SURFACE_ROW]) this.grid[SURFACE_ROW][c] = 98;
         }
       }
+      // Discard stale drill target if that block is already empty
+      if (this.pod.drilling && !this.isSolid(this.pod.drilling.col, this.pod.drilling.row)) {
+        this.pod.drilling = null;
+      }
+      // Restore camera immediately so frame 1 opens on the exact depth/tunnel
+      if (saved.cam && Number.isFinite(saved.cam.x) && Number.isFinite(saved.cam.y)) {
+        this.camX = clamp(saved.cam.x, 0, COLS * TILE - this.W);
+        this.camY = clamp(saved.cam.y, -190, (ROWS - 1) * TILE - 450);
+      } else {
+        this.updateCamera(0, true);
+      }
       this.grace = 1.5;
     } else {
+      this.updateCamera(0, true);
       this.grace = 1.0;
     }
 
@@ -217,18 +274,39 @@ export class Motherload extends Game {
   }
 
   serialize() {
+    const removed = [];
+    const added = [];
+    for (let idx = 0; idx < ROWS * COLS; idx++) {
+      const r = Math.floor(idx / COLS);
+      const c = idx % COLS;
+      const isNow = this.grid[r][c] === 32;
+      const wasInit = this.initialBoulders.has(idx);
+      if (wasInit && !isNow) removed.push(idx);
+      else if (!wasInit && isNow) added.push(idx);
+    }
     return {
       upgrades: { ...this.upgrades },
       cash: this.cash,
-      cargo: [...this.cargo],
+      cargo: this.cargo.map((c) => ({ ...c })),
       inventory: { ...this.inventory },
       pod: {
-        x: Math.round(this.pod.x),
-        y: Math.round(this.pod.y),
+        x: +this.pod.x.toFixed(2),
+        y: +this.pod.y.toFixed(2),
+        vx: +this.pod.vx.toFixed(2),
+        vy: +this.pod.vy.toFixed(2),
+        dir: this.pod.dir,
+        grounded: this.pod.grounded,
+        flying: this.pod.flying,
+        drilling: this.pod.drilling ? { ...this.pod.drilling } : null,
         fuel: +this.pod.fuel.toFixed(2),
         hull: +this.pod.hull.toFixed(1),
       },
-      mined: Array.from(this.minedTiles).slice(-2500),
+      cam: {
+        x: +this.camX.toFixed(2),
+        y: +this.camY.toFixed(2),
+      },
+      mined: Array.from(this.minedTiles),
+      boulders: { removed, added },
     };
   }
 
@@ -285,6 +363,7 @@ export class Motherload extends Game {
         }
         if (depthFt > 350 && roll2 < 0.045) {
           this.grid[r][c] = 32; // Heavy Boulder
+          this.initialBoulders.add(r * COLS + c);
           continue;
         }
 
@@ -417,6 +496,7 @@ export class Motherload extends Game {
         this.finishDrilling(p.drilling.col, p.drilling.row);
         p.drilling = null;
       }
+      this.updateCamera(dt);
       this.fx.update(dt);
       return;
     }
@@ -548,16 +628,24 @@ export class Motherload extends Game {
     this.checkStationPrompts();
 
     // Smooth Camera Tracking: Anchor pod vertically at screen Y = 350
-    // When pod is at surface (p.y = 146): targetCamY = 146 - 350 = -204.
-    // Clamping minCamY to -190 gives clear headroom above surface buildings
+    this.updateCamera(dt);
+
+    this.fx.update(dt);
+  }
+
+  updateCamera(dt, instant = false) {
+    const p = this.pod;
     const targetCamX = clamp(p.x - this.W / 2, 0, COLS * TILE - this.W);
     const minCamY = -190;
     const maxCamY = (ROWS - 1) * TILE - 450;
     const targetCamY = clamp(p.y - 350, minCamY, maxCamY);
-    this.camX += (targetCamX - this.camX) * Math.min(1, dt * 8);
-    this.camY += (targetCamY - this.camY) * Math.min(1, dt * 6);
-
-    this.fx.update(dt);
+    if (instant) {
+      this.camX = targetCamX;
+      this.camY = targetCamY;
+    } else {
+      this.camX += (targetCamX - this.camX) * Math.min(1, dt * 8);
+      this.camY += (targetCamY - this.camY) * Math.min(1, dt * 6);
+    }
   }
 
   isSolid(c, r) {
@@ -577,7 +665,7 @@ export class Motherload extends Game {
     // Gas Pocket explosion check!
     if (tile === 30) {
       this.grid[r][c] = 0;
-      this.minedTiles.add(`${c},${r}`);
+      this.minedTiles.add(r * COLS + c);
       const rad = UPGRADES.radiator[this.upgrades.radiator].resist;
       const dmg = Math.round(35 * (1 - rad) * (this.diff.hazardDmgMult ?? 1));
       this.pod.hull = Math.max(0, this.pod.hull - dmg);
@@ -592,13 +680,14 @@ export class Motherload extends Game {
       return;
     }
 
-    // Hardness based on rock tier
+    // Hardness based on rock tier (scales up cleanly with Prestige)
     let hardness = 1.0;
     if (tile === 2) hardness = 1.6;
     else if (tile === 3) hardness = 2.8;
     else if (tile === 4) hardness = 4.5;
     else if (tile >= 10 && tile <= 19) hardness = 2.0;
     else if (tile === 32) hardness = 3.5; // Boulder
+    hardness *= (this.diff.rockHardnessMult ?? 1);
 
     this.pod.drilling = {
       col: c,
@@ -614,7 +703,7 @@ export class Motherload extends Game {
   finishDrilling(c, r) {
     const tile = this.grid[r][c];
     this.grid[r][c] = 0;
-    this.minedTiles.add(`${c},${r}`);
+    this.minedTiles.add(r * COLS + c);
 
     // Burst of rock crumble
     this.fx.burst(c * TILE + TILE / 2, r * TILE + TILE / 2, '#8d99ae', 10, 60, 0.3, 3);
@@ -640,6 +729,11 @@ export class Motherload extends Game {
 
   /* ------------------------------------------------ Boulders (Falling Rock Hazards) */
   updateBoulders(dt) {
+    const stepInterval = Math.max(0.06, 0.14 / (this.diff.hazardDmgMult ?? 1));
+    this.boulderStepCd -= dt;
+    if (this.boulderStepCd > 0) return;
+    this.boulderStepCd = stepInterval;
+
     const p = this.pod;
     const minR = Math.max(SURFACE_ROW, Math.floor((this.camY - 50) / TILE));
     const maxR = Math.min(ROWS - 2, Math.ceil((this.camY + this.H + 50) / TILE));
@@ -889,7 +983,7 @@ export class Motherload extends Game {
           if (r >= SURFACE_ROW && r < ROWS && c > 0 && c < COLS - 1) {
             if (this.grid[r][c] !== 99 && this.grid[r][c] !== 98) {
               this.grid[r][c] = 0;
-              this.minedTiles.add(`${c},${r}`);
+              this.minedTiles.add(r * COLS + c);
             }
           }
         }

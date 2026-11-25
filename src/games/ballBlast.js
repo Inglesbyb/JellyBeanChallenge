@@ -31,7 +31,7 @@ export class BallBlast extends Game {
     hint: 'DRAG left & right to DODGE bouncing boulders · BLAST them into pieces & COLLECT gold!',
     baseLikes: 8940,
     isPrestige: false,
-    parScore60s: 6400,
+    parScore60s: 4000,
     roundLen: 90,
     cue: 'DODGE & BLAST BOULDERS!',
     prestigeCue: 'TOUGHER FASTER BOULDERS!',

@@ -1,6 +1,6 @@
-import { Game } from '../engine/Game.js';
-import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { Game } from '../../engine/Game.js';
+import { FX } from '../../engine/fx.js';
+import { drawBean } from '../../engine/bean.js';
 import {
   shadeColor,
   toyRim,
@@ -10,7 +10,7 @@ import {
   drawToyBevelRect,
   drawToyEyes,
   traceRoundRect,
-} from '../engine/toyStyle.js';
+} from '../../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const LANES = [95, 225, 355];
@@ -23,7 +23,7 @@ export class RhythmDash extends Game {
     hint: 'TAP lanes for beats · dodge skulls!',
     baseLikes: 2650,
     isPrestige: false,
-    parScore60s: 2800,
+    parScore60s: 3600,
     roundLen: 60,
     cue: 'TAP ON THE BEAT!',
     prestigeCue: 'HIGHER BPM · MORE SKULLS!',

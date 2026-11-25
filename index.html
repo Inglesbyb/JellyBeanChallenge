@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#05050c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Jelly Bean: 60s Challenge — The Arcade Gauntlet</title>
-    <meta name="description" content="Jelly Bean: 60s Challenge. Start with 20 arcade mini-games, 60 seconds each. Earn normalized Reel Points to unlock new 5-game mystery packs!" />
+    <meta name="description" content="Jelly Bean: 60s Challenge. Play 21 arcade mini-games, 60 seconds each. Conquer World 1 and test your stamina in Endless Gauntlet!" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
     <link rel="apple-touch-icon" href="/icon-512.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fredoka:wght@700&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app">
@@ -24,7 +24,6 @@
         <!-- HUD -->
         <div id="hud" class="hidden">
           <div class="hud-top">
-            <div class="daily-hud-badge hidden" id="dailyHudBadge">📅 DAILY 1/10</div>
             <div class="score-pill"><span class="bean-ico">🫘</span><span id="score">0</span><small>PTS</small></div>
             <button class="hud-btn" id="btnPause" aria-label="Pause game" title="Pause Game">⏸</button>
           </div>
@@ -48,13 +47,13 @@
           <div class="riw-deltas" id="riwDeltas"></div>
         </div>
 
-        <!-- Menu (Mario-Style Toy Courtyard Plaza) -->
+        <!-- Menu (HD Flash Cel-Cartoon Sunburst Plaza) -->
         <section id="menu" class="overlay plaza-theme">
           <div class="plaza-backdrop" aria-hidden="true"></div>
-          <canvas id="plazaCanvas" width="450" height="800" aria-label="Interactive Bean Courtyard"></canvas>
+          <canvas id="plazaCanvas" width="450" height="800" aria-label="Interactive Bean Sunburst Stage"></canvas>
 
           <div class="menu-inner plaza-lobby">
-            <!-- Top Resource Bar -->
+            <!-- Top Open-Sky Resource Bar -->
             <header class="home-top-bar plaza-top-bar">
               <button type="button" class="home-profile-chip plaza-pill" id="btnOpenProfile" aria-label="Open Player Profile">
                 <span class="home-avatar-ring" id="menuPlayerAvatar">
@@ -62,114 +61,237 @@
                 </span>
                 <span class="home-profile-meta">
                   <span class="home-player-name" id="menuPlayerName">Bean #429</span>
+                  <span class="home-rank-sep" aria-hidden="true">·</span>
                   <span class="home-rank-badge" id="menuPlayerRankChip">Sprout</span>
                 </span>
               </button>
 
               <div class="home-res-group">
-                <button type="button" class="home-res-pill plaza-pill stars" id="btnPlazaStars" aria-label="Open World 1 Map">
-                  <span class="hrp-ico">⭐</span>
-                  <span class="hrp-val" id="menuStarsVal">0/15</span>
-                </button>
-                <button type="button" class="home-res-pill plaza-pill rp" id="btnRpPill" aria-label="View Reel Points and Vault">
-                  <span class="hrp-ico">💎</span>
-                  <span class="hrp-val" id="menuRpVal">0</span>
-                </button>
-                <button type="button" class="home-res-pill plaza-pill games" id="btnGamesPill" aria-label="Unlocked Mini-Games">
-                  <span class="hrp-ico">🎮</span>
-                  <span class="hrp-val" id="menuGamesVal">20/25</span>
-                </button>
-                <button type="button" class="home-info-btn plaza-pill" id="btnHowToPlay" aria-label="How to Play" title="How to Play">i</button>
+                <div class="home-res-row-top">
+                  <button type="button" class="home-res-pill plaza-sky-stat stars" id="btnPlazaStars" aria-label="Open World 1 Map">
+                    <svg class="wbl-ico" viewBox="0 0 32 32" aria-hidden="true"><polygon points="16,2 20.5,11 30.5,12.4 23.2,19.4 25,29.5 16,24.6 7,29.5 8.8,19.4 1.5,12.4 11.5,11" fill="#facc15" stroke="#000" stroke-width="2.6" stroke-linejoin="round"/><polygon points="16,5 18.8,12 12,13.5" fill="#fef08a"/></svg>
+                    <span class="hrp-val" id="menuStarsVal">0/18</span>
+                  </button>
+                  <button type="button" class="home-res-pill plaza-sky-stat rp" id="btnRpPill" aria-label="View Reel Points and Profile">
+                    <svg class="wbl-ico" viewBox="0 0 32 32" aria-hidden="true"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="#38bdf8" stroke="#000" stroke-width="2.6" stroke-linejoin="round"/><polygon points="8,4 24,4 20,13 12,13" fill="#bae6fd"/><polygon points="2,13 12,13 16,29" fill="#0284c7" opacity="0.5"/></svg>
+                    <span class="hrp-val" id="menuRpVal">0</span>
+                  </button>
+                </div>
+                <div class="home-res-row-sub">
+                  <button type="button" class="home-res-pill plaza-sky-stat games" id="btnGamesPill" aria-label="Available Mini-Games">
+                    <svg class="wbl-ico wbl-pad" viewBox="0 0 36 26" aria-hidden="true"><rect x="3" y="4" width="30" height="18" rx="8" fill="#e2e8f0" stroke="#000" stroke-width="2.5"/><path d="M9 13h6M12 10v6" stroke="#000" stroke-width="2.4" stroke-linecap="round"/><circle cx="24" cy="11" r="2" fill="#ef4444" stroke="#000" stroke-width="1"/><circle cx="28" cy="14.5" r="2" fill="#22c55e" stroke="#000" stroke-width="1"/></svg>
+                    <span class="hrp-val" id="menuGamesVal">21/21</span>
+                  </button>
+                </div>
+                <div class="home-res-row-info">
+                  <button type="button" class="home-info-btn plaza-sky-info" id="btnHowToPlay" aria-label="How to Play" title="How to Play Comic Guide">
+                    <span class="psi-q">?</span><span class="psi-lbl">HOW TO</span>
+                  </button>
+                </div>
               </div>
             </header>
 
-            <!-- Chunky Arcade Logo in Sky -->
+            <!-- Chunky Yellow/Orange Weebl Arcade Logo in Sky -->
             <div class="plaza-title-wrap">
-              <h1 class="logo plaza-logo">JELLY BEAN<br /><span class="logo-sub">60s CHALLENGE</span></h1>
+              <h1 class="logo plaza-logo"><span class="logo-line1">JELLY</span><span class="logo-line2">BEAN</span><span class="logo-sub"><span class="sub-w">60s</span> <span class="sub-o">CHALLENGE</span></span></h1>
             </div>
 
-            <!-- Interactive Diorama Hotspots (synced 1:1 with 450x800 plaza-bg.jpg) -->
+            <!-- Interactive Stage Hotspots (synced 1:1 with #plazaCanvas props) -->
             <div class="plaza-stage-hits" aria-label="Plaza Landmarks">
-              <!-- Emerald Arch: World 1 Overworld -->
               <button type="button" class="plaza-landmark lm-world1" id="btnPlazaWorld1" aria-label="Enter World 1 Map">
                 <span class="plaza-sign sign-green">WORLD 1</span>
                 <span class="plaza-sign-sub" id="plazaWorldSub">1-1 · 4 REELS</span>
               </button>
 
-              <!-- Floating Pink Mystery Cube: Daily Challenge -->
-              <button type="button" class="plaza-landmark lm-daily" id="btnPlazaDaily" aria-label="Play Daily Gauntlet">
-                <span class="plaza-sign sign-gold">DAILY <span id="plazaDailyBadge"></span></span>
-              </button>
-
-              <!-- Striped Wardrobe Tent: Bean Closet -->
-              <button type="button" class="plaza-landmark lm-closet" id="btnOpenCloset" aria-label="Open Bean Closet">
-                <span class="plaza-sign sign-cyan">CLOSET</span>
-              </button>
-
-              <!-- Sapphire Treasure Chest: Packs Vault -->
-              <button type="button" class="plaza-landmark lm-vault" id="btnOpenVault" aria-label="Open Vault and Mystery Packs">
-                <span class="plaza-sign sign-blue">VAULT</span>
-                <span class="pack-dot hidden" id="menuPackDot">!</span>
-              </button>
-
-              <!-- Center Golden Stone Pedestal: Tap Hero Bean -->
               <button type="button" class="plaza-bean-hit" id="homeBeanBtn" aria-label="Tap your Jelly Bean">
                 <span class="sr-only">Tap Jelly Bean</span>
               </button>
+
+              <button type="button" class="plaza-landmark lm-world2" id="btnPlazaWorld2" aria-label="World 2 Coming Soon">
+                <span class="sr-only">World 2 Coming Soon</span>
+              </button>
             </div>
 
-            <!-- Bottom Turquoise Sea Action Area -->
+            <!-- Compact 3D Weebl Arcade Console Dock -->
             <div class="plaza-bottom-deck">
-              <!-- Sleek Next Pack Milestone Strip -->
-              <div class="pack-progress-card plaza-vault-strip" id="packProgressCard" role="button" tabindex="0" aria-label="Open Mystery Packs Progress">
-                <span class="pvs-title" id="packCardTitle">🎁 ARCADE VAULT I</span>
-                <div class="pack-bar-bg">
-                  <div class="pack-bar-fill" id="packCardBarFill" style="width: 0%;"></div>
-                </div>
-                <span class="pvs-pct" id="packCardPct">0%</span>
-                <span class="pvs-pts" id="packCardPts">0 / 25,000 RP</span>
-              </div>
-
-              <!-- Primary CTA Row: World 1 Map + Quick Endless -->
               <div class="plaza-cta-row">
                 <button type="button" class="btn plaza-world-btn" id="btnEnterWorld1">
-                  <span class="pwb-main">🗺️ WORLD 1 MAP</span>
-                  <span class="pwb-sub" id="btnEnterWorld1Sub">NEXT: 1-1 SNACK STREET</span>
+                  <svg class="wbl-cta-ico wbl-map-ico" viewBox="0 0 96 86" aria-hidden="true">
+                    <!-- Chunky Weebl Folded Treasure Island Map Badge -->
+                    <polygon points="10,20 35,10 62,18 86,8 86,68 62,78 35,70 10,80" fill="#fef3c7" stroke="#000" stroke-width="5.2" stroke-linejoin="round"/>
+                    <polygon points="35,10 62,18 62,78 35,70" fill="#fde68a"/>
+                    <polygon points="62,18 86,8 86,68 62,78" fill="#fcd34d" opacity="0.55"/>
+                    <path d="M16 25l16-6 27 8 21-8v44l-21 8-27-8-16 6z" fill="#4ade80" stroke="#000" stroke-width="3.2" stroke-linejoin="round"/>
+                    <path d="M16 51c12-10 24 8 38 1 11-5 19-14 26-10v21l-21 8-27-8-16 6z" fill="#38bdf8" opacity="0.88"/>
+                    <line x1="35" y1="12" x2="35" y2="68" stroke="#000" stroke-width="2.4" opacity="0.35"/>
+                    <line x1="62" y1="19" x2="62" y2="76" stroke="#000" stroke-width="2.4" opacity="0.35"/>
+                    <path d="M25 56 Q37 32 52 40 T70 30" fill="none" stroke="#fff7ed" stroke-width="4.2" stroke-linecap="round" stroke-dasharray="6 7"/>
+                    <path d="M25 56 Q37 32 52 40 T70 30" fill="none" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="6 7"/>
+                    <path d="M70 12c-7 0-12 5.2-12 11.8 0 8.5 12 18.2 12 18.2s12-9.7 12-18.2C82 17.2 77 12 70 12z" fill="#ef4444" stroke="#000" stroke-width="4" stroke-linejoin="round"/>
+                    <polygon points="70,16.5 72.2,21.4 77.5,22 73.5,25.6 74.6,30.8 70,28.1 65.4,30.8 66.5,25.6 62.5,22 67.8,21.4" fill="#fef08a" stroke="#000" stroke-width="1.8" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="pwb-copy">
+                    <span class="pwb-main">WORLD 1</span>
+                    <span class="pwb-sub" id="btnEnterWorld1Sub">▶ MAP · 1-1</span>
+                  </span>
                 </button>
-                <button type="button" class="btn plaza-endless-btn" id="btnPlay" title="Classic Endless Gauntlet across all unlocked reels">
-                  <span>♾️ ENDLESS</span>
-                  <small id="btnEndlessSub">20 REELS</small>
+                <button type="button" class="btn plaza-endless-btn is-locked" id="btnPlay" title="Play World 1 and defeat Lord Brim (1-6) to unlock Endless Mode!">
+                  <svg class="wbl-cta-ico wbl-inf" viewBox="0 0 108 72" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="wblInfGrad" x1="0%" y1="30%" x2="100%" y2="70%">
+                        <stop offset="0%" stop-color="#fde047"/>
+                        <stop offset="35%" stop-color="#fb7185"/>
+                        <stop offset="68%" stop-color="#60a5fa"/>
+                        <stop offset="100%" stop-color="#22d3ee"/>
+                      </linearGradient>
+                    </defs>
+                    <!-- Chunky 3D Cel-Shaded Rainbow Infinity Loop -->
+                    <path d="M28 16C16.5 16 9 23.8 9 36s7.5 20 19 20c12 0 19.5-12 26-20 6.5-8 14-20 26-20 11.5 0 19 7.8 19 20s-7.5 20-19 20c-12 0-19.5-12-26-20-6.5-8-14-20-26-20z" fill="none" stroke="#000000" stroke-width="21" stroke-linejoin="round" stroke-linecap="round"/>
+                    <path d="M28 16C16.5 16 9 23.8 9 36s7.5 20 19 20c12 0 19.5-12 26-20 6.5-8 14-20 26-20 11.5 0 19 7.8 19 20s-7.5 20-19 20c-12 0-19.5-12-26-20-6.5-8-14-20-26-20z" fill="none" stroke="url(#wblInfGrad)" stroke-width="12.5" stroke-linejoin="round" stroke-linecap="round"/>
+                    <path d="M18 27c2.5-3.8 6.5-5.8 10.8-5.8M70 26c3-3 7-4.8 11.2-4.8" fill="none" stroke="#ffffff" stroke-width="3.6" stroke-linecap="round" opacity="0.92"/>
+                    <polygon points="88,7 90.2,12 95.5,14 90.2,16 88,21 85.8,16 80.5,14 85.8,12" fill="#fef08a" stroke="#000" stroke-width="2.2" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="peb-copy">
+                    <span class="peb-lbl">ENDLESS</span>
+                    <small id="btnEndlessSub">🔒 BEAT LORD BRIM</small>
+                  </span>
                 </button>
               </div>
 
-              <!-- Bottom Toy Pill Nav -->
               <nav class="plaza-bottom-nav" aria-label="Quick Plaza Actions">
-                <button type="button" class="pnav-btn" id="btnOpenPacks"><span>📦</span><small>Packs</small></button>
-                <button type="button" class="pnav-btn" id="btnOpenQuestsPlaza"><span>📜</span><small>Quests</small><span class="nav-dot hidden" id="plazaQuestDot">!</span></button>
-                <button type="button" class="pnav-btn active" id="btnNavHome"><span>🏝️</span><small>Plaza</small></button>
-                <button type="button" class="pnav-btn" id="btnNavDaily"><span>🎲</span><small>Daily</small></button>
-                <button type="button" class="pnav-btn" id="btnMenuSettings"><span>⚙️</span><small>Menu</small></button>
+                <button type="button" class="pnav-btn" id="btnOpenQuestsPlaza">
+                  <svg class="wbl-nav-ico" viewBox="0 0 96 84" aria-hidden="true">
+                    <!-- Chunky Wood Clipboard, Cream Scroll & Pencil -->
+                    <g transform="rotate(-7 44 44)">
+                      <rect x="14" y="13" width="52" height="62" rx="9" fill="#b45309" stroke="#000" stroke-width="4.8"/>
+                      <rect x="14" y="59" width="52" height="16" rx="7" fill="#78350f"/>
+                      <rect x="14" y="13" width="52" height="62" rx="9" fill="none" stroke="#000" stroke-width="4.8"/>
+                      <rect x="21" y="21" width="38" height="47" rx="4" fill="#fefce8" stroke="#000" stroke-width="3.6"/>
+                      <rect x="27" y="7" width="26" height="12" rx="5" fill="#cbd5e1" stroke="#000" stroke-width="4.2"/>
+                      <path d="M32 10h16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+                      <path d="M26 32l4 4 7-8M26 44l4 4 7-8M26 56l4 4 7-8" fill="none" stroke="#16a34a" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M41 33h12M41 45h12M41 57h9" stroke="#94a3b8" stroke-width="3.6" stroke-linecap="round"/>
+                    </g>
+                    <g transform="rotate(34 70 46)">
+                      <rect x="63" y="22" width="14" height="34" rx="2.5" fill="#facc15" stroke="#000" stroke-width="4.2"/>
+                      <rect x="63" y="15" width="14" height="9" rx="2.5" fill="#fb7185" stroke="#000" stroke-width="4.2"/>
+                      <polygon points="63,56 77,56 70,69" fill="#fde68a" stroke="#000" stroke-width="4.2" stroke-linejoin="round"/>
+                      <polygon points="68,65 72,65 70,69" fill="#000"/>
+                      <line x1="67" y1="26" x2="67" y2="52" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round"/>
+                    </g>
+                  </svg>
+                  <small>Quests</small><span class="nav-dot hidden" id="plazaQuestDot">!</span>
+                </button>
+                <button type="button" class="pnav-btn active" id="btnNavHome">
+                  <svg class="wbl-nav-ico" viewBox="0 0 96 84" aria-hidden="true">
+                    <!-- Chunky Weebl Plaza Pavilion with Sun-Yellow Door & Red/Cream Stripes -->
+                    <polygon points="10,41 26,22 70,22 86,41" fill="#4ade80" stroke="#000" stroke-width="4.8" stroke-linejoin="round"/>
+                    <rect x="17" y="40" width="62" height="32" rx="4" fill="#fef3c7" stroke="#000" stroke-width="4.8"/>
+                    <rect x="17" y="61" width="62" height="11" fill="#fde68a"/>
+                    <polygon points="22,38 48,11 74,38" fill="#ef4444" stroke="#000" stroke-width="4.8" stroke-linejoin="round"/>
+                    <polygon points="36,38 48,11 60,38" fill="#ffffff" stroke="#000" stroke-width="3.4" stroke-linejoin="round"/>
+                    <line x1="48" y1="4" x2="48" y2="14" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+                    <polygon points="48,4 64,9 48,14" fill="#38bdf8" stroke="#000" stroke-width="3.2" stroke-linejoin="round"/>
+                    <path d="M38 72V54a10 10 0 0 1 20 0v18z" fill="#0f172a" stroke="#000" stroke-width="4"/>
+                    <path d="M41 71V56a7 7 0 0 1 14 0v15z" fill="#38bdf8" opacity="0.35"/>
+                    <rect x="10" y="69" width="76" height="8" rx="3" fill="#e2e8f0" stroke="#000" stroke-width="4.2"/>
+                  </svg>
+                  <small>Plaza</small>
+                </button>
+                <button type="button" class="pnav-btn" id="btnMenuSettings">
+                  <svg class="wbl-nav-ico" viewBox="0 0 96 84" aria-hidden="true">
+                    <!-- Chunky 3D Cel-Shaded Sky-Silver & Gold Candy Menu Bars -->
+                    <rect x="14" y="15" width="68" height="15" rx="7.5" fill="#fbbf24" stroke="#000" stroke-width="4.8"/>
+                    <rect x="18" y="18" width="44" height="4.5" rx="2.2" fill="#fef08a"/>
+                    <rect x="14" y="36" width="68" height="15" rx="7.5" fill="#38bdf8" stroke="#000" stroke-width="4.8"/>
+                    <rect x="18" y="39" width="44" height="4.5" rx="2.2" fill="#bae6fd"/>
+                    <rect x="14" y="57" width="68" height="15" rx="7.5" fill="#e2e8f0" stroke="#000" stroke-width="4.8"/>
+                    <rect x="18" y="60" width="44" height="4.5" rx="2.2" fill="#ffffff"/>
+                  </svg>
+                  <small>Menu</small>
+                </button>
               </nav>
             </div>
           </div>
         </section>
 
-        <!-- How To Play Modal -->
+        <!-- Story & How To Play Comic Modal (Panel-by-Panel, click NEXT to advance) -->
         <section id="howToModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="howToTitle">
-          <div class="settings-card howto-card">
-            <div class="settings-header">
-              <div class="settings-title-group">
-                <div class="eyebrow">ARCADE RULES</div>
-                <h2 class="settings-title" id="howToTitle">HOW TO PLAY</h2>
+          <div class="settings-card comic-modal-card">
+            <div class="comic-modal-head">
+              <div class="comic-title-col">
+                <div class="eyebrow" id="comicEyebrow">THE STORY SO FAR</div>
+                <h2 class="settings-title comic-modal-title" id="howToTitle">WHO ROBBED ME BIRD?!</h2>
               </div>
               <button class="modal-close" id="btnHowToClose" aria-label="Close how to play">✕</button>
             </div>
+
+            <div class="comic-scope-tabs" role="tablist" aria-label="Comic sections">
+              <button type="button" class="comic-tab-btn active" id="btnComicTabStory" aria-pressed="true">📖 STORY (1–6)</button>
+              <button type="button" class="comic-tab-btn" id="btnComicTabHowTo" aria-pressed="false">🎮 HOW TO PLAY</button>
+            </div>
+
+            <div class="comic-progress-bar" id="comicProgressBar" aria-hidden="true"></div>
+
+            <div class="comic-stage-wrap">
+              <article class="comic-stage" id="comicStage" aria-live="polite">
+                <img id="comicPanelArt" class="comic-panel-art" src="/assets/story/panel_01.jpg" alt="" />
+                <div class="comic-vignette" aria-hidden="true"></div>
+                <div id="comicCaptionBanner" class="comic-caption"></div>
+                <div id="comicBubblesLayer" class="comic-bubbles-layer"></div>
+                <div id="comicRulesOverlay" class="comic-rules-overlay hidden"></div>
+              </article>
+            </div>
+
+            <footer class="comic-nav-row">
+              <button type="button" class="btn ghost comic-nav-btn" id="btnComicPrev">◀ BACK</button>
+              <div class="comic-counter" id="comicCounter">1 / 6</div>
+              <button type="button" class="btn comic-nav-btn primary" id="btnComicNext">NEXT ▶</button>
+            </footer>
+          </div>
+        </section>
+
+        <!-- Endless Locked Modal -->
+        <section id="endlessLockedModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="endlessLockedTitle">
+          <div class="settings-card howto-card lock-card">
+            <div class="settings-header">
+              <div class="settings-title-group">
+                <div class="eyebrow">ENDLESS GAUNTLET LOCKED 🔒</div>
+                <h2 class="settings-title" id="endlessLockedTitle">PLAY WORLD 1 FIRST!</h2>
+              </div>
+              <button class="modal-close" id="btnEndlessLockedClose" aria-label="Close Endless locked notice">✕</button>
+            </div>
+            <p class="lock-card-msg" id="endlessLockStatus">You need to play through World 1 and defeat Lord Brim (Stage 1-6) to unlock Endless Mode!</p>
             <ul class="rules howto-rules">
-              <li><b>⏱</b><span><em>60s per game</em> — survive the clock to advance</span></li>
-              <li><b>💀</b><span><em>Die = game cut</em> — survivors keep rolling</span></li>
-              <li><b>🎁</b><span><em>Earn Reel Points (RP)</em> — unlock 5-game mystery packs &amp; Closet drip</span></li>
+              <li><b>🗺️</b><span><em>Work through World 1</em> — clear stages 1-1 to 1-5 on the map</span></li>
+              <li><b>👑</b><span><em>Defeat Lord Brim (1-6)</em> — shatter his citadel to unlock all 21 Endless Reels</span></li>
             </ul>
-            <button class="btn" id="btnHowToDone">GOT IT ✓</button>
+            <div class="lock-cta-group">
+              <button type="button" class="btn" id="btnEndlessGoWorld1">🗺️ PLAY WORLD 1 ▶</button>
+              <button type="button" class="btn ghost" id="btnEndlessLockDone">GOT IT</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- World 2 Coming Soon Modal -->
+        <section id="world2SoonModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="world2SoonTitle">
+          <div class="settings-card howto-card lock-card">
+            <div class="settings-header">
+              <div class="settings-title-group">
+                <div class="eyebrow">NEXT REALM IN DEVELOPMENT 🌀</div>
+                <h2 class="settings-title" id="world2SoonTitle">WORLD 2 COMING SOON!</h2>
+              </div>
+              <button class="modal-close" id="btnWorld2SoonClose" aria-label="Close World 2 notice">✕</button>
+            </div>
+            <p class="lock-card-msg" id="world2SoonStatus">New Frost &amp; Cyber realms are in the works! Play World 1 and defeat Lord Brim (1-6) to unlock Endless Mode while World 2 arrives.</p>
+            <ul class="rules howto-rules">
+              <li><b>🧪</b><span><em>Brand-new minigames brewing</em> — fresh World 2 challenges being built in the Bank</span></li>
+              <li><b>👑</b><span><em>Carry your Crown Rank forward</em> — Stars, Quests &amp; RP keep building cleanly</span></li>
+            </ul>
+            <div class="lock-cta-group">
+              <button type="button" class="btn" id="btnWorld2SoonGoW1">🗺️ OPEN WORLD 1 ▶</button>
+              <button type="button" class="btn ghost" id="btnWorld2SoonDone">GOT IT</button>
+            </div>
           </div>
         </section>
 
@@ -183,15 +305,6 @@
               <div class="mult-label">SURVIVAL MULTIPLIER</div>
               <div class="mult-val" id="sumMult">×1.0</div>
               <div class="mult-sub" id="sumSub"></div>
-            </div>
-            <div class="summary-pack-box" id="summaryPackBox">
-              <div class="spb-top">
-                <span id="sumPackTitle">🎁 MYSTERY PACK I</span>
-                <span id="sumPackPts">0 / 25,000 RP</span>
-              </div>
-              <div class="pack-bar-bg">
-                <div class="pack-bar-fill" id="sumPackBarFill" style="width: 0%;"></div>
-              </div>
             </div>
             <div class="summary-world-box hidden" id="summaryWorldBox">
               <div class="swb-head">
@@ -269,6 +382,15 @@
                 </label>
               </div>
 
+              <!-- Story & Rules Comic Replay -->
+              <div class="setting-row">
+                <div class="setting-label-col">
+                  <div class="setting-name">📖 Story &amp; How To Play</div>
+                  <div class="setting-desc">Watch the Scouse comic intro &amp; survival guide</div>
+                </div>
+                <button type="button" class="setting-link-btn" id="btnOpenStoryFromSettings">WATCH ▶</button>
+              </div>
+
               <!-- Privacy Policy Link (TICKET-09) -->
               <div class="setting-row">
                 <div class="setting-label-col">
@@ -324,18 +446,6 @@
               </div>
             </div>
 
-            <!-- Captain Bean Mascot Closet Shortcut -->
-            <button type="button" class="btn-profile-closet" id="btnProfileOpenCloset" aria-label="Customize Mascot Skins and Hats">
-              <div class="bpc-left">
-                <span class="bpc-icon">🎩</span>
-                <div class="bpc-text">
-                  <div class="bpc-title">CAPTAIN'S CLOSET</div>
-                  <div class="bpc-sub" id="profileClosetSummary">Cyan · No Hat</div>
-                </div>
-              </div>
-              <span class="bpc-arrow">CUSTOMIZE →</span>
-            </button>
-
             <!-- Rank Tier Card -->
             <div class="rank-card">
               <div class="rank-top">
@@ -376,14 +486,6 @@
                 <div class="stat-num" id="statRunsAttempted">0</div>
                 <div class="stat-lbl">RUNS PLAYED ⚔️</div>
               </div>
-              <div class="stat-card">
-                <div class="stat-num" id="statDailyStreak">🔥 0</div>
-                <div class="stat-lbl">DAILY STREAK</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-num" id="statDailyMedals">🥇 0</div>
-                <div class="stat-lbl">DAILY MEDALS</div>
-              </div>
             </div>
 
             <!-- Favorite / Top Arcade Game -->
@@ -397,71 +499,7 @@
 
             <div class="profile-actions-row">
               <button class="btn" id="btnProfileDone">DONE ✓</button>
-              <button class="btn ghost share-btn" id="btnShareProfile">📸 SHARE POSTER</button>
             </div>
-          </div>
-        </section>
-
-        <!-- Captain Bean Mascot Closet Modal (TICKET-03) -->
-        <section id="closetModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="closetTitle">
-          <div class="closet-card">
-            <div class="closet-header">
-              <div class="closet-title-group">
-                <div class="eyebrow">MASCOT CUSTOMIZER</div>
-                <h2 class="closet-title" id="closetTitle">CAPTAIN'S CLOSET</h2>
-              </div>
-              <button class="modal-close" id="btnClosetClose" aria-label="Close closet">✕</button>
-            </div>
-
-            <!-- Live Animated Mascot Preview Stage -->
-            <div class="closet-stage">
-              <canvas id="closetCanvas" width="220" height="170"></canvas>
-              <div class="closet-stage-info">
-                <div class="stage-skin-pill" id="closetActivePill">
-                  <span class="sap-skin" id="closetSkinLabel">Electric Cyan</span>
-                  <span class="sap-sep">·</span>
-                  <span class="sap-hat" id="closetHatLabel">No Hat</span>
-                </div>
-                <div class="closet-balance-pill" id="closetBalancePill">🌟 0 LIFETIME PTS</div>
-              </div>
-            </div>
-
-            <!-- Tab Switcher: Skins vs Hats -->
-            <div class="closet-tabs">
-              <button type="button" class="closet-tab active" id="tabSkins" data-tab="skins">🎨 SKINS (<span id="skinsCount">8</span>)</button>
-              <button type="button" class="closet-tab" id="tabHats" data-tab="hats">🎩 HATS (<span id="hatsCount">8</span>)</button>
-            </div>
-
-            <!-- Item Grid -->
-            <div class="closet-grid-container">
-              <div class="closet-grid" id="closetGrid"></div>
-            </div>
-
-            <!-- Bottom Done Button -->
-            <button class="btn" id="btnClosetDone">EQUIP & EXIT ✓</button>
-          </div>
-        </section>
-
-        <!-- Daily Challenge Summary Modal (TICKET-04) -->
-        <section id="dailySummaryModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="dsTitle">
-          <div class="daily-summary-card">
-            <div class="eyebrow" id="dsEyebrow">DAILY SEED COMPLETED</div>
-            <div class="ds-medal-icon" id="dsMedalIcon">🥇</div>
-            <h2 class="ds-title" id="dsTitle">GOLD MEDALIST!</h2>
-            <div class="ds-score-banner">
-              <span class="ds-score-val" id="dsScoreVal">68,450</span>
-              <span class="ds-score-lbl">DAILY PTS</span>
-            </div>
-            
-            <div class="ds-streak-box">
-              <div class="ds-streak-val" id="dsStreakVal">🔥 1 DAY</div>
-              <div class="ds-streak-desc" id="dsStreakDesc">Daily Gauntlet streak kept alive!</div>
-            </div>
-
-            <div class="ds-chips-row" id="dsChipsRow"></div>
-
-            <button class="btn" id="btnDailyDone">CLAIM DAILY REWARDS ✓</button>
-            <button class="btn ghost share-btn" id="btnShareDaily">📸 SHARE DAILY RECORD</button>
           </div>
         </section>
 
@@ -492,88 +530,75 @@
           </div>
         </section>
 
-        <!-- Game Packs Vault Modal -->
-        <section id="packsModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="packsTitle">
-          <div class="packs-card">
-            <div class="profile-header">
-              <div class="profile-title-group">
-                <div class="eyebrow">PROGRESSION VAULT</div>
-                <h2 class="profile-title" id="packsTitle">GAME PACKS</h2>
-              </div>
-              <button class="modal-close" id="btnPacksClose" aria-label="Close packs vault">✕</button>
-            </div>
-
-            <div class="packs-balance-pill" id="packsBalancePill">🌟 0 REEL PTS · 20/25 GAMES UNLOCKED</div>
-            <div class="packs-list" id="packsList"></div>
-
-            <button class="btn" id="btnPacksDone">DONE ✓</button>
-          </div>
-        </section>
-
-        <!-- Mystery Pack Unlock & Reveal Modal -->
-        <section id="packRevealModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="packRevealTitle">
-          <div class="pack-reveal-card">
-            <div class="eyebrow" id="packRevealEyebrow">MYSTERY PACK UNLOCKED!</div>
-            <h2 class="pack-reveal-title" id="packRevealTitle">ARCADE VAULT I</h2>
-            <p class="pack-reveal-sub" id="packRevealSub">Tap each mystery card to reveal your 5 new reel games!</p>
-
-            <div class="pack-reveal-grid" id="packRevealGrid"></div>
-
-            <button class="btn" id="btnPackRevealAction">REVEAL ALL ✨</button>
-          </div>
-        </section>
-
-        <!-- World 1 Mario-Style Diorama Overworld Map -->
+        <!-- World 1 Weebl Theme-Park Cove Overworld Map -->
         <section id="worldMapOverlay" class="overlay hidden world-map-theme" aria-label="World 1 Overworld Map">
           <div class="wm-backdrop" aria-hidden="true"></div>
           <canvas id="worldMapCanvas" width="450" height="800" aria-hidden="true"></canvas>
 
-          <!-- Interactive Diorama Nodes & Collectible Pins -->
+          <!-- Interactive Diorama Nodes & Collectible Pins synced 1:1 to Opt3 disc centers -->
           <div class="wm-pins-layer" id="wmPinsLayer">
-            <button type="button" class="wm-node-btn" data-node="1-1" style="left: 40.9%; top: 79.5%;" aria-label="Stage 1-1 Snack Street">
+            <button type="button" class="wm-node-btn" data-node="1-1" style="left: 44.5%; top: 79.4%;" aria-label="Stage 1-1 Snack Street">
               <span class="wm-node-tag"><b class="wnt-code">1-1</b><span class="wnt-stars">☆☆☆</span></span>
             </button>
-            <button type="button" class="wm-node-btn" data-node="1-2" style="left: 67.6%; top: 65.5%;" aria-label="Stage 1-2 Harbor Drop">
+            <button type="button" class="wm-node-btn" data-node="1-2" style="left: 68.6%; top: 66.9%;" aria-label="Stage 1-2 Harbor Drop">
               <span class="wm-node-tag"><b class="wnt-code">1-2</b><span class="wnt-stars">🔒</span></span>
             </button>
-            <button type="button" class="wm-node-btn" data-node="1-3" style="left: 31.6%; top: 52.8%;" aria-label="Stage 1-3 Brick District">
+            <button type="button" class="wm-node-btn" data-node="1-3" style="left: 34.4%; top: 54.3%;" aria-label="Stage 1-3 Brick District">
               <span class="wm-node-tag"><b class="wnt-code">1-3</b><span class="wnt-stars">🔒</span></span>
             </button>
-            <button type="button" class="wm-node-btn" data-node="1-4" style="left: 66.0%; top: 44.5%;" aria-label="Stage 1-4 Skyline Siege">
+            <button type="button" class="wm-node-btn" data-node="1-4" style="left: 68.0%; top: 46.1%;" aria-label="Stage 1-4 Skyline Siege">
               <span class="wm-node-tag"><b class="wnt-code">1-4</b><span class="wnt-stars">🔒</span></span>
             </button>
-            <button type="button" class="wm-node-btn" data-node="1-5" style="left: 54.0%; top: 25.5%;" aria-label="Stage 1-5 Apex Spire">
+            <button type="button" class="wm-node-btn" data-node="1-5" style="left: 41.7%; top: 33.8%;" aria-label="Stage 1-5 Apex Spire">
               <span class="wm-node-tag"><b class="wnt-code">1-5</b><span class="wnt-stars">🔒</span></span>
             </button>
-
-            <button type="button" class="wm-portal-pin" id="btnWorld2Portal" style="left: 40.4%; top: 19.2%;" aria-label="World 2 Portal">
-              <span class="wm-portal-tag" id="wmPortalTag">W2 SOON</span>
+            <button type="button" class="wm-node-btn wm-node-boss" data-node="1-6" style="left: 55.6%; top: 27.1%;" aria-label="Stage 1-6 Lord Brim's Citadel Boss">
+              <span class="wm-node-tag"><b class="wnt-code">1-6</b><span class="wnt-stars">👑🔒</span></span>
             </button>
 
-            <button type="button" class="wm-chest-pin" id="btnWorldChest" style="left: 84.9%; top: 69.5%;" aria-label="World 1 Star Chest">
-              <span class="wm-chest-ico" id="wmChestIco">🎁</span>
-              <span class="wm-chest-lbl" id="wmChestLbl">5⭐</span>
+            <button type="button" class="wm-portal-pin" id="btnWorld2Portal" style="left: 42.1%; top: 21.2%;" aria-label="World 2 Portal">
+              <span class="wm-portal-tag" id="wmPortalTag">W2 SOON</span>
             </button>
           </div>
 
-          <!-- Top HUD & Bottom Selected Node Card -->
+          <!-- Top HUD & Bottom Selected Node Card (Weebl HD Standard) -->
           <div class="menu-inner wm-hud">
             <div class="wm-top-row">
               <div class="wm-title-col">
                 <div class="wm-title-banner">WORLD <span>1</span></div>
                 <div class="wm-counters">
-                  <div class="wm-counter"><span class="wmc-ico">🫘</span><span class="wmc-val" id="wmReelsVal">4/20</span></div>
-                  <div class="wm-counter"><span class="wmc-ico">⭐</span><span class="wmc-val" id="wmStarsVal">0/15</span></div>
-                  <div class="wm-counter"><span class="wmc-ico">💎</span><span class="wmc-val" id="wmRpVal">0</span></div>
-                  <div class="wm-counter"><span class="wmc-ico">🔥</span><span class="wmc-val" id="wmBoostVal">×1.0</span></div>
+                  <div class="wm-counter">
+                    <svg class="wmc-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4" fill="#ef4444" stroke="#000" stroke-width="2.2"/><circle cx="12" cy="12" r="3.5" fill="#fde047" stroke="#000" stroke-width="1.6"/></svg>
+                    <span class="wmc-val" id="wmReelsVal">4/20</span>
+                  </div>
+                  <div class="wm-counter">
+                    <svg class="wmc-svg" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,2 15,8.5 22,9.3 16.8,14 18.2,21 12,17.5 5.8,21 7.2,14 2,9.3 9,8.5" fill="#facc15" stroke="#000" stroke-width="2" stroke-linejoin="round"/></svg>
+                    <span class="wmc-val" id="wmStarsVal">0/18</span>
+                  </div>
+                  <div class="wm-counter">
+                    <svg class="wmc-svg" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,2 21,9 12,22 3,9" fill="#38bdf8" stroke="#000" stroke-width="2" stroke-linejoin="round"/><polygon points="12,2 21,9 12,10 3,9" fill="#bae6fd"/></svg>
+                    <span class="wmc-val" id="wmRpVal">0</span>
+                  </div>
+                  <div class="wm-counter">
+                    <svg class="wmc-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c2.5 4 7 6.5 7 11.5a7 7 0 0 1-14 0c0-3.2 2-5.8 3.6-7.5.4 2 1.6 3.2 2.4 3.4-.5-2.6 0-5.2 1-7.4z" fill="#fb923c" stroke="#000" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="15.5" r="2.6" fill="#fde047"/></svg>
+                    <span class="wmc-val" id="wmBoostVal">×1.0</span>
+                  </div>
                 </div>
               </div>
 
               <div class="wm-top-actions">
-                <button type="button" class="wm-pill-btn" id="btnWorldBackPlaza">🏠 Plaza</button>
-                <button type="button" class="wm-pill-btn" id="btnWorldOpenQuests">📜 Quests <span class="wm-q-dot hidden" id="worldQuestDot">!</span></button>
-                <button type="button" class="wm-pill-btn" id="btnWorldPlayDaily">🎲 Daily</button>
-                <button type="button" class="wm-pill-btn endless" id="btnWorldPlayEndless">♾️ Endless</button>
+                <button type="button" class="wm-pill-btn" id="btnWorldBackPlaza">
+                  <svg class="wmp-svg" viewBox="0 0 38 32" aria-hidden="true"><polygon points="4,15 10,8 28,8 34,15" fill="#4ade80" stroke="#000" stroke-width="2.1" stroke-linejoin="round"/><polygon points="10,14 19,3 28,14" fill="#ef4444" stroke="#000" stroke-width="2.2" stroke-linejoin="round"/><rect x="7" y="14" width="24" height="14" rx="1.5" fill="#fde68a" stroke="#000" stroke-width="2.2"/><path d="M15.5 28v-7.5a3.5 3.5 0 0 1 7 0V28z" fill="#334155" stroke="#000" stroke-width="1.8"/></svg>
+                  <span>Plaza</span>
+                </button>
+                <button type="button" class="wm-pill-btn" id="btnWorldOpenQuests">
+                  <svg class="wmp-svg" viewBox="0 0 38 32" aria-hidden="true"><rect x="8" y="4" width="20" height="24" rx="3" fill="#b45309" stroke="#000" stroke-width="2.2"/><rect x="11" y="7" width="14" height="18" rx="1.5" fill="#fef9c3" stroke="#000" stroke-width="1.6"/><path d="M14 12h8M14 17h8M14 21h5" stroke="#64748b" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  <span>Quests</span><span class="wm-q-dot hidden" id="worldQuestDot">!</span>
+                </button>
+                <button type="button" class="wm-pill-btn endless" id="btnWorldPlayEndless">
+                  <svg class="wmp-svg wmp-inf" viewBox="0 0 48 26" aria-hidden="true"><defs><linearGradient id="wmInfG" x1="0%" y1="50%" x2="100%" y2="50%"><stop offset="0%" stop-color="#fbbf24"/><stop offset="40%" stop-color="#ef4444"/><stop offset="56%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient></defs><path d="M12.5 5.5C7.2 5.5 4 8.8 4 13s3.2 7.5 8.5 7.5c5.2 0 8.5-5 11.5-7.5 3-2.5 6.3-7.5 11.5-7.5 5.3 0 8.5 3.3 8.5 7.5s-3.2 7.5-8.5 7.5c-5.2 0-8.5-5-11.5-7.5-3-2.5-6.3-7.5-11.5-7.5z" fill="none" stroke="#000000" stroke-width="8" stroke-linejoin="round"/><path d="M12.5 5.5C7.2 5.5 4 8.8 4 13s3.2 7.5 8.5 7.5c5.2 0 8.5-5 11.5-7.5 3-2.5 6.3-7.5 11.5-7.5 5.3 0 8.5 3.3 8.5 7.5s-3.2 7.5-8.5 7.5c-5.2 0-8.5-5-11.5-7.5-3-2.5-6.3-7.5-11.5-7.5z" fill="none" stroke="url(#wmInfG)" stroke-width="4.2" stroke-linejoin="round"/></svg>
+                  <span>Endless</span>
+                </button>
               </div>
             </div>
 
@@ -587,7 +612,7 @@
                 </div>
                 <div class="wbd-icons" id="wmSelIcons">🌀 🍬 🏰 ⚓</div>
                 <div class="wbd-meta">
-                  <span class="wbd-thresh" id="wmSelThresh">1⭐ 4,000 · 2⭐ 6,000 · 3⭐ 9,500</span>
+                  <span class="wbd-thresh" id="wmSelThresh">1⭐ 4,000 · 2⭐ 6,000 · 3⭐ 9,000</span>
                   <span class="wbd-best" id="wmSelBest">BEST: 0</span>
                 </div>
               </div>
@@ -596,7 +621,7 @@
           </div>
         </section>
 
-        <!-- World 1 Quests & Star Chests Modal -->
+        <!-- World 1 Quests Modal -->
         <section id="questsModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="questsTitle">
           <div class="packs-card quests-card">
             <div class="profile-header">
@@ -613,9 +638,6 @@
             </div>
 
             <div class="quests-list" id="questsList"></div>
-
-            <div class="quests-chests-head">🎁 WORLD 1 STAR CHESTS (<span id="questsStarsCount">0/15 ⭐</span>)</div>
-            <div class="quests-chests-row" id="worldChestsRow"></div>
 
             <button class="btn" id="btnQuestsDone">BACK TO MAP ✓</button>
           </div>
@@ -646,7 +668,6 @@
             </div>
 
             <div class="admin-controls-grid">
-              <button type="button" class="admin-ctrl-btn" id="btnAdminTogglePacks">🔓 UNLOCK ALL</button>
               <button type="button" class="admin-ctrl-btn" id="btnAdminAddRP">⚡ +10K RP</button>
               <button type="button" class="admin-ctrl-btn" id="btnAdminToggleTimer">⏱️ TIMER: 60s</button>
               <button type="button" class="admin-ctrl-btn" id="btnAdminRevive">❤️ REVIVE ALL</button>

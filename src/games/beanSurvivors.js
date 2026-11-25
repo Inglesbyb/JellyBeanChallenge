@@ -185,7 +185,7 @@ export class BeanSurvivors extends Game {
     hint: 'DRAG to move · WEAPONS AUTO-FIRE · LEVEL UP to slay the Gummy Behemoth!',
     baseLikes: 5890,
     isPrestige: true,
-    parScore60s: 2300,
+    parScore60s: 2000,
     roundLen: 60,
     cue: 'MOVE & SURVIVE SWARMS!',
     prestigeCue: 'FASTER SWARMS · TANKIER BOSS!',

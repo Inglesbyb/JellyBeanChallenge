@@ -1,16 +1,19 @@
 import { Game } from '../engine/Game.js';
 import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { shadeColor } from '../engine/toyStyle.js';
 import {
-  shadeColor,
-  mixColor,
-  toyRim,
-  toyLineW,
-  drawToyShadow,
-  drawToySphere,
-  drawToyBevelRect,
-  drawToyEyes,
-} from '../engine/toyStyle.js';
+  STYLE_TOKENS,
+  preloadWeeblAtlas,
+  drawSprite,
+  drawWoodTrussTile,
+  drawSunburst,
+  drawComicPanel,
+  drawComicStarburst,
+  drawComicText,
+  drawWeeblScubaBean,
+  drawWeeblEyeCluster,
+  drawHeroCharacter,
+} from './weeblAtlas.js';
 
 const TAU = Math.PI * 2;
 export const WORLD_W = 40000;
@@ -35,10 +38,10 @@ export const DEPTH_ZONES = [
     yMin: 0,
     yMax: 3500,
     threat: 'CALM NURSERY (Tier 1)',
-    threatColor: '#3dffa2',
-    bgTop: 'hsl(190, 95%, 52%)',
-    bgBot: 'hsl(198, 90%, 42%)',
-    ambient: '#00b4d8',
+    threatColor: '#4ade80',
+    bgTop: '#22d3ee',
+    bgBot: '#0284c7',
+    ambient: '#38bdf8',
     light: 0.95,
   },
   {
@@ -47,10 +50,10 @@ export const DEPTH_ZONES = [
     yMin: 3500,
     yMax: 8500,
     threat: 'MODERATE REEF (Tier 2)',
-    threatColor: '#ffd166',
-    bgTop: 'hsl(204, 90%, 38%)',
-    bgBot: 'hsl(220, 85%, 32%)',
-    ambient: '#0077b6',
+    threatColor: '#facc15',
+    bgTop: '#0ea5e9',
+    bgBot: '#0369a1',
+    ambient: '#0284c7',
     light: 0.80,
   },
   {
@@ -59,10 +62,10 @@ export const DEPTH_ZONES = [
     yMin: 8500,
     yMax: 14500,
     threat: 'PIRATE TIMBER TRENCH (Tier 3)',
-    threatColor: '#f77f00',
-    bgTop: 'hsl(225, 80%, 28%)',
-    bgBot: 'hsl(245, 82%, 24%)',
-    ambient: '#1d3557',
+    threatColor: '#fb923c',
+    bgTop: '#1d4ed8',
+    bgBot: '#1e3a8a',
+    ambient: '#1e40af',
     light: 0.65,
   },
   {
@@ -71,10 +74,10 @@ export const DEPTH_ZONES = [
     yMin: 14500,
     yMax: 21000,
     threat: 'PREDATOR PATROL (Tier 4)',
-    threatColor: '#ff70a6',
-    bgTop: 'hsl(255, 85%, 22%)',
-    bgBot: 'hsl(270, 88%, 18%)',
-    ambient: '#3a0ca3',
+    threatColor: '#f472b6',
+    bgTop: '#4338ca',
+    bgBot: '#312e81',
+    ambient: '#3730a3',
     light: 0.50,
   },
   {
@@ -83,10 +86,10 @@ export const DEPTH_ZONES = [
     yMin: 21000,
     yMax: 28000,
     threat: 'BIOLUMINESCENT DEPTHS (Tier 5)',
-    threatColor: '#b5179e',
-    bgTop: 'hsl(275, 90%, 16%)',
-    bgBot: 'hsl(285, 95%, 12%)',
-    ambient: '#240046',
+    threatColor: '#e879f9',
+    bgTop: '#6d28d9',
+    bgBot: '#4c1d95',
+    ambient: '#5b21b6',
     light: 0.38,
   },
   {
@@ -95,10 +98,10 @@ export const DEPTH_ZONES = [
     yMin: 28000,
     yMax: 35000,
     threat: 'THERMAL PRESSURE (Tier 6)',
-    threatColor: '#e63946',
-    bgTop: 'hsl(290, 95%, 11%)',
-    bgBot: 'hsl(310, 95%, 9%)',
-    ambient: '#10002b',
+    threatColor: '#fb7185',
+    bgTop: '#9d174d',
+    bgBot: '#581c87',
+    ambient: '#831843',
     light: 0.28,
   },
   {
@@ -107,10 +110,10 @@ export const DEPTH_ZONES = [
     yMin: 35000,
     yMax: 41000,
     threat: 'APEX PREDATOR TERRITORY (Tier 7)',
-    threatColor: '#ff0054',
-    bgTop: 'hsl(320, 100%, 8%)',
-    bgBot: 'hsl(335, 100%, 5%)',
-    ambient: '#0d0221',
+    threatColor: '#f43f5e',
+    bgTop: '#7f1d1d',
+    bgBot: '#4c0519',
+    ambient: '#881337',
     light: 0.18,
   },
   {
@@ -119,11 +122,11 @@ export const DEPTH_ZONES = [
     yMin: 41000,
     yMax: 46000,
     threat: 'ANCIENT LEVIATHAN REALM (Tier 8)',
-    threatColor: '#ffd60a',
-    bgTop: 'hsl(340, 100%, 6%)',
-    bgBot: 'hsl(0, 100%, 3%)',
-    ambient: '#05010a',
-    light: 0.12,
+    threatColor: '#fde047',
+    bgTop: '#6b1236',
+    bgBot: '#3b0764',
+    ambient: '#581c87',
+    light: 0.14,
   },
 ];
 
@@ -152,6 +155,7 @@ const SPECIES = [
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const celInk = (s, mult = 1, min = 1.6, max = 4.2) => clamp(s * 0.088 * mult, min, max);
 const stageOf = (size) => {
   let i = 0;
   for (let k = 0; k < STAGES.length; k++) if (size >= STAGES[k].s) i = k;
@@ -166,7 +170,7 @@ export class DeepFeeder extends Game {
     hint: 'DRAG to swim · eat Swedish fish & gummy sharks · dodge giants!',
     baseLikes: 3420,
     isPrestige: true,
-    parScore60s: 850,
+    parScore60s: 1400,
     cue: 'FEED THE FISH!',
     prestigeCue: 'MORE BIGGER FISH!',
     scaling: {
@@ -180,6 +184,7 @@ export class DeepFeeder extends Game {
   init(saved, score = 0) {
     this.fx = new FX();
     this.score = score;
+    preloadWeeblAtlas();
     // Prestige rank (1 = first playthrough). Set by Reel.js before init().
     this.pLevel = Math.max(1, this.prestige || 1);
     this.player = {
@@ -193,6 +198,8 @@ export class DeepFeeder extends Game {
       stamina: 1.0,
       sugarRush: 0,
       bubbleT: 0,
+      chompT: 0,
+      dangerNear: false,
     };
     if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y) && Number.isFinite(saved.size) && saved.size >= 12) {
       Object.assign(this.player, { x: saved.x, y: saved.y, size: saved.size });
@@ -215,10 +222,18 @@ export class DeepFeeder extends Game {
     this.fishBatchPts = 0;
     this.sharkTextCooldown = 0;
 
-    // Ocean environment: Strawberry/Apple Licorice Laces & Rock Candy Corals
+    // Ocean environment: Strawberry/Apple Licorice Laces, Rock Candy Corals & Parallax Reefs
     this.licoriceLaces = this.buildLicoriceLaces();
     this.corals = this.buildCoralReefs();
     this.deepVents = this.buildHydrothermalVents();
+    this.parallaxRidges = [
+      { seed: 0.7, speed: 0.25, baseAlpha: 0.16, amp: 34, step: 95 },
+      { seed: 2.3, speed: 0.45, baseAlpha: 0.24, amp: 46, step: 115 },
+    ];
+    this.surfaceClouds = [
+      { x: -190, y: -105, scale: 0.78, id: 'cloud_1' },
+      { x: 185, y: -125, scale: 0.68, id: 'cloud_2' },
+    ];
 
     // 5 Sunken Sugar Galleons across the 40,000 x 45,000 world
     this.galleons = [
@@ -232,9 +247,9 @@ export class DeepFeeder extends Game {
 
     // 21 Chocolate Wafer Pirate Treasure Chests across all 8 zones
     this.chests = [
-      // Shallows (0 - 3500m)
-      { id: 'c1',  x: -800,   y: 800,   opened: false, name: 'Sunlit Shallows Wafer' },
-      { id: 'c2',  x: 1200,   y: 2200,  opened: false, name: 'Soda Current Cache' },
+      // Shallows (0 - 3500m) — c1 visible close to starter dive
+      { id: 'c1',  x: -340,   y: 660,   opened: false, name: 'Sunlit Shallows Wafer' },
+      { id: 'c2',  x: 1100,   y: 2100,  opened: false, name: 'Soda Current Cache' },
       // Coral Shelf (3500 - 8500m)
       { id: 'c3',  x: -3500,  y: 4800,  opened: false, name: 'Peach Ring Reef Chest' },
       { id: 'c4',  x: 4200,   y: 6500,  opened: false, name: 'Coral Cavern Cache' },
@@ -291,13 +306,24 @@ export class DeepFeeder extends Game {
 
   buildLicoriceLaces() {
     const laces = [];
+    // Starter reef kelp clusters visible around initial spawn (y = 300..900)
+    const starterOffsets = [-310, -170, -65, 110, 240, 390];
+    starterOffsets.forEach((sx, idx) => {
+      laces.push({
+        x: sx + rand(-25, 25),
+        y: rand(460, 760),
+        height: rand(165, 310),
+        wobPhase: rand(0, TAU),
+        color: idx % 2 === 0 ? '#ef4444' : '#14b8a6',
+      });
+    });
     for (let i = -60; i <= 60; i++) {
       laces.push({
         x: i * 320 + rand(-80, 80),
-        y: rand(1000, 42000),
-        height: rand(280, 680),
+        y: rand(900, 42000),
+        height: rand(260, 620),
         wobPhase: rand(0, TAU),
-        color: Math.random() > 0.5 ? '#d90429' : '#2ec4b6',
+        color: Math.random() > 0.5 ? '#ef4444' : '#14b8a6',
       });
     }
     return laces;
@@ -305,11 +331,21 @@ export class DeepFeeder extends Game {
 
   buildCoralReefs() {
     const reefs = [];
-    const colors = ['#f72585', '#4cc9f0', '#7209b7', '#ffbe0b', '#06d6a0'];
+    const colors = ['#ec4899', '#38bdf8', '#a855f7', '#facc15', '#22c55e'];
+    // Starter corals framing opening Sunlit Soda Shallows dive
+    [-250, -90, 155, 310].forEach((cx, idx) => {
+      reefs.push({
+        x: cx + rand(-25, 25),
+        y: rand(470, 680),
+        type: idx % 3,
+        color: colors[idx % colors.length],
+        scale: rand(0.95, 1.35),
+      });
+    });
     for (let i = -50; i <= 50; i++) {
       reefs.push({
         x: i * 380 + rand(-90, 90),
-        y: rand(800, 39000),
+        y: rand(700, 39000),
         type: Math.floor(Math.random() * 3),
         color: colors[Math.abs(i) % colors.length],
         scale: rand(0.85, 1.6),
@@ -636,6 +672,8 @@ export class DeepFeeder extends Game {
 
     /* ------------------------------------------------ Enhanced Predator AI & Movement Loop */
     p.bumpSquash = Math.max(0, (p.bumpSquash || 0) - dt * 4.8);
+    p.chompT = Math.max(0, (p.chompT || 0) - dt * 5.2);
+    p.dangerNear = false;
 
     for (let i = this.fish.length - 1; i >= 0; i--) {
       const f = this.fish[i];
@@ -687,6 +725,7 @@ export class DeepFeeder extends Game {
           const proximity = 1.0 - d / aggroRadius;
           lungeBoost = 1.15 + proximity * 0.25;
           f.isHunting = true;
+          if (d < (p.size + f.size) * 1.95) p.dangerNear = true;
 
           const inFront = (dx * f.dir > 0);
           if (inFront && d < (p.size + f.size) * 1.2) {
@@ -876,6 +915,7 @@ export class DeepFeeder extends Game {
     const p = this.player;
     const kk = 1 / this.zoom;
     this.fish.splice(i, 1);
+    p.chompT = 1.0;
 
     const growthMult = wasSharkHunter ? 1.4 : 0.95;
     p.size = Math.min(360, Math.sqrt(p.size * p.size + f.size * f.size * growthMult + f.size * 1.2));
@@ -927,7 +967,7 @@ export class DeepFeeder extends Game {
     const oy = H / 2 + 15;
     const off = this.fx.offset();
 
-    // 1. Dynamic Vibrant Depth-Based Soda Ocean Gradient
+    // 1. Dynamic Vibrant Depth-Based Cel Ocean Gradient
     const zone = this.getDepthZone(p.y);
     const bg = ctx.createLinearGradient(0, 0, 0, H);
     bg.addColorStop(0, zone.bgTop);
@@ -935,31 +975,38 @@ export class DeepFeeder extends Game {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // 2. Surface Sunbeams (Shallow Waters: y < 1600)
-    if (p.y < 1600) {
-      const sunAlpha = (1 - p.y / 1600) * 0.28;
+    // 2. Parallax Distant Reef Ridges & Hard-Edged Sunbeams
+    this.drawParallaxReefs(ctx, p, zone, W, H);
+    if (p.y < 2200) {
+      const sunAlpha = (1 - p.y / 2200) * 0.16;
       ctx.fillStyle = `rgba(255, 255, 255, ${sunAlpha})`;
-      for (let i = 0; i < 6; i++) {
-        const sx = i * 105 - 40 + Math.sin(this.time * 0.45 + i * 1.5) * 18;
+      for (let i = 0; i < 5; i++) {
+        const sx = i * 118 - 35 + Math.sin(this.time * 0.45 + i * 1.4) * 16;
         ctx.beginPath();
         ctx.moveTo(sx, 0);
-        ctx.lineTo(sx + 65, 0);
-        ctx.lineTo(sx + 210, H);
-        ctx.lineTo(sx + 35, H);
+        ctx.lineTo(sx + 54, 0);
+        ctx.lineTo(sx + 185, H);
+        ctx.lineTo(sx + 28, H);
         ctx.closePath();
         ctx.fill();
       }
     }
 
-    // 3. Floating Sugar Crystals / Sparkling Plankton
+    // 3. Floating Sugar Crystals / #000-rimmed Sparkles
     for (const q of this.sugarCrystals) {
+      ctx.save();
+      ctx.globalAlpha = 0.42 + q.d * 0.45;
       ctx.fillStyle = q.color;
-      ctx.globalAlpha = 0.35 + q.d * 0.5;
       ctx.beginPath();
       ctx.arc(q.x, q.y, q.s, 0, TAU);
       ctx.fill();
+      if (q.sparkle) {
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    ctx.globalAlpha = 1.0;
 
     // 4. World Camera Transform
     ctx.save();
@@ -967,36 +1014,33 @@ export class DeepFeeder extends Game {
     ctx.scale(sc, sc);
     ctx.translate(-p.x, -p.y);
 
-    // Liquid Soda Surface Wave (Top of ocean)
-    if (p.y < 1000) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = 4 / sc;
-      ctx.beginPath();
-      const x0 = p.x - ox / sc - 40;
-      ctx.moveTo(x0, 20);
-      for (let x = x0; x < p.x + ox / sc + 40; x += 32 / sc) {
-        ctx.lineTo(x, 20 + Math.sin(x * 0.04 + this.time * 2.2) * 6 / sc);
-      }
-      ctx.stroke();
+    // Weebl Above-Surface Sky, Sunburst, Island & Foamy Wave Crest (`y < 20`)
+    if (p.y - oy / sc < 140) {
+      this.drawSurfaceSkyAndWaves(ctx, p, ox / sc, oy / sc);
     }
 
-    // Rising Soda Fizz Carbonation Bubbles
+    // Rising Soda Fizz Carbonation Bubbles (#000-rimmed white specular bubbles)
     for (const b of this.sodaBubbles) {
       if (Math.abs(b.x - p.x) > ox / sc + 60 || Math.abs(b.y - p.y) > (H / 2) / sc + 60) continue;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.lineWidth = 1.5 / sc;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.36)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.lineWidth = 1.6 / sc;
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.r, 0, TAU);
       ctx.fill();
       ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+      ctx.beginPath();
+      ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.28, 0, TAU);
+      ctx.fill();
     }
 
-    // Background Rock Candy Corals & Licorice Laces
+    // Background Rock Candy Corals & Licorice Kelp Laces
     this.drawCorals(ctx, p, ox / sc);
     this.drawLicoriceLaces(ctx, p, ox / sc, (H / 2) / sc);
 
-    // Sunken Sugar Galleon (Chocolate Timber Pirate Shipwreck at y: 2000)
+    // Sunken Sugar Galleons
     this.drawSunkenGalleon(ctx, p, ox / sc, (H / 2) / sc);
 
     // Seabed at Mariana Trench with Hydrothermal Rock Candy Vents
@@ -1008,12 +1052,12 @@ export class DeepFeeder extends Game {
     // Collectible Gold Foil Chocolate Doubloons
     this.drawCoins(ctx);
 
-    // Render 3D Translucent Gummy & Vinyl Confectionery Fish
+    // Render #000-Inked Weebl Cel Confectionery Fish
     const sorted = [...this.fish].sort((a, b) => a.size - b.size);
     for (const f of sorted) {
       if (
-        Math.abs(f.x - p.x) > ox / sc + f.size * 2 ||
-        Math.abs(f.y - p.y) > (H / 2) / sc + f.size * 2
+        Math.abs(f.x - p.x) > ox / sc + f.size * 2.2 ||
+        Math.abs(f.y - p.y) > (H / 2) / sc + f.size * 2.2
       ) {
         continue;
       }
@@ -1024,115 +1068,253 @@ export class DeepFeeder extends Game {
       this.drawConfectioneryFish(ctx, f, ratio, isDeadly, isRival && nearPlayer);
     }
 
-    // Scuba-Bean Player Mascot with Sugar Rush Rainbow Aura
-    if (p.sugarRush > 0) {
-      ctx.save();
-      const pulse = 1.0 + Math.sin(this.time * 12) * 0.15;
-      const sr = p.size * 1.85 * pulse;
-      const sg = ctx.createRadialGradient(p.x, p.y, sr * 0.3, p.x, p.y, sr);
-      sg.addColorStop(0, 'rgba(255, 214, 10, 0.72)');
-      sg.addColorStop(0.5, 'rgba(247, 37, 133, 0.48)');
-      sg.addColorStop(1, 'rgba(76, 201, 240, 0)');
-      ctx.fillStyle = sg;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, sr, 0, TAU);
-      ctx.fill();
-
-      ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 3 / sc;
-      ctx.setLineDash([8, 8]);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, sr * 0.85, this.time * 4, this.time * 4 + TAU);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
+    // Crowned Green Weebl Scuba Hero Swimmer (+ Sugar Rush Sunburst Aura)
+    if (p.sugarRush > 0 || this.isMaxSize()) {
+      const pulse = 1.0 + Math.sin(this.time * 11) * 0.12;
+      drawSunburst(ctx, p.x, p.y, p.size * 1.95 * pulse, this.time * 2.4, 12, p.sugarRush > 0 ? 0.65 : 0.45, p.sugarRush > 0);
     }
 
-    const sq = 1 + (p.bumpSquash || 0) * 0.22;
-    drawBean(ctx, p.x, p.y, p.size * 1.5, {
-      hat: 'scuba',
-      color: p.sugarRush > 0 ? '#ffbe0b' : '#25e6ff',
-      bellyColor: '#ff758f',
-      dir: p.dir,
-      walkT: this.time * 2.5,
-      squash: sq,
-      eyes: p.bumpSquash > 0.2 ? 'alert' : 'happy',
-    });
+    this.drawPlayerHero(ctx, p, sc);
 
     this.fx.render(ctx, sc);
     ctx.restore();
 
-    // 5. Threat Radar
+    // 5. Screen-Edge Threat Arrows
     this.drawThreatRadar(ctx, p, ox, oy, sc, W, H);
 
-    // 6. HUD: Depth Meter, Threat Badge, Dash Stamina, Sugar Rush & Zone Banner Alert
+    // 6. Clutter-Free Weebl Comic HUD
     this.drawDeepHUD(ctx, W, H, p);
   }
 
-  /* ------------------------------------------------ Scenery & Landmarks (3D Toy Vinyl Style) */
+  drawPlayerHero(ctx, p, sc) {
+    const eyes = p.dangerNear || p.bumpSquash > 0.2 ? 'panic' : 'happy';
+    const sq = 1 + (p.bumpSquash || 0) * 0.2 + (p.chompT || 0) * 0.16;
+    const tilt = clamp(p.vy / Math.max(90, Math.abs(p.vx) + 180) * 0.45, -0.45, 0.45);
+    const swimSpeed = this.time * (p.dash > 0.1 || p.sugarRush > 0 ? 1.8 : 1.1);
+
+    // Pristine HD 3D Crowned Scuba Hero Bean with curved goggles, snorkel & trailing flippers
+    drawHeroCharacter(ctx, p.x, p.y + p.size * 0.72, p.size * 1.92, {
+      view: 'side',
+      dir: p.dir < 0 ? -1 : 1,
+      state: 'swim',
+      prop: 'scuba',
+      skinColor: p.sugarRush > 0 ? '#facc15' : null,
+      expr: eyes,
+      t: swimSpeed,
+      lean: tilt,
+      squashX: 2 - sq,
+      squashY: sq,
+    });
+  }
+
+  drawSurfaceSkyAndWaves(ctx, p, halfW, halfH) {
+    const leftX = p.x - halfW - 120;
+    const spanW = halfW * 2 + 240;
+    const surfY = 20;
+    const skyTop = p.y - halfH - 120;
+
+    // 1. Clip sky, sunburst, clouds & island cleanly above animated ocean surface wave
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(leftX, skyTop);
+    ctx.lineTo(leftX + spanW, skyTop);
+    for (let x = leftX + spanW; x >= leftX; x -= 28) {
+      ctx.lineTo(x, surfY + Math.sin(x * 0.032 + this.time * 2.4) * 7);
+    }
+    ctx.closePath();
+    ctx.clip();
+
+    const sg = ctx.createLinearGradient(0, skyTop, 0, surfY);
+    sg.addColorStop(0, '#38bdf8');
+    sg.addColorStop(1, '#bae6fd');
+    ctx.fillStyle = sg;
+    ctx.fillRect(leftX, skyTop, spanW, surfY - skyTop + 14);
+
+    // Subtle sky sunburst cleanly tucked behind HUD
+    drawSunburst(ctx, p.x * 0.35, -180, 260, this.time * 0.08, 12, 0.14, false);
+
+    // Fluffy Weebl clouds (atlas sprite with cel vector fallback)
+    for (const c of this.surfaceClouds) {
+      const cx = p.x * 0.65 + c.x;
+      drawSprite(ctx, c.id, cx, c.y, 175 * c.scale, 102 * c.scale, {
+        fallback: (cctx, w, h) => {
+          cctx.fillStyle = '#ffffff';
+          cctx.strokeStyle = STYLE_TOKENS.ink;
+          cctx.lineWidth = 3.5;
+          cctx.beginPath();
+          cctx.arc(-w * 0.22, 0, h * 0.32, 0, TAU);
+          cctx.arc(0, -h * 0.14, h * 0.42, 0, TAU);
+          cctx.arc(w * 0.24, 2, h * 0.3, 0, TAU);
+          cctx.fill();
+          cctx.stroke();
+        },
+      });
+    }
+
+    // Little sunny Weebl coral atoll tucked in open gap between T1 pill and Sonar
+    ctx.fillStyle = '#fde68a';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(42, surfY + 10);
+    ctx.quadraticCurveTo(105, surfY - 34, 168, surfY + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#22c55e';
+    ctx.beginPath();
+    ctx.moveTo(64, surfY - 13);
+    ctx.quadraticCurveTo(105, surfY - 39, 146, surfY - 13);
+    ctx.quadraticCurveTo(105, surfY - 5, 64, surfY - 13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. Foamy #000-Inked Ocean Wave Ribbon at y = 20
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 10 / Math.max(0.25, this.zoom);
+    ctx.beginPath();
+    for (let x = leftX; x <= leftX + spanW; x += 28) {
+      const wy = surfY + Math.sin(x * 0.032 + this.time * 2.4) * 7;
+      if (x === leftX) ctx.moveTo(x, wy);
+      else ctx.lineTo(x, wy);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5.5 / Math.max(0.25, this.zoom);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawParallaxReefs(ctx, p, zone, W, H) {
+    ctx.save();
+    for (const layer of this.parallaxRidges) {
+      const baseY = H * (0.72 + layer.speed * 0.25);
+      const scroll = p.x * this.zoom * layer.speed;
+      ctx.fillStyle = zone.ambient;
+      ctx.globalAlpha = layer.baseAlpha;
+      ctx.beginPath();
+      ctx.moveTo(-20, H + 10);
+      for (let sx = -40; sx <= W + layer.step; sx += layer.step * 0.5) {
+        const wx = sx + scroll;
+        const crest = Math.sin(wx * 0.012 + layer.seed) * layer.amp
+          + Math.cos(wx * 0.027 - layer.seed) * (layer.amp * 0.45);
+        ctx.lineTo(sx, baseY - crest);
+      }
+      ctx.lineTo(W + 40, H + 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------ Scenery & Landmarks (#000-Inked Weebl Cel Style) */
   drawCorals(ctx, p, halfW) {
     for (const c of this.corals) {
       if (Math.abs(c.x - p.x) > halfW + 120) continue;
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.scale(c.scale, c.scale);
-      const rim = toyRim(c.color, 0.55);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      const darkCol = shadeColor(c.color, -0.26);
 
       if (c.type === 0) {
-        const g = ctx.createLinearGradient(-14, -58, 18, 0);
-        g.addColorStop(0, shadeColor(c.color, 0.45));
-        g.addColorStop(0.55, c.color);
-        g.addColorStop(1, shadeColor(c.color, -0.25));
-        ctx.fillStyle = g;
-        ctx.strokeStyle = rim;
-        ctx.lineWidth = 1.8;
+        // 3-branch cel-shaded Weebl staghorn coral with rounded tips & gloss dots
+        ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+
+        // Shaded back right tine
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 17;
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(-14, -42);
-        ctx.lineTo(-4, -58);
-        ctx.lineTo(8, -48);
-        ctx.lineTo(18, 0);
-        ctx.closePath();
+        ctx.moveTo(4, -6);
+        ctx.quadraticCurveTo(18, -22, 20, -40);
+        ctx.stroke();
+        ctx.strokeStyle = darkCol;
+        ctx.lineWidth = 11;
+        ctx.stroke();
+
+        // Main center trunk + left curved tine
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 19;
+        ctx.beginPath();
+        ctx.moveTo(0, 2);
+        ctx.quadraticCurveTo(-2, -26, 2, -56);
+        ctx.moveTo(-2, -16);
+        ctx.quadraticCurveTo(-18, -28, -19, -46);
+        ctx.stroke();
+
+        ctx.strokeStyle = c.color;
+        ctx.lineWidth = 13;
+        ctx.stroke();
+
+        // Rounded reef base pebble
+        ctx.fillStyle = '#94a3b8';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.ellipse(0, 3, 18, 7, 0, 0, TAU);
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+        // Specular gloss highlights on coral tips
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
         ctx.beginPath();
-        ctx.moveTo(-2, -10);
-        ctx.lineTo(-4, -55);
-        ctx.lineTo(6, -46);
-        ctx.closePath();
+        ctx.arc(0, -54, 2.8, 0, TAU);
+        ctx.arc(-19, -44, 2.4, 0, TAU);
+        ctx.arc(19, -38, 2.2, 0, TAU);
         ctx.fill();
       } else if (c.type === 1) {
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#991b1b';
-        ctx.lineWidth = 12;
+        // Curved candy tube coral
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 17;
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.quadraticCurveTo(15, -30, -10, -65);
+        ctx.quadraticCurveTo(15, -30, -9, -64);
         ctx.stroke();
 
-        ctx.strokeStyle = '#ff5a6e';
-        ctx.lineWidth = 9;
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 10.5;
         ctx.stroke();
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(-2, -6);
+        ctx.quadraticCurveTo(10, -32, -10, -58);
         ctx.stroke();
       } else {
-        drawToySphere(ctx, 0, -2, 18, c.color, { lineWidth: 1.6 });
-        ctx.strokeStyle = shadeColor(c.color, 0.25);
-        ctx.lineWidth = 3.5;
-        ctx.lineCap = 'round';
+        // Smiling cel coral cushion & swaying tentacles
         for (let t = -3; t <= 3; t++) {
-          const tx = t * 6;
-          const sw = Math.sin(this.time * 2 + t) * 6;
+          const tx = t * 6.5;
+          const sw = Math.sin(this.time * 2.2 + t) * 7;
+          ctx.strokeStyle = STYLE_TOKENS.ink;
+          ctx.lineWidth = 7.2;
           ctx.beginPath();
-          ctx.moveTo(tx, -8);
-          ctx.lineTo(tx + sw, -24);
+          ctx.moveTo(tx, -6);
+          ctx.lineTo(tx + sw, -25);
+          ctx.stroke();
+          ctx.strokeStyle = shadeColor(c.color, 0.2);
+          ctx.lineWidth = 3.5;
           ctx.stroke();
         }
+        ctx.fillStyle = c.color;
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 22, 13, 0, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -1145,63 +1327,90 @@ export class DeepFeeder extends Game {
 
       ctx.save();
       ctx.translate(g.x, g.y);
+      ctx.lineJoin = 'round';
 
-      ctx.fillStyle = '#fde047';
-      ctx.font = "700 13px 'Fredoka', Outfit, sans-serif";
-      ctx.textAlign = 'center';
-      ctx.fillText(`🏴‍☠️ ${g.name.toUpperCase()}`, 0, -180);
+      drawComicText(ctx, `🏴‍☠️ ${g.name.toUpperCase()}`, 0, -182, "900 14px 'Fredoka', Outfit, sans-serif", '#fde047', {
+        strokeWidth: 4,
+      });
 
-      const woodRim = '#2b160a';
-      const hg = ctx.createLinearGradient(0, -45, 0, 75);
-      hg.addColorStop(0, '#78462a');
-      hg.addColorStop(0.5, '#54301a');
-      hg.addColorStop(1, '#361d0e');
-      ctx.fillStyle = hg;
-      ctx.strokeStyle = woodRim;
-      ctx.lineWidth = 2.6;
+      // Cross-braced mast
+      ctx.save();
+      ctx.translate(-7, -96);
+      drawWoodTrussTile(ctx, 18, 128);
+      ctx.restore();
+
+      // Peppermint striped tattered sail
+      ctx.fillStyle = '#fef3c7';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3.2;
       ctx.beginPath();
-      ctx.moveTo(-180, -40);
-      ctx.quadraticCurveTo(-140, 60, 0, 75);
-      ctx.quadraticCurveTo(160, 75, 210, -20);
-      ctx.lineTo(190, -40);
-      ctx.lineTo(120, -35);
-      ctx.lineTo(-180, -40);
+      ctx.moveTo(-10, -152);
+      ctx.quadraticCurveTo(54, -112, 62, -68);
+      ctx.lineTo(-10, -68);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(255, 224, 178, 0.14)';
-      ctx.lineWidth = 2;
-      for (let y = -20; y < 60; y += 18) {
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(-10, -112, 46, 16);
+      ctx.strokeRect(-10, -112, 46, 16);
+
+      // Pirate Jolly flag
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.roundRect(-62, -156, 46, 28, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(-39, -142, 6.5, 0, TAU);
+      ctx.fill();
+
+      // Chunky Weebl-inked Hull
+      ctx.fillStyle = '#b45309';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 4.0;
+      ctx.beginPath();
+      ctx.moveTo(-182, -40);
+      ctx.quadraticCurveTo(-142, 64, 0, 78);
+      ctx.quadraticCurveTo(162, 78, 212, -20);
+      ctx.lineTo(190, -42);
+      ctx.lineTo(120, -35);
+      ctx.lineTo(-182, -40);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(-200, 14, 420, 75);
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.2;
+      for (let y = -14; y <= 46; y += 20) {
         ctx.beginPath();
-        ctx.moveTo(-155, y);
-        ctx.lineTo(175, y);
+        ctx.moveTo(-175, y);
+        ctx.lineTo(195, y);
         ctx.stroke();
       }
-
-      drawToyBevelRect(ctx, -15, -160, 16, 125, 6, '#5c3317', { depth: 0, lineWidth: 2, rimColor: woodRim });
-
-      ctx.fillStyle = 'rgba(103, 232, 249, 0.55)';
-      ctx.strokeStyle = '#0e7490';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.moveTo(-10, -150);
-      ctx.quadraticCurveTo(50, -110, 60, -70);
-      ctx.lineTo(-10, -70);
-      ctx.closePath();
-      ctx.fill();
+      ctx.restore();
       ctx.stroke();
 
-      drawToyBevelRect(ctx, -60, -155, 45, 28, 6, '#1e293b', { depth: 2, lineWidth: 1.6, rimColor: '#0f172a' });
-      drawToySphere(ctx, -38, -142, 6, '#f8fafc', { lineWidth: 0.8 });
-
       for (let px = -110; px <= 130; px += 55) {
-        drawToySphere(ctx, px, 15, 9, '#ffd166', { lineWidth: 1.4, rimColor: '#92400e' });
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.arc(px, 15, 10, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
         ctx.fillStyle = '#0f172a';
-        ctx.beginPath(); ctx.arc(px, 15, 4.5, 0, TAU); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px, 15, 5, 0, TAU);
+        ctx.fill();
       }
 
-      drawToyBevelRect(ctx, 80, -10, 40, 12, 5, '#334155', { depth: 2, lineWidth: 1.5, rimColor: '#0f172a' });
       ctx.restore();
     }
   }
@@ -1212,29 +1421,28 @@ export class DeepFeeder extends Game {
     ctx.save();
     const seaY = MAXY - 20;
 
-    ctx.fillStyle = '#29170d';
+    ctx.fillStyle = '#451a03';
     ctx.fillRect(p.x - halfW - 50, seaY, halfW * 2 + 100, 200);
 
-    const cg = ctx.createLinearGradient(0, seaY - 10, 0, seaY + 80);
-    cg.addColorStop(0, '#54321d');
-    cg.addColorStop(1, '#29170d');
-    ctx.fillStyle = cg;
+    ctx.fillStyle = '#78350f';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(p.x - halfW - 50, seaY);
+    ctx.moveTo(p.x - halfW - 50, seaY + 10);
     for (let x = p.x - halfW - 50; x <= p.x + halfW + 50; x += 40) {
-      const yBump = Math.sin(x * 0.05) * 8;
-      ctx.lineTo(x, seaY + yBump);
+      ctx.lineTo(x, seaY + Math.sin(x * 0.05) * 9);
     }
-    ctx.lineTo(p.x + halfW + 50, seaY + 100);
-    ctx.lineTo(p.x - halfW - 50, seaY + 100);
+    ctx.lineTo(p.x + halfW + 50, seaY + 120);
+    ctx.lineTo(p.x - halfW - 50, seaY + 120);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
 
     for (const v of this.deepVents) {
       if (Math.abs(v.x - p.x) > halfW + 100) continue;
-      ctx.fillStyle = '#3b1c0e';
-      ctx.strokeStyle = '#1b0b04';
-      ctx.lineWidth = 2;
+      ctx.fillStyle = '#572814';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3.2;
       ctx.beginPath();
       ctx.moveTo(v.x - v.w * 0.5, v.y + v.h);
       ctx.lineTo(v.x - v.w * 0.3, v.y);
@@ -1246,16 +1454,20 @@ export class DeepFeeder extends Game {
 
       ctx.fillStyle = v.glow;
       ctx.beginPath();
-      ctx.ellipse(v.x, v.y, v.w * 0.28, 8, 0, 0, TAU);
+      ctx.ellipse(v.x, v.y, v.w * 0.28, 9, 0, 0, TAU);
       ctx.fill();
+      ctx.stroke();
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
       for (let i = 0; i < 4; i++) {
         const by = v.y - ((this.time * 65 + i * 25) % 120);
         const bx = v.x + Math.sin(this.time * 4 + i) * 8;
+        ctx.fillStyle = '#fef08a';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(bx, by, 3 + i, 0, TAU);
+        ctx.arc(bx, by, 3.5 + i * 0.8, 0, TAU);
         ctx.fill();
+        ctx.stroke();
       }
     }
     ctx.restore();
@@ -1267,42 +1479,47 @@ export class DeepFeeder extends Game {
       ctx.save();
       ctx.translate(c.x, c.y);
 
-      drawToyShadow(ctx, 0, 18, 24, 7, 0.28);
-      drawToyBevelRect(ctx, -22, -10, 44, 26, 6, '#6b3a19', { depth: 3, lineWidth: 1.8, rimColor: '#361907' });
+      if (!c.opened) {
+        const sp = 0.75 + 0.25 * Math.sin(this.time * 4.5 + c.x);
+        drawComicStarburst(ctx, 20, -24, 9 * sp, 3.8 * sp, 4, '#fef08a', STYLE_TOKENS.ink, this.time * 1.5, 1.8);
+      }
 
-      ctx.fillStyle = '#ffd166';
-      ctx.fillRect(-17, -10, 6, 26);
-      ctx.fillRect(11, -10, 6, 26);
+      // Base chest box
+      ctx.fillStyle = '#92400e';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      ctx.roundRect(-22, -10, 44, 26, 6);
+      ctx.fill();
+      ctx.stroke();
 
-      drawToySphere(ctx, 0, 3, 5.5, '#ffd166', { lineWidth: 1.2, rimColor: '#92400e' });
+      // Golden straps & padlock
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(-16, -9, 6, 24);
+      ctx.strokeRect(-16, -9, 6, 24);
+      ctx.fillRect(10, -9, 6, 24);
+      ctx.strokeRect(10, -9, 6, 24);
+
+      ctx.beginPath();
+      ctx.arc(0, 3, 6, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
 
       if (c.opened) {
-        ctx.fillStyle = '#ffbe0b';
-        ctx.beginPath();
-        ctx.arc(0, -12, 14, 0, Math.PI);
-        ctx.fill();
-
-        const sparkle = Math.sin(this.time * 6) * 2.5;
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(0, -15, 4 + sparkle, 0, TAU); ctx.fill();
+        drawComicStarburst(ctx, 0, -18, 15, 7, 7, '#fef08a', STYLE_TOKENS.ink, this.time * 3, 2);
       } else {
-        const lg = ctx.createLinearGradient(0, -32, 0, -10);
-        lg.addColorStop(0, '#8d5127');
-        lg.addColorStop(1, '#5c3315');
-        ctx.fillStyle = lg;
-        ctx.strokeStyle = '#361907';
-        ctx.lineWidth = 1.8;
+        ctx.fillStyle = '#b45309';
         ctx.beginPath();
         ctx.arc(0, -10, 22, Math.PI, 0);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = '#ffd166';
-        const sp = Math.sin(this.time * 4) * 1.5;
+        ctx.fillStyle = '#fde047';
         ctx.beginPath();
-        ctx.arc(0, -18, 4 + sp, 0, TAU);
+        ctx.arc(0, -19, 4.5, 0, TAU);
         ctx.fill();
+        ctx.stroke();
       }
 
       ctx.restore();
@@ -1313,12 +1530,20 @@ export class DeepFeeder extends Game {
     for (const c of this.coins) {
       ctx.save();
       ctx.translate(c.x, c.y);
-      const spin = Math.max(0.22, Math.abs(Math.sin(c.t)));
+      const spin = Math.max(0.28, Math.abs(Math.sin(c.t)));
       ctx.scale(spin, 1);
-      drawToySphere(ctx, 0, 0, 10, '#ffd166', { lineWidth: 1.4, rimColor: '#92400e' });
+
+      ctx.fillStyle = '#facc15';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 10.5, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.fillStyle = '#d97706';
       ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, TAU);
+      ctx.arc(0, 0, 4.5, 0, TAU);
       ctx.fill();
       ctx.restore();
     }
@@ -1326,85 +1551,141 @@ export class DeepFeeder extends Game {
 
   drawLicoriceLaces(ctx, p, halfW, halfH) {
     for (const k of this.licoriceLaces) {
-      if (Math.abs(k.x - p.x) > halfW + 100) continue;
-      const sway = Math.sin(this.time * 1.6 + k.wobPhase) * 28;
-      const rim = toyRim(k.color, 0.55);
+      if (Math.abs(k.x - p.x) > halfW + 100 || Math.abs(k.y - k.height * 0.5 - p.y) > halfH + k.height) continue;
+      const sw1 = Math.sin(this.time * 1.9 + k.wobPhase) * 30;
+      const sw2 = Math.cos(this.time * 1.5 + k.wobPhase) * 24;
+      const cp1x = k.x + sw1 * 0.95;
+      const cp1y = k.y - k.height * 0.34;
+      const cp2x = k.x - sw2 * 0.95;
+      const cp2y = k.y - k.height * 0.68;
+      const tipX = k.x + sw1;
+      const tipY = k.y - k.height;
 
+      ctx.save();
+      // Lively S-sway candy kelp stem
       ctx.lineCap = 'round';
-      ctx.strokeStyle = rim;
-      ctx.lineWidth = 14;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 15;
       ctx.beginPath();
       ctx.moveTo(k.x, k.y);
-      ctx.quadraticCurveTo(k.x + sway * 0.5, k.y - k.height * 0.5, k.x + sway, k.y - k.height);
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tipX, tipY);
       ctx.stroke();
 
       ctx.strokeStyle = k.color;
-      ctx.lineWidth = 10.5;
+      ctx.lineWidth = 9.5;
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.lineWidth = 2.6;
       ctx.stroke();
+
+      // Alternating #000-inked gummy leaf buds anchored directly onto the S-curve stem
+      ctx.fillStyle = k.color;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2.6;
+      for (const [t, side] of [[0.32, 1], [0.58, -1], [0.82, 1]]) {
+        const mt = 1 - t;
+        const bx = mt * mt * mt * k.x + 3 * mt * mt * t * cp1x + 3 * mt * t * t * cp2x + t * t * t * tipX;
+        const by = mt * mt * mt * k.y + 3 * mt * mt * t * cp1y + 3 * mt * t * t * cp2y + t * t * t * tipY;
+        ctx.beginPath();
+        ctx.ellipse(bx + side * 7.5, by - 3, 10, 5, side * -0.45, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // 2-tone cel #000-outlined reef boulder base
+      ctx.fillStyle = '#94a3b8';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(k.x, k.y + 3, 18, 8.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.beginPath();
+      ctx.ellipse(k.x + 6, k.y + 4.5, 9, 4.5, 0, 0, TAU);
+      ctx.fill();
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath();
+      ctx.ellipse(k.x - 13, k.y + 5, 7, 4.5, -0.2, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
-  /* ------------------------------------------------ SOFT 3D TOY EYE HELPER */
-  drawCartoonEye(ctx, ex, ey, er, lookX = 0.35, angry = false) {
-    drawToyEyes(ctx, ex, ey, er * 0.72, {
-      spacing: 0,
-      style: angry ? 'angry' : 'bright',
-      lookX,
-    });
+  drawCartoonJaws(ctx, x, y, w, h, snapT, teeth = 3) {
+    if (snapT <= 0.04) return;
+    const open = snapT * h;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#7f1d1d';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = Math.max(1.4, w * 0.1);
+    ctx.beginPath();
+    ctx.moveTo(-w, -open * 0.35);
+    ctx.lineTo(w * 0.2, 0);
+    ctx.lineTo(-w * 0.85, open);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    for (let t = 0; t < teeth; t++) {
+      const tx = -w * (0.85 - (t / Math.max(1, teeth)) * 0.72);
+      ctx.beginPath();
+      ctx.moveTo(tx, -open * 0.25);
+      ctx.lineTo(tx + w * 0.14, open * 0.35);
+      ctx.lineTo(tx + w * 0.28, -open * 0.12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
-  /* ------------------------------------------------ 3D TRANSLUCENT GUMMY & VINYL FISH */
+  /* ------------------------------------------------ #000-INKED WEEBL SEA CREATURES */
   drawConfectioneryFish(ctx, f, ratio, isDeadly, showRivalHint = false) {
     ctx.save();
     ctx.translate(f.x, f.y);
 
     const s = f.size;
 
-    // Predator Aggro / Rival Clash / Fleeing clarity cues
+    // Predator Aggro / Rival Clash / Fleeing / Cracked Stun Indicators
     if (f.stunT > 0) {
-      // Orbiting golden dizzy stars on Dash-Cracked fish!
       for (let i = 0; i < 3; i++) {
         const a = this.time * 6.5 + (i / 3) * TAU;
-        const sx = Math.cos(a) * s * 0.52;
-        const sy = -s * 0.72 + Math.sin(a) * s * 0.16;
-        ctx.fillStyle = '#fde047';
-        ctx.beginPath();
-        ctx.arc(sx, sy, Math.max(2.2, s * 0.09), 0, TAU);
-        ctx.fill();
+        const sx = Math.cos(a) * s * 0.54;
+        const sy = -s * 0.78 + Math.sin(a) * s * 0.16;
+        drawComicStarburst(ctx, sx, sy, Math.max(4, s * 0.16), Math.max(2, s * 0.07), 5, '#facc15', STYLE_TOKENS.ink, a, 1.5);
       }
     } else if (f.isHunting) {
-      const alertPulse = 1.0 + Math.sin(this.time * 12) * 0.14;
-      ctx.fillStyle = 'rgba(255, 0, 84, 0.20)';
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 1.32 * alertPulse, 0, TAU);
-      ctx.fill();
-
-      ctx.fillStyle = '#ff0054';
-      ctx.font = `900 ${Math.max(13, Math.round(s * 0.3))}px Outfit, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠️', 0, -s * 0.74);
+      const alertPulse = 1.0 + Math.sin(this.time * 12) * 0.12;
+      drawComicStarburst(ctx, 0, 0, s * 1.18 * alertPulse, s * 0.92 * alertPulse, 10, 'rgba(239, 68, 68, 0.26)', '#ef4444', this.time * 2, 2);
+      drawComicText(ctx, '!', 0, -s * 0.84, `900 ${Math.max(14, Math.round(s * 0.36))}px 'Fredoka', Outfit, sans-serif`, '#ef4444', { strokeWidth: 3.5 });
     } else if (showRivalHint) {
-      // Clear amber rival rim when within clash range so player knows "Dash to Crack!"
       const pRing = 1 + Math.sin(this.time * 8) * 0.08;
-      ctx.strokeStyle = 'rgba(255, 209, 102, 0.72)';
-      ctx.lineWidth = toyLineW(s, 0.055, 1.4, 3);
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = celInk(s, 0.75, 1.8, 3.2);
+      ctx.setLineDash([6, 5]);
       ctx.beginPath();
-      ctx.ellipse(0, 0, s * 1.05 * pRing, s * 0.62 * pRing, 0, 0, TAU);
+      ctx.ellipse(0, 0, s * 1.08 * pRing, s * 0.64 * pRing, 0, 0, TAU);
       ctx.stroke();
-
-      ctx.fillStyle = '#fde047';
-      ctx.font = `800 ${Math.max(11, Math.round(s * 0.28))}px 'Fredoka', Outfit, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('⚡', 0, -s * 0.72);
+      ctx.setLineDash([]);
+      drawComicText(ctx, '⚡', 0, -s * 0.78, `900 ${Math.max(12, Math.round(s * 0.32))}px 'Fredoka', Outfit, sans-serif`, '#fde047', { strokeWidth: 3 });
     } else if (f.isFleeing) {
-      ctx.fillStyle = '#67e8f9';
+      // Comic sky-blue panic sweat drop
+      ctx.fillStyle = '#38bdf8';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = Math.max(1.4, s * 0.06);
       ctx.beginPath();
-      ctx.arc(0, -s * 0.65, Math.max(2.6, s * 0.11), 0, TAU);
+      ctx.moveTo(0, -s * 0.88);
+      ctx.quadraticCurveTo(s * 0.14, -s * 0.66, 0, -s * 0.56);
+      ctx.quadraticCurveTo(-s * 0.14, -s * 0.66, 0, -s * 0.88);
       ctx.fill();
+      ctx.stroke();
     }
 
     const sq = f.bumpSquash || 0;
@@ -1412,431 +1693,432 @@ export class DeepFeeder extends Game {
     ctx.rotate(Math.atan2(f.vy, Math.abs(f.vx) + 25) * 0.42);
 
     const swing = Math.sin(f.wob * 2.8) * s * 0.22;
+    const eyeMood = f.stunT > 0 ? 'dizzy' : isDeadly ? 'angry' : f.isFleeing ? 'panic' : 'happy';
 
     switch (f.species) {
       case 'swedish':
-        this.renderSwedishFish(ctx, s, swing, f.flavor);
+        this.renderSwedishFish(ctx, s, swing, f.flavor, eyeMood);
         break;
       case 'candycorn':
-        this.renderCandyCornFish(ctx, s, swing);
+        this.renderCandyCornFish(ctx, s, swing, eyeMood);
         break;
       case 'peachring':
-        this.renderSourPeachRing(ctx, s, swing);
+        this.renderSourPeachRing(ctx, s, swing, eyeMood);
         break;
       case 'gummyworm':
-        this.renderGummyWorm(ctx, s, f.wob);
+        this.renderGummyWorm(ctx, s, f.wob, eyeMood);
         break;
       case 'puffer':
-        this.renderMarshmallowPuffer(ctx, s, swing, f.puffed, isDeadly);
+        this.renderMarshmallowPuffer(ctx, s, swing, f.puffed, eyeMood);
         break;
       case 'jellydrop':
-        this.renderBioluminescentGumdrop(ctx, s, f.wob);
+        this.renderBioluminescentGumdrop(ctx, s, f.wob, eyeMood);
         break;
       case 'peppermint':
-        this.renderPeppermintBarracuda(ctx, s, swing, isDeadly);
+        this.renderPeppermintBarracuda(ctx, s, swing, eyeMood, f.snapT);
         break;
       case 'licoriceserpent':
-        this.renderLicoriceSerpent(ctx, s, f.wob);
+        this.renderLicoriceSerpent(ctx, s, f.wob, eyeMood, f.snapT);
         break;
       case 'rockcandymarlin':
-        this.renderRockCandyMarlin(ctx, s, swing, isDeadly);
+        this.renderRockCandyMarlin(ctx, s, swing, eyeMood, f.snapT);
         break;
       case 'sourkraken':
-        this.renderGumdropKraken(ctx, s, f.wob, isDeadly);
+        this.renderGumdropKraken(ctx, s, f.wob, eyeMood);
         break;
       case 'strawberryshark':
-        this.renderHariboShark(ctx, s, swing, isDeadly, true);
+        this.renderHariboShark(ctx, s, swing, eyeMood, true, f.snapT);
         break;
       case 'sourmegalodon':
-        this.renderSourMegalodon(ctx, s, swing, isDeadly);
+        this.renderSourMegalodon(ctx, s, swing, eyeMood, f.snapT);
         break;
       case 'hariboshark':
       default:
-        this.renderHariboShark(ctx, s, swing, isDeadly, false);
+        this.renderHariboShark(ctx, s, swing, eyeMood, false, f.snapT);
         break;
     }
-
-    // Soft Studio Top Gloss Crescent on every confectionery creature
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
-    ctx.beginPath();
-    ctx.ellipse(-s * 0.1, -s * 0.24, s * 0.38, s * 0.085, 0, 0, TAU);
-    ctx.fill();
 
     ctx.restore();
   }
 
-  // 1. 🍬 Swedish Gummy Fish (Volumetric 3D translucent gummy body + tinted rim)
-  renderSwedishFish(ctx, s, swing, flavor = '#e63946') {
-    const rim = toyRim(flavor, 0.56);
-    const lw = toyLineW(s, 0.042, 0.85, 2.2);
+  // 1. 🍬 Swedish Gummy Fish (#000-inked 2-tone cel + Weebl eyes)
+  renderSwedishFish(ctx, s, swing, flavor = '#e63946', eyeMood = 'happy') {
+    const lw = celInk(s, 0.95);
+    const dark = shadeColor(flavor, -0.25);
 
     ctx.lineJoin = 'round';
-    ctx.fillStyle = shadeColor(flavor, -0.14);
-    ctx.strokeStyle = rim;
+    ctx.fillStyle = dark;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
     ctx.lineWidth = lw;
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.62, 0);
-    ctx.quadraticCurveTo(-s * 1.05, -s * 0.35 + swing * 0.4, -s * 1.32, -s * 0.42 + swing);
-    ctx.quadraticCurveTo(-s * 1.1, swing * 0.5, -s * 1.32, s * 0.42 + swing);
-    ctx.quadraticCurveTo(-s * 1.05, s * 0.35 + swing * 0.4, -s * 0.62, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    const bg = ctx.createRadialGradient(-s * 0.18, -s * 0.18, s * 0.06, 0, 0, s * 0.95);
-    bg.addColorStop(0, shadeColor(flavor, 0.48));
-    bg.addColorStop(0.45, flavor);
-    bg.addColorStop(1, shadeColor(flavor, -0.28));
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, s * 0.92, s * 0.48, 0, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-    ctx.lineWidth = Math.max(1.2, s * 0.04);
-    [-0.14, 0.16].forEach((ox) => {
-      ctx.beginPath();
-      ctx.arc(ox * s, 0, s * 0.24, -0.55, 0.55);
-      ctx.stroke();
-    });
-
-    ctx.fillStyle = shadeColor(flavor, 0.15);
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw * 0.85;
-    ctx.beginPath();
-    ctx.ellipse(-s * 0.05, s * 0.24, s * 0.22, s * 0.12, 0.4, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-
-    this.drawCartoonEye(ctx, s * 0.48, -s * 0.12, s * 0.14, 0.4);
-  }
-
-  // 2. 🍊 Candy Corn Fish (Smooth glazed 3D bands without heavy ink seams)
-  renderCandyCornFish(ctx, s, swing) {
-    const rim = '#92400e';
-    const lw = toyLineW(s, 0.042, 0.85, 2.2);
-
-    ctx.fillStyle = '#fbbf24';
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw;
-    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-s * 0.6, 0);
-    ctx.lineTo(-s * 1.28, -s * 0.42 + swing);
-    ctx.lineTo(-s * 1.28, s * 0.42 + swing);
+    ctx.quadraticCurveTo(-s * 1.05, -s * 0.36 + swing * 0.4, -s * 1.34, -s * 0.44 + swing);
+    ctx.quadraticCurveTo(-s * 1.1, swing * 0.5, -s * 1.34, s * 0.44 + swing);
+    ctx.quadraticCurveTo(-s * 1.05, s * 0.36 + swing * 0.4, -s * 0.6, 0);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    const bg = ctx.createLinearGradient(-s * 0.85, -s * 0.45, s * 0.85, s * 0.45);
-    bg.addColorStop(0, '#ffd166');
-    bg.addColorStop(0.42, '#f97316');
-    bg.addColorStop(0.75, '#fff7ed');
-    bg.addColorStop(1, '#ffffff');
-    ctx.fillStyle = bg;
+    ctx.fillStyle = flavor;
     ctx.beginPath();
-    ctx.ellipse(0, 0, s * 0.86, s * 0.48, 0, 0, TAU);
+    ctx.ellipse(0, 0, s * 0.92, s * 0.50, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.28, s * 0.96, s * 0.35, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.14, -s * 0.28, s * 0.36, s * 0.09, -0.08, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.92, s * 0.50, 0, 0, TAU);
+    ctx.stroke();
+
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.04, s * 0.22, s * 0.24, s * 0.12, 0.38, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-    ctx.beginPath();
-    ctx.ellipse(0, s * 0.24, s * 0.56, s * 0.12, 0, 0, TAU);
-    ctx.fill();
-
-    this.drawCartoonEye(ctx, s * 0.46, -s * 0.12, s * 0.14, 0.4);
+    drawWeeblEyeCluster(ctx, s * 0.44, -s * 0.10, s * 0.22, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.8 });
   }
 
-  // 3. 🍑 Sour Peach Ring Jelly (Glossy translucent gummy donut ring)
-  renderSourPeachRing(ctx, s, swing) {
-    const rim = '#9d174d';
-    const lw = toyLineW(s, 0.042, 0.85, 2.2);
+  // 2. 🍊 Candy Corn Fish (Hard cel 3-color block bands)
+  renderCandyCornFish(ctx, s, swing, eyeMood = 'happy') {
+    const lw = celInk(s, 0.95);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = lw;
 
-    ctx.strokeStyle = '#be185d';
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.58, 0);
+    ctx.lineTo(-s * 1.28, -s * 0.44 + swing);
+    ctx.lineTo(-s * 1.28, s * 0.44 + swing);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.88, s * 0.50, 0, 0, TAU);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(-s, -s, s * 0.65, s * 2);
+    ctx.fillStyle = '#f97316';
+    ctx.fillRect(-s * 0.35, -s, s * 0.72, s * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(s * 0.37, -s, s * 0.75, s * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.12, -s * 0.28, s * 0.36, s * 0.09, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.88, s * 0.50, 0, 0, TAU);
+    ctx.stroke();
+
+    drawWeeblEyeCluster(ctx, s * 0.44, -s * 0.10, s * 0.22, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.8 });
+  }
+
+  // 3. 🍑 Sour Peach Ring Jelly (Real donut ring cutout + #000 outlines)
+  renderSourPeachRing(ctx, s, swing, eyeMood = 'happy') {
+    const lw = celInk(s, 0.95);
     ctx.lineCap = 'round';
-    ctx.lineWidth = lw * 1.4;
+    ctx.lineJoin = 'round';
+
     for (let t = -1; t <= 1; t++) {
-      const ty = t * (s * 0.18);
+      const ty = t * (s * 0.2);
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = lw * 2.2;
       ctx.beginPath();
-      ctx.moveTo(-s * 0.58, ty);
+      ctx.moveTo(-s * 0.56, ty);
       ctx.quadraticCurveTo(-s * 1.0, ty + swing, -s * 1.32, ty - swing);
+      ctx.stroke();
+      ctx.strokeStyle = '#fb7185';
+      ctx.lineWidth = lw * 1.25;
       ctx.stroke();
     }
 
-    const g = ctx.createLinearGradient(-s * 0.7, -s * 0.5, s * 0.7, s * 0.5);
-    g.addColorStop(0, '#fde047');
-    g.addColorStop(0.55, '#fb7185');
-    g.addColorStop(1, '#f43f5e');
-    ctx.fillStyle = g;
-    ctx.strokeStyle = rim;
+    ctx.fillStyle = '#fb7185';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
     ctx.lineWidth = lw;
     ctx.beginPath();
-    ctx.arc(0, 0, s * 0.65, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
+    ctx.arc(0, 0, s * 0.66, 0, TAU, false);
+    ctx.arc(0, 0, s * 0.26, 0, TAU, true);
+    ctx.fill('evenodd');
 
-    ctx.fillStyle = '#0c4a6e';
+    // Upper sunny peach cel slice
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(0, 0, s * 0.27, 0, TAU);
+    ctx.arc(0, 0, s * 0.66, 0, TAU, false);
+    ctx.arc(0, 0, s * 0.26, 0, TAU, true);
+    ctx.clip('evenodd');
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.15, -s * 0.3, s * 0.72, s * 0.38, 0, 0, TAU);
     ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.66, 0, TAU);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.26, 0, TAU);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * TAU;
-      const r = s * 0.46;
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * r, Math.sin(a) * r, s * 0.04, 0, TAU);
-      ctx.fill();
-    }
-
-    this.drawCartoonEye(ctx, s * 0.16, -s * 0.38, s * 0.13, 0.3);
+    drawWeeblEyeCluster(ctx, s * 0.26, -s * 0.34, s * 0.19, { lookX: 0.4, mood: eyeMood, lineW: lw * 0.75 });
   }
 
-  // 4. 🍫 Marshmallow Puffer (Fluffy 3D pillow sphere + glossy candy spikes)
-  renderMarshmallowPuffer(ctx, s, swing, puffed, isDeadly) {
+  // 4. 🍫 Marshmallow Puffer (Fluffy #000-inked puff + cel butterscotch spikes)
+  renderMarshmallowPuffer(ctx, s, swing, puffed, eyeMood = 'happy') {
     const puffScale = 1.0 + puffed * 0.42;
-    const pr = s * 0.62 * puffScale;
-    const lw = toyLineW(pr * 2, 0.038, 0.85, 2.0);
+    const pr = s * 0.64 * puffScale;
+    const lw = celInk(pr * 2, 0.55);
 
     if (puffed > 0.05) {
       const numSpikes = 10;
       for (let i = 0; i < numSpikes; i++) {
         const a = (i / numSpikes) * TAU;
-        const spLen = pr + puffed * s * 0.34;
-        ctx.fillStyle = '#fbbf24';
-        ctx.strokeStyle = '#92400e';
+        const spLen = pr + puffed * s * 0.36;
+        ctx.fillStyle = '#f59e0b';
+        ctx.strokeStyle = STYLE_TOKENS.ink;
         ctx.lineWidth = lw;
-        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(Math.cos(a - 0.18) * pr * 0.92, Math.sin(a - 0.18) * pr * 0.92);
+        ctx.moveTo(Math.cos(a - 0.2) * pr * 0.9, Math.sin(a - 0.2) * pr * 0.9);
         ctx.lineTo(Math.cos(a) * spLen, Math.sin(a) * spLen);
-        ctx.lineTo(Math.cos(a + 0.18) * pr * 0.92, Math.sin(a + 0.18) * pr * 0.92);
+        ctx.lineTo(Math.cos(a + 0.2) * pr * 0.9, Math.sin(a + 0.2) * pr * 0.9);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       }
     }
 
-    drawToySphere(ctx, 0, 0, pr, '#fffbeb', { rimColor: '#b45309', lineWidth: lw });
-
-    ctx.fillStyle = '#f59e0b';
-    ctx.strokeStyle = '#92400e';
-    ctx.lineWidth = lw * 0.9;
+    ctx.fillStyle = '#fef3c7';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = lw;
     ctx.beginPath();
-    ctx.ellipse(-pr * 0.72, swing * 0.4, pr * 0.28, pr * 0.16, 0, 0, TAU);
+    ctx.arc(-pr * 0.72, swing * 0.35, pr * 0.26, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
-    this.drawCartoonEye(ctx, pr * 0.35, -pr * 0.2, pr * 0.3, 0.3, isDeadly);
+    ctx.fillStyle = '#fffbeb';
+    ctx.beginPath();
+    ctx.arc(0, 0, pr, 0, TAU);
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#fde68a';
+    ctx.beginPath();
+    ctx.arc(pr * 0.12, pr * 0.22, pr, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(-pr * 0.28, -pr * 0.45, pr * 0.3, pr * 0.14, -0.35, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(0, 0, pr, 0, TAU);
+    ctx.stroke();
+
+    drawWeeblEyeCluster(ctx, pr * 0.32, -pr * 0.16, pr * 0.32, { lookX: 0.4, mood: eyeMood, lineW: lw * 0.8 });
   }
 
-  // 5. 🐛 Trolli Gummy Worm (Beaded glossy 3D gummy spheres)
-  renderGummyWorm(ctx, s, wob) {
+  // 5. 🐛 Trolli Gummy Worm (Beaded cel segments + #000 ink)
+  renderGummyWorm(ctx, s, wob, eyeMood = 'happy') {
     const segments = 5;
-    const lw = toyLineW(s, 0.04, 0.75, 1.9);
+    const lw = celInk(s, 0.85);
     for (let i = segments; i >= 0; i--) {
-      const segX = -i * (s * 0.28);
-      const segY = Math.sin(wob * 2.8 + i * 0.6) * (s * 0.24);
-      const segR = s * (0.36 - i * 0.02);
-      const col = i % 2 === 0 ? '#2dd4bf' : '#f43f5e';
-      drawToySphere(ctx, segX, segY, segR, col, { lineWidth: lw });
+      const segX = -i * (s * 0.29);
+      const segY = Math.sin(wob * 2.8 + i * 0.65) * (s * 0.24);
+      const segR = s * (0.37 - i * 0.02);
+      const col = i % 2 === 0 ? '#14b8a6' : '#f43f5e';
+      ctx.fillStyle = col;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.arc(segX, segY, segR, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.58)';
+      ctx.beginPath();
+      ctx.ellipse(segX - segR * 0.25, segY - segR * 0.35, segR * 0.28, segR * 0.14, -0.3, 0, TAU);
+      ctx.fill();
     }
-    this.drawCartoonEye(ctx, s * 0.14, -s * 0.08, s * 0.13, 0.4);
+    drawWeeblEyeCluster(ctx, s * 0.14, -s * 0.08, s * 0.18, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.8 });
   }
 
-  // 6. 🍭 Peppermint Razor Barracuda (Sleek 3D candy torpedo)
-  renderPeppermintBarracuda(ctx, s, swing, isDeadly) {
-    const lw = toyLineW(s, 0.04, 0.9, 2.2);
-    const L = s * 1.5;
-    const Hh = s * 0.4;
-    const rim = '#881337';
+  // 6. 🍭 Peppermint Razor Barracuda (Snapping jaw + bold stripes)
+  renderPeppermintBarracuda(ctx, s, swing, eyeMood = 'angry', snapT = 0) {
+    const lw = celInk(s, 0.95);
+    const L = s * 1.48;
+    const Hh = s * 0.42;
 
-    ctx.fillStyle = '#e11d48';
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw;
     ctx.lineJoin = 'round';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = lw;
+    ctx.fillStyle = '#e11d48';
     ctx.beginPath();
     ctx.moveTo(-L * 0.7, 0);
-    ctx.lineTo(-L * 1.32, -Hh * 1.08 + swing);
-    ctx.lineTo(-L * 1.32, Hh * 1.08 + swing);
+    ctx.lineTo(-L * 1.34, -Hh * 1.12 + swing);
+    ctx.lineTo(-L * 1.34, Hh * 1.12 + swing);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    const bg = ctx.createLinearGradient(0, -Hh, 0, Hh);
-    bg.addColorStop(0, '#ffffff');
-    bg.addColorStop(0.7, '#f8fafc');
-    bg.addColorStop(1, '#cbd5e1');
-    ctx.fillStyle = bg;
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.fill();
 
     ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.clip();
     ctx.strokeStyle = '#e11d48';
-    ctx.lineWidth = Math.max(3, s * 0.1);
-    [-0.5, -0.22, 0.06, 0.32].forEach((sx) => {
+    ctx.lineWidth = Math.max(4, s * 0.13);
+    [-0.55, -0.22, 0.1, 0.4].forEach((sx) => {
       ctx.beginPath();
-      ctx.moveTo(sx * L - Hh, -Hh * 0.95);
-      ctx.lineTo(sx * L + Hh, Hh * 0.95);
+      ctx.moveTo(sx * L - Hh, -Hh);
+      ctx.lineTo(sx * L + Hh, Hh);
       ctx.stroke();
     });
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
+    ctx.fillRect(-L, -Hh, L * 2, Hh * 0.42);
     ctx.restore();
 
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.stroke();
 
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.2;
-    for (let i = 0; i < 3; i++) {
-      const tx = L * (0.68 + i * 0.09);
-      ctx.beginPath();
-      ctx.moveTo(tx, Hh * 0.15);
-      ctx.lineTo(tx + L * 0.04, -Hh * 0.08);
-      ctx.lineTo(tx + L * 0.08, Hh * 0.15);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    this.drawCartoonEye(ctx, L * 0.68, -Hh * 0.22, Hh * 0.36, 0.45, isDeadly);
+    this.drawCartoonJaws(ctx, L * 0.78, Hh * 0.2, L * 0.34, Hh * 0.75, Math.max(0.28, snapT), 3);
+    drawWeeblEyeCluster(ctx, L * 0.62, -Hh * 0.2, Hh * 0.46, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.85 });
   }
 
-  // 7. 🦈 Haribo Two-Tone Shark (3D shaded sapphire/berry top + marshmallow belly!)
-  renderHariboShark(ctx, s, swing, isDeadly, isStrawberry = false) {
-    const L = s * 1.45;
-    const Hh = s * 0.52;
+  // 7. 🦈 Haribo Two-Tone Shark & Strawberry Shark
+  renderHariboShark(ctx, s, swing, eyeMood = 'angry', isStrawberry = false, snapT = 0) {
+    const L = s * 1.46;
+    const Hh = s * 0.54;
     const gelColor = isStrawberry ? '#f43f5e' : '#0284c7';
-    const rim = toyRim(gelColor, 0.62);
-    const lw = toyLineW(s, 0.04, 0.9, 2.3);
+    const lw = celInk(s, 0.98);
 
     ctx.lineJoin = 'round';
-    ctx.fillStyle = shadeColor(gelColor, -0.1);
-    ctx.strokeStyle = rim;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
     ctx.lineWidth = lw;
+
+    ctx.fillStyle = shadeColor(gelColor, -0.14);
     ctx.beginPath();
     ctx.moveTo(-L * 0.7, 0);
-    ctx.lineTo(-L * 1.32, -Hh * 1.22 + swing);
-    ctx.lineTo(-L * 1.04, swing * 0.4);
-    ctx.lineTo(-L * 1.32, Hh * 1.22 + swing);
+    ctx.lineTo(-L * 1.34, -Hh * 1.24 + swing);
+    ctx.lineTo(-L * 1.02, swing * 0.4);
+    ctx.lineTo(-L * 1.34, Hh * 1.24 + swing);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = shadeColor(gelColor, 0.12);
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.08, -Hh * 0.85);
-    ctx.quadraticCurveTo(-L * 0.24, -Hh * 1.6, -L * 0.42, -Hh * 1.9);
-    ctx.lineTo(-L * 0.52, -Hh * 0.85);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    const tg = ctx.createLinearGradient(0, -Hh, 0, 0);
-    tg.addColorStop(0, shadeColor(gelColor, 0.36));
-    tg.addColorStop(1, gelColor);
-    ctx.fillStyle = tg;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, L, Hh, 0, Math.PI, 0);
-    ctx.fill();
-
-    const bg = ctx.createLinearGradient(0, 0, 0, Hh);
-    bg.addColorStop(0, '#fffbeb');
-    bg.addColorStop(1, '#e2e8f0');
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, L, Hh, 0, 0, Math.PI);
-    ctx.fill();
-
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = lw * 0.8;
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.92, 0);
-    ctx.lineTo(L * 0.92, 0);
     ctx.stroke();
 
     ctx.fillStyle = gelColor;
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw * 0.85;
     ctx.beginPath();
-    ctx.ellipse(-L * 0.1, Hh * 0.52, L * 0.26, Hh * 0.34, 0.4, 0, TAU);
+    ctx.moveTo(-L * 0.06, -Hh * 0.86);
+    ctx.quadraticCurveTo(-L * 0.24, -Hh * 1.65, -L * 0.44, -Hh * 1.95);
+    ctx.lineTo(-L * 0.54, -Hh * 0.86);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = 1.0;
-    for (let t = 0; t < 3; t++) {
-      const tx = L * (0.66 + t * 0.08);
-      ctx.beginPath();
-      ctx.arc(tx, Hh * 0.22, s * 0.052, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
-    }
+    // Two-tone cel split: saturated gummy upper + bright cream belly
+    ctx.beginPath();
+    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = gelColor;
+    ctx.fillRect(-L * 1.1, -Hh * 1.1, L * 2.2, Hh * 1.18);
+    ctx.fillStyle = '#fffbeb';
+    ctx.fillRect(-L * 1.1, Hh * 0.08, L * 2.2, Hh);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(-L * 0.1, -Hh * 0.56, L * 0.48, Hh * 0.16, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
 
-    this.drawCartoonEye(ctx, L * 0.65, -Hh * 0.28, Hh * 0.32, 0.4, isDeadly);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
+    ctx.stroke();
+
+    ctx.fillStyle = gelColor;
+    ctx.beginPath();
+    ctx.ellipse(-L * 0.12, Hh * 0.5, L * 0.28, Hh * 0.34, 0.38, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawCartoonJaws(ctx, L * 0.72, Hh * 0.24, L * 0.34, Hh * 0.75, Math.max(0.24, snapT), 3);
+    drawWeeblEyeCluster(ctx, L * 0.62, -Hh * 0.26, Hh * 0.4, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.85 });
   }
 
-  // 8. 🍓 Bioluminescent Gumdrop Jelly (Glowing translucent jelly dome)
-  renderBioluminescentGumdrop(ctx, s, wob) {
+  // 8. 🍓 Bioluminescent Gumdrop Jelly
+  renderBioluminescentGumdrop(ctx, s, wob, eyeMood = 'happy') {
     const pulse = 1.0 + Math.sin(wob * 2.5) * 0.12;
     const r = s * 0.72 * pulse;
-    const lw = toyLineW(s, 0.04, 0.85, 2.0);
+    const lw = celInk(s, 0.9);
 
-    ctx.strokeStyle = '#f472b6';
-    ctx.lineWidth = Math.max(2, s * 0.065);
     ctx.lineCap = 'round';
     for (let t = -2; t <= 2; t++) {
       const tx = t * (s * 0.22);
       const sw = Math.sin(wob * 2.5 + t) * s * 0.24;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = Math.max(4, s * 0.14);
       ctx.beginPath();
       ctx.moveTo(tx, 0);
       ctx.quadraticCurveTo(tx + sw, s * 0.6, tx - sw, s * 1.2);
       ctx.stroke();
+      ctx.strokeStyle = '#f472b6';
+      ctx.lineWidth = Math.max(2.2, s * 0.08);
+      ctx.stroke();
     }
 
-    const g = ctx.createRadialGradient(-r * 0.25, -r * 0.55, r * 0.1, 0, 0, r);
-    g.addColorStop(0, '#fbcfe8');
-    g.addColorStop(0.45, '#ec4899');
-    g.addColorStop(1, '#7e22ce');
-    ctx.fillStyle = g;
-    ctx.strokeStyle = '#581c87';
+    ctx.fillStyle = '#ec4899';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
     ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.arc(0, 0, r, Math.PI, 0);
     ctx.closePath();
     ctx.fill();
+
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#a855f7';
+    ctx.fillRect(-r, -r * 0.36, r * 2, r * 0.4);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.34, -r * 0.56, r * 0.26, r * 0.12, -0.4, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, r, Math.PI, 0);
+    ctx.closePath();
     ctx.stroke();
 
-    this.drawCartoonEye(ctx, s * 0.18, -r * 0.35, r * 0.22, 0.3);
+    drawWeeblEyeCluster(ctx, 0, -r * 0.36, r * 0.24, { dual: true, spacing: r * 0.48, lookX: 0.3, mood: eyeMood, lineW: lw * 0.75 });
   }
 
-  // 9. 🗡️ Rock Candy Marlin (3D glazed azure marlin + striped candy lance)
-  renderRockCandyMarlin(ctx, s, swing, isDeadly) {
-    const L = s * 1.45;
+  // 9. 🗡️ Rock Candy Marlin
+  renderRockCandyMarlin(ctx, s, swing, eyeMood = 'angry', snapT = 0) {
+    const L = s * 1.46;
     const Hh = s * 0.46;
-    const rim = '#0c4a6e';
-    const lw = toyLineW(s, 0.04, 0.9, 2.2);
+    const lw = celInk(s, 0.95);
+
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = lw;
 
     ctx.fillStyle = '#38bdf8';
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = lw;
-    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-L * 0.3, -Hh * 0.85);
     ctx.lineTo(-L * 0.05, -Hh * 2.15);
@@ -1845,76 +2127,90 @@ export class DeepFeeder extends Game {
     ctx.fill();
     ctx.stroke();
 
-    const bg = ctx.createLinearGradient(0, -Hh, 0, Hh);
-    bg.addColorStop(0, '#38bdf8');
-    bg.addColorStop(0.55, '#0284c7');
-    bg.addColorStop(1, '#075985');
-    ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
-    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(-L, -Hh, L * 2, Hh * 2);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-L, -Hh, L * 2, Hh * 0.72);
+    ctx.fillStyle = '#bae6fd';
+    ctx.fillRect(-L, Hh * 0.25, L * 2, Hh);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
     ctx.stroke();
 
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#881337';
-    ctx.lineWidth = Math.max(3.5, s * 0.1);
+    // Candy lance rostrum
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = Math.max(5.5, s * 0.16);
     ctx.beginPath();
-    ctx.moveTo(L * 0.85, 0);
+    ctx.moveTo(L * 0.84, 0);
     ctx.lineTo(L * 1.88, 0);
     ctx.stroke();
 
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(2.2, s * 0.07);
+    ctx.lineWidth = Math.max(3, s * 0.09);
     ctx.stroke();
-
     ctx.setLineDash([s * 0.16, s * 0.16]);
-    ctx.strokeStyle = '#f43f5e';
+    ctx.strokeStyle = '#ef4444';
     ctx.stroke();
     ctx.setLineDash([]);
 
-    this.drawCartoonEye(ctx, L * 0.65, -Hh * 0.2, Hh * 0.34, 0.45, isDeadly);
+    this.drawCartoonJaws(ctx, L * 0.68, Hh * 0.25, L * 0.26, Hh * 0.55, Math.max(0.2, snapT), 2);
+    drawWeeblEyeCluster(ctx, L * 0.62, -Hh * 0.22, Hh * 0.42, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.85 });
   }
 
-  // 10. 🐙 Gumdrop Kraken Squid (Bulbous vinyl purple crown + curly arms)
-  renderGumdropKraken(ctx, s, wob, isDeadly) {
-    const lw = toyLineW(s, 0.04, 0.85, 2.2);
-
+  // 10. 🐙 Gumdrop Kraken Squid
+  renderGumdropKraken(ctx, s, wob, eyeMood = 'angry') {
+    const lw = celInk(s, 0.95);
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#ec4899';
-    ctx.lineWidth = Math.max(2.8, s * 0.075);
     for (let i = -2; i <= 2; i++) {
-      const ty = i * (s * 0.14);
-      const wave = Math.sin(wob * 3 + i) * s * 0.24;
+      const ty = i * (s * 0.15);
+      const wave = Math.sin(wob * 3 + i) * s * 0.25;
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = Math.max(5, s * 0.15);
       ctx.beginPath();
-      ctx.moveTo(s * 0.48, ty);
-      ctx.quadraticCurveTo(s * 1.05, ty + wave, s * 1.55, ty - wave);
+      ctx.moveTo(s * 0.46, ty);
+      ctx.quadraticCurveTo(s * 1.05, ty + wave, s * 1.56, ty - wave);
+      ctx.stroke();
+      ctx.strokeStyle = '#ec4899';
+      ctx.lineWidth = Math.max(2.6, s * 0.085);
       ctx.stroke();
     }
 
-    const kg = ctx.createRadialGradient(-s * 0.45, -s * 0.18, s * 0.08, -s * 0.3, 0, s * 0.9);
-    kg.addColorStop(0, '#c084fc');
-    kg.addColorStop(0.5, '#9333ea');
-    kg.addColorStop(1, '#581c87');
-    ctx.fillStyle = kg;
-    ctx.strokeStyle = '#3b0764';
+    ctx.fillStyle = '#9333ea';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
     ctx.lineWidth = lw;
     ctx.beginPath();
-    ctx.ellipse(-s * 0.3, 0, s * 0.85, s * 0.46, 0, 0, TAU);
+    ctx.ellipse(-s * 0.3, 0, s * 0.86, s * 0.48, 0, 0, TAU);
     ctx.fill();
+
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#c084fc';
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.45, -s * 0.25, s * 0.55, s * 0.16, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.3, 0, s * 0.86, s * 0.48, 0, 0, TAU);
     ctx.stroke();
 
-    this.drawCartoonEye(ctx, s * 0.22, -s * 0.16, s * 0.21, 0.4, isDeadly);
+    drawWeeblEyeCluster(ctx, s * 0.24, -s * 0.16, s * 0.26, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.8 });
   }
 
-  // 11. 🍓 Strawberry Licorice Eel (Smooth glossy red candy ribbon)
-  renderLicoriceSerpent(ctx, s, wob) {
-    const lineW = Math.max(4, s * 0.13);
+  // 11. 🍓 Strawberry Licorice Eel
+  renderLicoriceSerpent(ctx, s, wob, eyeMood = 'angry', snapT = 0) {
+    const lineW = Math.max(5, s * 0.16);
 
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#881337';
-    ctx.lineWidth = lineW + 2.4;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = lineW + Math.max(3, s * 0.09);
     ctx.beginPath();
-    for (let x = -s * 1.35; x <= s * 0.85; x += s * 0.2) {
+    for (let x = -s * 1.35; x <= s * 0.85; x += s * 0.18) {
       const y = Math.sin(wob * 3 + x * 0.08) * s * 0.32;
       if (x === -s * 1.35) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
@@ -1925,83 +2221,80 @@ export class DeepFeeder extends Game {
     ctx.lineWidth = lineW;
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.lineWidth = Math.max(1.2, s * 0.045);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = Math.max(1.5, s * 0.045);
     ctx.stroke();
 
-    this.drawCartoonEye(ctx, s * 0.72, -s * 0.08, s * 0.12, 0.4);
+    this.drawCartoonJaws(ctx, s * 0.84, Math.sin(wob * 3 + 0.08 * s * 0.85) * s * 0.32 + s * 0.06, s * 0.22, s * 0.18, Math.max(0.25, snapT), 2);
+    drawWeeblEyeCluster(ctx, s * 0.7, Math.sin(wob * 3 + 0.06 * s) * s * 0.32 - s * 0.14, s * 0.18, { lookX: 0.45, mood: eyeMood, lineW: 2 });
   }
 
-  // 12. 👑 Sour Crystal Megalodon (Colossal glazed blue-berry-lemon apex titan)
-  renderSourMegalodon(ctx, s, swing, isDeadly) {
-    const L = s * 1.65;
-    const Hh = s * 0.62;
-    const rim = '#1e1b4b';
-    const lw = toyLineW(s, 0.036, 1.2, 2.8);
+  // 12. 👑 Sour Crystal Megalodon (Royal crystal-crowned apex boss titan)
+  renderSourMegalodon(ctx, s, swing, eyeMood = 'angry', snapT = 0) {
+    const L = s * 1.66;
+    const Hh = s * 0.64;
+    const lw = celInk(s, 1.05, 2.2, 4.5);
 
     ctx.lineJoin = 'round';
-    ctx.fillStyle = '#4f46e5';
-    ctx.strokeStyle = rim;
+    ctx.strokeStyle = STYLE_TOKENS.ink;
     ctx.lineWidth = lw;
+
+    ctx.fillStyle = '#4f46e5';
     ctx.beginPath();
     ctx.moveTo(-L * 0.7, 0);
-    ctx.lineTo(-L * 1.35, -Hh * 1.28 + swing);
-    ctx.lineTo(-L * 1.05, swing * 0.4);
-    ctx.lineTo(-L * 1.35, Hh * 1.28 + swing);
+    ctx.lineTo(-L * 1.38, -Hh * 1.3 + swing);
+    ctx.lineTo(-L * 1.04, swing * 0.4);
+    ctx.lineTo(-L * 1.38, Hh * 1.3 + swing);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(-L * 0.1, -Hh * 0.85);
-    ctx.lineTo(-L * 0.45, -Hh * 2.0);
-    ctx.lineTo(-L * 0.55, -Hh * 0.85);
+    ctx.moveTo(-L * 0.08, -Hh * 0.85);
+    ctx.lineTo(-L * 0.45, -Hh * 2.05);
+    ctx.lineTo(-L * 0.56, -Hh * 0.85);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    const bg = ctx.createLinearGradient(0, -Hh, 0, Hh);
-    bg.addColorStop(0, '#60a5fa');
-    bg.addColorStop(0.55, '#7c3aed');
-    bg.addColorStop(1, '#fbbf24');
-    ctx.fillStyle = bg;
+    // Two-tone crystal cobalt + golden belly
     ctx.beginPath();
     ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillRect(-L * 1.1, -Hh * 1.1, L * 2.2, Hh * 2.2);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-L * 1.1, -Hh * 1.1, L * 2.2, Hh * 0.88);
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(-L * 1.1, Hh * 0.25, L * 2.2, Hh);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, L, Hh, 0, 0, TAU);
+    ctx.stroke();
+
+    // Sovereign Crown Crystal Crest
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(L * 0.14, -Hh * 0.82);
+    ctx.lineTo(L * 0.22, -Hh * 1.32);
+    ctx.lineTo(L * 0.34, -Hh * 0.98);
+    ctx.lineTo(L * 0.46, -Hh * 1.36);
+    ctx.lineTo(L * 0.56, -Hh * 0.8);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    for (let i = 0; i < 16; i++) {
-      const sx = ((i % 4) - 1.5) * (L * 0.38);
-      const sy = (Math.floor(i / 4) - 1.5) * (Hh * 0.35);
-      ctx.beginPath();
-      ctx.arc(sx, sy, Math.max(1.8, s * 0.032), 0, TAU);
-      ctx.fill();
-    }
-
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = 1.4;
-    for (let t = 0; t < 5; t++) {
-      const tx = L * (0.64 + t * 0.07);
-      ctx.beginPath();
-      ctx.moveTo(tx, Hh * 0.2);
-      ctx.lineTo(tx + L * 0.04, Hh * 0.54);
-      ctx.lineTo(tx + L * 0.08, Hh * 0.2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    this.drawCartoonEye(ctx, L * 0.68, -Hh * 0.25, Hh * 0.36, 0.45, true);
+    this.drawCartoonJaws(ctx, L * 0.72, Hh * 0.25, L * 0.38, Hh * 0.82, Math.max(0.36, snapT), 4);
+    drawWeeblEyeCluster(ctx, L * 0.64, -Hh * 0.28, Hh * 0.42, { lookX: 0.45, mood: eyeMood, lineW: lw * 0.85 });
   }
 
-  /* ------------------------------------------------ Threat Radar (Lane Approaching Only) */
+  /* ------------------------------------------------ Screen-Edge Comic Threat Arrows */
   drawThreatRadar(ctx, p, ox, oy, sc, W, H) {
     if (p.sugarRush > 0) return;
 
     const vr = this.viewR();
-    const margin = 26;
+    const margin = 24;
 
     for (const f of this.fish) {
       const ratio = f.size / p.size;
@@ -2021,75 +2314,101 @@ export class DeepFeeder extends Game {
 
       const screenX = ox + dx * sc;
       const screenY = oy + dy * sc;
-
       const isOffscreen = screenX < margin || screenX > W - margin || screenY < margin || screenY > H - margin;
       if (!isOffscreen) continue;
 
       const ang = Math.atan2(dy, dx);
       const edgeX = clamp(ox + Math.cos(ang) * (W / 2 - margin), margin, W - margin);
-      const edgeY = clamp(oy + Math.sin(ang) * (H / 2 - margin), margin + 40, H - margin - 60);
+      const edgeY = clamp(oy + Math.sin(ang) * (H / 2 - margin), 192, H - 78);
 
       const proximity = 1.0 - clamp((d - vr * 0.45) / (vr * 1.1), 0, 1);
-      const pulse = 1.0 + Math.sin(this.time * (6 + proximity * 10)) * 0.22;
+      const pulse = 1.0 + Math.sin(this.time * (7 + proximity * 10)) * 0.16;
 
       ctx.save();
       ctx.translate(edgeX, edgeY);
-
-      ctx.fillStyle = `rgba(244, 63, 94, ${0.32 + proximity * 0.42})`;
-      ctx.beginPath();
-      ctx.arc(0, 0, 17 * pulse, 0, TAU);
-      ctx.fill();
-
       ctx.rotate(ang);
-      ctx.fillStyle = '#f43f5e';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.8;
+      ctx.scale(pulse, pulse);
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.moveTo(11, 0);
-      ctx.lineTo(-7, -8);
-      ctx.lineTo(-3.5, 0);
-      ctx.lineTo(-7, 8);
+      ctx.moveTo(13, 0);
+      ctx.lineTo(-9, -10);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-9, 10);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '800 11px Outfit, system-ui, sans-serif';
-      ctx.textAlign = 'center';
       const distM = Math.max(1, Math.round(d / 18));
-      ctx.fillText(`${distM}m`, edgeX, edgeY + 22);
+      drawComicText(ctx, `${distM}m`, edgeX, edgeY + 21, "900 11px 'Fredoka', Outfit, sans-serif", '#fef08a', { strokeWidth: 3 });
     }
   }
 
-  /* ------------------------------------------------ Crisp Toy HUD */
+  /* ------------------------------------------------ Clutter-Free Weebl Comic HUD (Zero #hud or #adminDock overlap!) */
   drawDeepHUD(ctx, W, H, p) {
     const curStage = STAGES[this.stage];
+    const nextStage = STAGES[Math.min(STAGES.length - 1, this.stage + 1)];
     const depthM = Math.max(0, Math.round(p.y / 10));
     const zone = this.getDepthZone(p.y);
 
-    const radarW = 136;
-    const radarH = 76;
-    const rx = 14;
-    const ry = H - 232;
+    // 1. Top-Left Compact Evolution & Depth Comic Pill (`x=12, y=104, 240x48`) — clears CYCLE row above!
+    drawComicPanel(ctx, 12, 104, 240, 48, 12, '#0f172a', { lineWidth: 3, shadowDx: 2.5, shadowDy: 3.5 });
 
-    drawToyBevelRect(ctx, rx, ry, radarW, radarH, 12, '#0f172a', {
-      depth: 2,
-      rimColor: '#38bdf8',
-      lineWidth: 2,
-      gloss: false,
-    });
+    const tierLabel = this.isMaxSize()
+      ? 'APEX MEGALODON · MAX'
+      : `T${this.stage + 1} · ${curStage.n.toUpperCase()}`;
+    drawComicText(
+      ctx,
+      tierLabel,
+      22,
+      119,
+      "900 11.5px 'Fredoka', Outfit, sans-serif",
+      this.isMaxSize() ? '#fde047' : '#4ade80',
+      { align: 'left', strokeWidth: 2.8 }
+    );
 
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = '800 9px Outfit, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('📡 SONAR · 45km OCEAN', rx + 10, ry + 14);
+    // Inline evolution progress bar cleanly docked on right edge of card (`x=200..244`)
+    if (!this.isMaxSize() && nextStage.s > curStage.s) {
+      const evoFrac = clamp((p.size - curStage.s) / Math.max(1, nextStage.s - curStage.s), 0, 1);
+      const gx = 200, gy = 113, gw = 42, gh = 10;
+      ctx.fillStyle = '#020617';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(gx, gy, gw, gh, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.roundRect(gx + 1.5, gy + 1.5, Math.max(4, (gw - 3) * evoFrac), gh - 3, 4);
+      ctx.fill();
+    }
 
-    const barX = rx + 12;
-    const barY = ry + 22;
-    const barHeight = 44;
+    drawComicText(
+      ctx,
+      `${depthM}m · ${zone.name}`,
+      22,
+      138,
+      '800 10.5px Outfit, system-ui, sans-serif',
+      zone.threatColor,
+      { align: 'left', strokeWidth: 2.5 }
+    );
+
+    // 2. Top-Right Compact Comic Sonar Disc + Depth Bar (`x=W-80, y=114, 68x68`) — clears ★ PRESTIGE badge!
+    const sx = W - 80;
+    const sy = 114;
+    drawComicPanel(ctx, sx, sy, 68, 68, 14, '#0f172a', { lineWidth: 3, shadowDx: 2.5, shadowDy: 3.5 });
+
+    // Vertical 8-zone depth strip on left side of sonar pod
+    const barX = sx + 8;
+    const barY = sy + 9;
+    const barHeight = 50;
     const barWidth = 7;
-
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2;
     for (let k = 0; k < DEPTH_ZONES.length; k++) {
       const z = DEPTH_ZONES[k];
       const segY0 = (z.yMin / MAXY) * barHeight;
@@ -2097,35 +2416,44 @@ export class DeepFeeder extends Game {
       ctx.fillStyle = z.threatColor;
       ctx.fillRect(barX, barY + segY0, barWidth, Math.max(2, segY1 - segY0));
     }
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    const playerYNorm = clamp(p.y / MAXY, 0, 1);
-    const pMarkerY = barY + playerYNorm * barHeight;
-    drawToySphere(ctx, barX + barWidth / 2, pMarkerY, 4, '#ffffff', { rimColor: '#0f172a', lineWidth: 1.2 });
+    const pMarkerY = barY + clamp(p.y / MAXY, 0, 1) * barHeight;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(barX + barWidth / 2, pMarkerY, 4.2, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
 
-    const cx = rx + 82;
-    const cy = ry + 44;
-    const cr = 24;
-
-    ctx.fillStyle = 'rgba(2, 44, 67, 0.85)';
-    ctx.strokeStyle = 'rgba(56, 243, 255, 0.45)';
-    ctx.lineWidth = 1.2;
+    // Circular comic sweep radar
+    const cx = sx + 42;
+    const cy = sy + 34;
+    const cr = 19.5;
+    ctx.fillStyle = '#064e3b';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.arc(cx, cy, cr, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
     const sweepAng = (this.time * 2.8) % TAU;
-    ctx.strokeStyle = 'rgba(56, 243, 255, 0.8)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#34d399';
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + Math.cos(sweepAng) * cr, cy + Math.sin(sweepAng) * cr);
     ctx.stroke();
 
-    ctx.fillStyle = '#3dffa2';
+    ctx.fillStyle = '#4ade80';
+    ctx.strokeStyle = STYLE_TOKENS.ink;
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.arc(cx, cy, 2.5, 0, TAU);
+    ctx.arc(cx, cy, 3, 0, TAU);
     ctx.fill();
+    ctx.stroke();
 
     const radarScale = cr / 1800;
     for (const f of this.fish) {
@@ -2133,9 +2461,9 @@ export class DeepFeeder extends Game {
       const fdx = (f.x - p.x) * radarScale;
       const fdy = (f.y - p.y) * radarScale;
       if (Math.hypot(fdx, fdy) < cr - 2) {
-        ctx.fillStyle = f.isHunting ? '#ff0054' : '#ff70a6';
+        ctx.fillStyle = f.isHunting ? '#ef4444' : '#fb7185';
         ctx.beginPath();
-        ctx.arc(cx + fdx, cy + fdy, f.isHunting ? 3 : 2, 0, TAU);
+        ctx.arc(cx + fdx, cy + fdy, f.isHunting ? 2.8 : 2, 0, TAU);
         ctx.fill();
       }
     }
@@ -2144,127 +2472,67 @@ export class DeepFeeder extends Game {
       const cdx = (c.x - p.x) * radarScale;
       const cdy = (c.y - p.y) * radarScale;
       if (Math.hypot(cdx, cdy) < cr - 2) {
-        ctx.fillStyle = '#ffd166';
+        ctx.fillStyle = '#facc15';
         ctx.beginPath();
-        ctx.arc(cx + cdx, cy + cdy, 2.2, 0, TAU);
+        ctx.arc(cx + cdx, cy + cdy, 2.3, 0, TAU);
         ctx.fill();
       }
     }
 
-    if (this.isMaxSize()) {
-      const vSec = Math.max(0, Math.ceil(this.victoryTimer));
-      const badgeW = 280;
-      const badgeH = 46;
-      const bx = W / 2 - badgeW / 2;
-      const by = 18;
-
-      drawToyBevelRect(ctx, bx, by, badgeW, badgeH, 12, '#fde047', {
-        depth: 3,
-        rimColor: '#713f12',
-        lineWidth: 2.2,
-      });
-
-      ctx.fillStyle = '#451a03';
-      ctx.font = "700 13px 'Fredoka', Outfit, sans-serif";
-      ctx.textAlign = 'center';
-      ctx.fillText('👑 APEX MEGALODON (INVULNERABLE)', W / 2, by + 19);
-
-      ctx.font = '800 11px Outfit, system-ui, sans-serif';
-      ctx.fillText(vSec > 0 ? `OCEAN DOMINATED · VICTORY IN ${vSec}s` : 'OCEAN DOMINATED · VICTORY!', W / 2, by + 36);
-    }
-
-    const pillY = H - 148;
-    drawToyBevelRect(ctx, 14, pillY, 242, 54, 14, '#0f172a', {
-      depth: 2.5,
-      rimColor: '#334155',
-      lineWidth: 2,
-      gloss: false,
-    });
-
-    ctx.fillStyle = this.isMaxSize() ? '#fde047' : '#3dffa2';
-    ctx.font = "700 13px 'Fredoka', Outfit, sans-serif";
-    ctx.textAlign = 'left';
-    ctx.fillText(this.isMaxSize() ? '👑 APEX MEGALODON (MAX)' : `${curStage.icon} ${curStage.n.toUpperCase()}`, 26, pillY + 20);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 11px Outfit, system-ui, sans-serif';
-    ctx.fillText(`${depthM}m · ${zone.name}`, 26, pillY + 36);
-
-    ctx.fillStyle = zone.threatColor;
-    ctx.font = '800 10px Outfit, system-ui, sans-serif';
-    ctx.fillText(`● ${zone.threat}`, 26, pillY + 48);
-
-    const barW = 120;
-    const barH = 14;
-    const bx = W - barW - 16;
-    const by = H - 122;
-
-    drawToyBevelRect(ctx, bx - 8, by - 16, barW + 16, 42, 10, '#0f172a', {
-      depth: 2.5,
-      rimColor: '#334155',
-      lineWidth: 2,
-      gloss: false,
+    // 3. Bottom-Right ⚡ BUBBLE DASH / 🔥 SUGAR RUSH Pill (`W-152, H-64`, clears #adminDock on bottom-left!)
+    const dashW = 138;
+    const dashH = 44;
+    const dx = W - dashW - 14;
+    const dy = H - dashH - 18;
+    drawComicPanel(ctx, dx, dy, dashW, dashH, 12, p.sugarRush > 0 ? '#701a75' : '#0f172a', {
+      lineWidth: 3,
+      shadowDx: 2.5,
+      shadowDy: 3.5,
     });
 
     if (p.sugarRush > 0) {
-      ctx.fillStyle = '#fde047';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`⚡ SUGAR RUSH! ${p.sugarRush.toFixed(1)}s`, bx, by - 4);
+      drawComicText(ctx, `🔥 SUGAR RUSH ${p.sugarRush.toFixed(1)}s`, dx + dashW / 2, dy + 13, "900 10px 'Fredoka', Outfit, sans-serif", '#fde047', { strokeWidth: 2.8 });
+      const rushFrac = clamp(p.sugarRush / 5.2, 0, 1);
+      ctx.fillStyle = '#020617';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(dx + 10, dy + 23, dashW - 20, 12, 6);
+      ctx.fill();
+      ctx.stroke();
 
-      const rushFill = (p.sugarRush / 5.2) * barW;
-      const rsg = ctx.createLinearGradient(bx, 0, bx + rushFill, 0);
-      rsg.addColorStop(0, '#f72585');
-      rsg.addColorStop(0.5, '#ffd166');
-      rsg.addColorStop(1, '#4cc9f0');
-      ctx.fillStyle = rsg;
-      this.rr(bx, by, rushFill, barH, 7);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.roundRect(dx + 12, dy + 25, Math.max(8, (dashW - 24) * rushFrac), 8, 4);
       ctx.fill();
     } else {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.font = '800 10px Outfit, system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('⚡ BUBBLE DASH', bx, by - 4);
-
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
-      this.rr(bx, by, barW, barH, 7);
+      drawComicText(ctx, '⚡ BUBBLE DASH', dx + dashW / 2, dy + 13, "900 10px 'Fredoka', Outfit, sans-serif", '#bae6fd', { strokeWidth: 2.8 });
+      ctx.fillStyle = '#020617';
+      ctx.strokeStyle = STYLE_TOKENS.ink;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(dx + 10, dy + 23, dashW - 20, 12, 6);
       ctx.fill();
+      ctx.stroke();
 
-      const fillW = Math.max(10, barW * p.stamina);
-      const sg = ctx.createLinearGradient(bx, 0, bx + fillW, 0);
-      sg.addColorStop(0, '#38bdf8');
-      sg.addColorStop(1, '#818cf8');
-      ctx.fillStyle = sg;
-      this.rr(bx, by, fillW, barH, 7);
+      ctx.fillStyle = p.stamina > 0.25 ? '#38bdf8' : '#ef4444';
+      ctx.beginPath();
+      ctx.roundRect(dx + 12, dy + 25, Math.max(8, (dashW - 24) * clamp(p.stamina, 0, 1)), 8, 4);
       ctx.fill();
     }
 
-    if (this.zoneAlert && this.zoneAlert.timer > 0) {
+    // 4. Apex Megalodon Crown Banner OR Zone Transition Alert (`y = 190` — clear of Sonar!)
+    if (this.isMaxSize()) {
+      const vSec = Math.max(0, Math.ceil(this.victoryTimer));
+      drawComicPanel(ctx, W / 2 - 140, 190, 280, 46, 12, '#facc15', { lineWidth: 3 });
+      drawComicText(ctx, '👑 APEX MEGALODON!', W / 2, 206, "900 13px 'Fredoka', Outfit, sans-serif", '#ffffff', { strokeWidth: 3.4 });
+      drawComicText(ctx, vSec > 0 ? `OCEAN DOMINATED · VICTORY IN ${vSec}s` : 'VICTORY!', W / 2, 223, '900 10px Outfit, sans-serif', '#fef9c3', { strokeWidth: 2.8 });
+    } else if (this.zoneAlert && this.zoneAlert.timer > 0) {
       ctx.save();
-      const alpha = clamp(this.zoneAlert.timer / 0.8, 0, 1) * clamp((3.2 - this.zoneAlert.timer) / 0.5, 0, 1);
-      ctx.globalAlpha = alpha;
-
-      const bw = 320;
-      const bh = 54;
-      const bbx = W / 2 - bw / 2;
-      const bby = 68;
-
-      drawToyBevelRect(ctx, bbx, bby, bw, bh, 14, '#0f172a', {
-        depth: 3,
-        rimColor: this.zoneAlert.color,
-        lineWidth: 2.5,
-        gloss: false,
-      });
-
-      ctx.fillStyle = this.zoneAlert.color;
-      ctx.font = '900 11px Outfit, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`ENTERING ZONE · ${this.zoneAlert.threat}`, W / 2, bby + 20);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = "700 14px 'Fredoka', Outfit, sans-serif";
-      ctx.fillText(this.zoneAlert.name.toUpperCase(), W / 2, bby + 39);
-
+      ctx.globalAlpha = clamp(this.zoneAlert.timer / 0.7, 0, 1) * clamp((3.2 - this.zoneAlert.timer) / 0.45, 0, 1);
+      drawComicPanel(ctx, W / 2 - 144, 190, 288, 46, 12, '#0f172a', { lineWidth: 3 });
+      drawComicText(ctx, `ENTERING · ${this.zoneAlert.threat}`, W / 2, 205, '900 10px Outfit, sans-serif', this.zoneAlert.color, { strokeWidth: 2.8 });
+      drawComicText(ctx, this.zoneAlert.name.toUpperCase(), W / 2, 223, "900 13px 'Fredoka', Outfit, sans-serif", '#ffffff', { strokeWidth: 3.2 });
       ctx.restore();
     }
   }

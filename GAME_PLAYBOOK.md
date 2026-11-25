@@ -123,7 +123,7 @@ All games render to a portrait canvas sized **450 × 800** (scaled with DPR up t
 - Top HUD Safe Zone: `Y = 0` to `130` (`Game.SAFE_TOP`)
 - Active Playable Field: `Y = 130` to `695` (`Game.PLAY_HEIGHT = 565`, helper `this.isInSafeBounds(y)`)
 - Bottom Dock Safe Zone: `Y = 695` to `800` (`Game.SAFE_BOTTOM`)
-- Cartoon comic outlines (`2.0px–3.0px` `#000000`), `Outfit` canvas typography, and `drawBean()` (`hat: this.prestige > 1 ? 'crown' : null` when applicable).
+- Cartoon comic outlines (`2.0px–3.0px` `#000000`), `Outfit`/`Fredoka` canvas typography, and for the main **Crowned Green Hero Bean**, always use `drawHeroCharacter(ctx, x, y, size, opts)` from [`weeblAtlas.js`](file:///C:/Users/Eggwi/.gemini/antigravity-ide/scratch/game-reels/src/games/weeblAtlas.js) (`Three.js` cel-shaded 3D with automatic 2D SSR fallback — see [`HERO_CHARACTER_SSOT.md`](file:///C:/Users/Eggwi/.gemini/antigravity-ide/scratch/game-reels/HERO_CHARACTER_SSOT.md)).
 
 ---
 
@@ -140,5 +140,7 @@ All games render to a portrait canvas sized **450 × 800** (scaled with DPR up t
 1. **Copy the Template:** Copy [`src/games/_template.js`](file:///C:/Users/Eggwi/.gemini/antigravity-ide/scratch/game-reels/src/games/_template.js) to `src/games/myGame.js`.
 2. **Fill `static meta`:** Set `id`, `title`, `icon`, `hint`, `isPrestige`, `parScore60s`, `cue`, `prestigeCue`, and your tailored `scaling` parameters.
 3. **Wire `this.diff` in `init()`:** Read `this.diff.<param>` for both fresh and resumed starts, and implement `update`, `render`, `serialize`, `restoreLabel`, `destroy`.
-4. **Register in [`src/games/registry.js`](file:///C:/Users/Eggwi/.gemini/antigravity-ide/scratch/game-reels/src/games/registry.js):** Import your class and add it to the target pack array (`STARTER_GAMES` or `PACK_1_GAMES`, etc.).
+4. **Register in [`src/games/registry.js`](file:///C:/Users/Eggwi/.gemini/antigravity-ide/scratch/game-reels/src/games/registry.js):**
+   - **WIP / Future World prototype:** Place the file in `src/games/bank/` and add it to `GAME_BANK` (dev/admin-only, hidden from users).
+   - **Live rotation:** Add it to `STARTER_GAMES` (or the target live World node list).
 5. **Verify Contract & Test:** Run `npm run verify:games`, then test `?game=my-game&admin=1` in the browser!

@@ -1,6 +1,6 @@
-import { Game } from '../engine/Game.js';
-import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { Game } from '../../engine/Game.js';
+import { FX } from '../../engine/fx.js';
+import { drawBean } from '../../engine/bean.js';
 import {
   toyRim,
   toyLineW,
@@ -8,7 +8,7 @@ import {
   drawToySphere,
   drawToyBevelRect,
   traceRoundRect,
-} from '../engine/toyStyle.js';
+} from '../../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -21,7 +21,7 @@ export class LaserDodge extends Game {
     hint: 'DRAG to dodge lasers · grab orbs!',
     baseLikes: 3120,
     isPrestige: false,
-    parScore60s: 2400,
+    parScore60s: 2600,
     roundLen: 60,
     cue: 'DODGE LASERS, GRAB ORBS!',
     prestigeCue: 'SHORTER LASER WARNINGS!',

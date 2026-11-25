@@ -1,10 +1,9 @@
 // Persistence: frozen game snapshots, normalized RP progression, World 1 map & quests saved to localStorage.
 import {
-  GAME_PACKS,
+  GAMES,
+  GAME_BY_ID,
   WORLD_1_NODES,
-  WORLD_1_CHESTS,
   QUEST_POOL,
-  getPackForGame,
   getWorldNodeById,
   getStarsForScore,
 } from '../games/registry.js';
@@ -14,11 +13,11 @@ const LEGACY_KEY = 'GAME_REELS_V2';
 
 export const RANKS = [
   { min: 0, title: 'Sprout Bean', icon: '🌱', next: 25000 },
-  { min: 25000, title: 'Bronze Bean', icon: '🥉', next: 100000 },
-  { min: 100000, title: 'Silver Bean', icon: '🥈', next: 250000 },
-  { min: 250000, title: 'Gold Bean', icon: '🥇', next: 600000 },
-  { min: 600000, title: 'Diamond Bean', icon: '💎', next: 1500000 },
-  { min: 1500000, title: 'Apex Legend', icon: '👑', next: null },
+  { min: 25000, title: 'Bronze Bean', icon: '🥉', next: 90000 },
+  { min: 90000, title: 'Silver Bean', icon: '🥈', next: 220000 },
+  { min: 220000, title: 'Gold Bean', icon: '🥇', next: 500000 },
+  { min: 500000, title: 'Diamond Bean', icon: '💎', next: 1000000 },
+  { min: 1000000, title: 'Apex Legend', icon: '👑', next: null },
 ];
 
 export function getRankTier(lifetimeScore = 0) {
@@ -53,87 +52,6 @@ const defaultSettings = () => ({
   screenShakeEnabled: true,
 });
 
-export const SKINS = [
-  { id: 'cyan', name: 'Electric Cyan', color: '#25e6ff', belly: '#1ec0db', unlockCost: 0, desc: 'High-voltage candy gloss' },
-  { id: 'classic', name: 'Classic Berry', color: '#ff3366', belly: '#ff758c', unlockCost: 0, desc: 'Original jellybean shine' },
-  { id: 'lime', name: 'Toxic Lime', color: '#39ff14', belly: '#00b33c', unlockCost: 15000, desc: 'Radioactive citrus burst' },
-  { id: 'gold', name: 'Golden Glow', color: '#ffd166', belly: '#ff9f1c', unlockCost: 50000, desc: 'Gauntlet champion luster' },
-  { id: 'obsidian', name: 'Obsidian Void', color: '#7c5cff', belly: '#4a148c', unlockCost: 100000, desc: 'Cosmic dark matter finish' },
-  { id: 'bubblegum', name: 'Bubblegum', color: '#ff70a6', belly: '#ff9770', unlockCost: 200000, desc: 'Chewy sweet perfection' },
-  { id: 'glacier', name: 'Glacier Frost', color: '#e0fbfc', belly: '#98c1d9', unlockCost: 350000, desc: 'Sub-zero cryo crystal' },
-  { id: 'magma', name: 'Inferno Magma', color: '#ff4b5c', belly: '#e63946', unlockCost: 500000, desc: 'Volcanic sugar eruption' },
-];
-
-export const HATS = [
-  { id: 'none', name: 'Pure Bean', icon: '🫘', unlockCost: 0, desc: 'Natural aerodynamic shape' },
-  { id: 'crown', name: 'King Crown', icon: '👑', unlockCost: 25000, desc: 'Royalty of the 60s realm' },
-  { id: 'tophat', name: 'Top Hat', icon: '🎩', unlockCost: 50000, desc: 'Distinguished gentleman' },
-  { id: 'astro', name: 'Astro Dome', icon: '🚀', unlockCost: 100000, desc: 'Pressurized space helmet' },
-  { id: 'ninja', name: 'Shinobi Mask', icon: '🥷', unlockCost: 150000, desc: 'Silent shadow runner' },
-  { id: 'viking', name: 'Viking Helm', icon: '🪓', unlockCost: 250000, desc: 'Horned berserker strength' },
-  { id: 'chef', name: 'Chef Toque', icon: '🍳', unlockCost: 400000, desc: 'Five-star arcade chef' },
-  { id: 'party', name: 'Party Cone', icon: '🎉', unlockCost: 600000, desc: 'Confetti jubilee celebration' },
-];
-
-// Calibrated to the normalized 10-stage Reel Points economy (~16,100 RP avg for full clear)
-export const DAILY_MEDALS = [
-  { id: 'gold', name: 'Gold Medal', icon: '🥇', minScore: 20000, desc: 'Apex Gauntlet Master' },
-  { id: 'silver', name: 'Silver Medal', icon: '🥈', minScore: 15000, desc: 'Veteran Gauntlet Runner' },
-  { id: 'bronze', name: 'Bronze Medal', icon: '🥉', minScore: 10000, desc: 'Proven Challenger' },
-];
-
-export function getDailyMedal(score = 0) {
-  for (const m of DAILY_MEDALS) {
-    if (score >= m.minScore) return m;
-  }
-  return null;
-}
-
-export function getUtcDayKey(d = new Date()) {
-  return d.toISOString().slice(0, 10);
-}
-
-export function getDailySeed(dateStr = getUtcDayKey()) {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    h = Math.imul(h ^ dateStr.charCodeAt(i), 16777619);
-  }
-  return h >>> 0;
-}
-
-export function getDailyGameIndices(eligible = 20, count = 10, dateStr = getUtcDayKey()) {
-  const seed = getDailySeed(dateStr);
-  let s = seed;
-  const rng = () => {
-    let t = (s += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-
-  const indices = Array.isArray(eligible)
-    ? [...eligible]
-    : Array.from({ length: eligible }, (_, i) => i);
-
-  for (let i = indices.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [indices[i], indices[j]] = [indices[j], indices[i]];
-  }
-  return indices.slice(0, Math.min(count, indices.length));
-}
-
-const defaultCloset = () => ({
-  skinId: 'cyan',
-  hatId: 'none',
-});
-
-const defaultDaily = () => ({
-  lastCompletedDay: null,
-  streak: 0,
-  bestStreak: 0,
-  history: {}, // 'YYYY-MM-DD' -> { score: number, medal: string, timestamp: number }
-});
-
 const defaultProfile = () => ({
   name: `Bean #${Math.floor(100 + Math.random() * 900)}`,
   avatar: '🫘',
@@ -148,11 +66,6 @@ const defaultStats = () => ({
   timersSurvived: 0,
   stagesCleared: 0,
   gameHighScores: {},
-});
-
-const defaultProgression = () => ({
-  unlockedPacks: ['starter'],
-  revealedPacks: ['starter'],
 });
 
 const defaultQuests = () => ({
@@ -171,7 +84,6 @@ const defaultWorlds = () => ({
   nodes: {
     '1-1': { unlocked: true, cleared: false, stars: 0, bestScore: 0 },
   },
-  claimedChests: [],
   world2Unlocked: false,
 });
 
@@ -191,8 +103,7 @@ function normalizeWorldsState(raw) {
     }
     w.nodes[cur.id] = existing;
   }
-  if (!Array.isArray(w.claimedChests)) w.claimedChests = [];
-  if (w.nodes['1-5']?.cleared) w.world2Unlocked = true;
+  w.world2Unlocked = Boolean(w.nodes['1-6']?.cleared);
   if (!getWorldNodeById(w.selectedNodeId) || !w.nodes[w.selectedNodeId]?.unlocked) {
     w.selectedNodeId = '1-1';
   }
@@ -220,15 +131,13 @@ function normalizeQuestsState(raw) {
 export const store = {
   data: {
     started: false,
+    storySeen: false,
     meta: freshMeta(),
     games: {},
     likes: {},
     settings: defaultSettings(),
     profile: defaultProfile(),
     stats: defaultStats(),
-    closet: defaultCloset(),
-    daily: defaultDaily(),
-    progression: defaultProgression(),
     worlds: defaultWorlds(),
     quests: defaultQuests(),
   },
@@ -257,39 +166,24 @@ export const store = {
         const settings = { ...defaultSettings(), ...(p.settings || {}) };
         const profile = { ...defaultProfile(), ...(p.profile || {}) };
         const stats = { ...defaultStats(), ...(p.stats || {}) };
-        const closet = { ...defaultCloset(), ...(p.closet || {}) };
-        const daily = { ...defaultDaily(), ...(p.daily || {}) };
-        const progression = { ...defaultProgression(), ...(p.progression || {}) };
-        if (!Array.isArray(progression.unlockedPacks) || !progression.unlockedPacks.includes('starter')) {
-          progression.unlockedPacks = ['starter', ...(Array.isArray(progression.unlockedPacks) ? progression.unlockedPacks : [])];
-        }
-        if (!Array.isArray(progression.revealedPacks) || !progression.revealedPacks.includes('starter')) {
-          progression.revealedPacks = ['starter', ...(Array.isArray(progression.revealedPacks) ? progression.revealedPacks : [])];
-        }
         if (!stats.gameHighScores || typeof stats.gameHighScores !== 'object') {
           stats.gameHighScores = {};
-        }
-        if (!daily.history || typeof daily.history !== 'object') {
-          daily.history = {};
         }
         const worlds = normalizeWorldsState(p.worlds);
         const quests = normalizeQuestsState(p.quests);
 
         this.data = {
           started: !!p.started,
+          storySeen: !!p.storySeen,
           meta,
           games: p.games || {},
           likes: p.likes || {},
           settings,
           profile,
           stats,
-          closet,
-          daily,
-          progression,
           worlds,
           quests,
         };
-        this.checkPackUnlocks();
         return;
       }
 
@@ -299,15 +193,13 @@ export const store = {
         const lp = JSON.parse(legacyRaw);
         this.data = {
           started: false,
+          storySeen: false,
           meta: freshMeta(),
           games: {},
           likes: lp.likes || {},
           settings: { ...defaultSettings(), ...(lp.settings || {}) },
           profile: { ...defaultProfile(), ...(lp.profile || {}) },
           stats: defaultStats(),
-          closet: defaultCloset(),
-          daily: defaultDaily(),
-          progression: defaultProgression(),
           worlds: defaultWorlds(),
           quests: defaultQuests(),
         };
@@ -331,13 +223,19 @@ export const store = {
     return this.data.meta;
   },
 
-  get progression() {
-    if (!this.data.progression) this.data.progression = defaultProgression();
-    return this.data.progression;
-  },
-
   hasSession() {
     return this.data.started;
+  },
+
+  hasSeenStory() {
+    return !!this.data.storySeen;
+  },
+
+  markStorySeen() {
+    if (!this.data.storySeen) {
+      this.data.storySeen = true;
+      this.save();
+    }
   },
 
   get(id) {
@@ -396,110 +294,22 @@ export const store = {
     return Object.values(this.data.meta.prestige || {}).filter((v) => v > 1).length;
   },
 
-  /* ----------------------------------------------------------- Pack Progression */
-  isPackUnlocked(packId) {
-    return this.progression.unlockedPacks.includes(packId);
-  },
-
-  isPackRevealed(packId) {
-    return this.progression.revealedPacks.includes(packId);
-  },
-
+  /* ----------------------------------------------------------- Playable Roster */
   isGameUnlocked(gameId) {
-    const pack = getPackForGame(gameId);
-    return !!pack && !pack.comingSoon && this.isPackUnlocked(pack.id);
+    return Boolean(GAME_BY_ID[gameId]);
   },
 
   getUnlockedGameIds() {
-    const ids = [];
-    for (const pack of GAME_PACKS) {
-      if (!pack.comingSoon && this.isPackUnlocked(pack.id)) {
-        ids.push(...pack.gameIds);
-      }
-    }
-    return ids;
+    return GAMES.map((g) => g.meta.id);
   },
 
   getTotalPlayableGameCount() {
-    return GAME_PACKS.reduce((sum, p) => sum + (p.comingSoon ? 0 : p.gameIds.length), 0);
-  },
-
-  getStatValue(type) {
-    const s = this.stats;
-    if (type === 'timersSurvived') return s.timersSurvived || 0;
-    if (type === 'stagesCleared') return s.stagesCleared || 0;
-    if (type === 'maxCycle') return s.maxCycle || 1;
-    return s.lifetimeScore || 0;
-  },
-
-  getPackProgress(pack) {
-    const unlocked = !pack.comingSoon && this.isPackUnlocked(pack.id);
-    const req = pack.unlockRequirement;
-    if (!req) {
-      return { current: 1, target: 1, pct: 1, remaining: 0, unlocked: true, comingSoon: false };
-    }
-    const current = this.getStatValue(req.type);
-    const target = Math.max(1, req.target);
-    const pct = unlocked ? 1 : Math.min(1, Math.max(0, current / target));
-    const remaining = unlocked ? 0 : Math.max(0, target - current);
-    return { current, target, pct, remaining, unlocked, comingSoon: !!pack.comingSoon };
-  },
-
-  getNextLockedPack() {
-    return (
-      GAME_PACKS.find((p) => !p.comingSoon && !this.isPackUnlocked(p.id)) ||
-      GAME_PACKS.find((p) => p.comingSoon) ||
-      null
-    );
-  },
-
-  getPendingRevealPacks() {
-    return GAME_PACKS.filter(
-      (p) => !p.comingSoon && this.isPackUnlocked(p.id) && !this.isPackRevealed(p.id)
-    );
-  },
-
-  checkPackUnlocks() {
-    const newlyUnlocked = [];
-    for (const pack of GAME_PACKS) {
-      if (pack.comingSoon || this.isPackUnlocked(pack.id)) continue;
-      const req = pack.unlockRequirement;
-      if (!req || this.getStatValue(req.type) >= req.target) {
-        this.progression.unlockedPacks.push(pack.id);
-        newlyUnlocked.push(pack);
-      }
-    }
-    if (newlyUnlocked.length > 0) this.save();
-    return newlyUnlocked;
-  },
-
-  markPackRevealed(packId) {
-    if (!this.progression.revealedPacks.includes(packId)) {
-      this.progression.revealedPacks.push(packId);
-      this.save();
-    }
-  },
-
-  adminUnlockAllPacks() {
-    for (const p of GAME_PACKS) {
-      if (p.comingSoon) continue;
-      if (!this.progression.unlockedPacks.includes(p.id)) this.progression.unlockedPacks.push(p.id);
-      if (!this.progression.revealedPacks.includes(p.id)) this.progression.revealedPacks.push(p.id);
-    }
-    this.save();
-  },
-
-  adminResetPacks() {
-    this.progression.unlockedPacks = ['starter'];
-    this.progression.revealedPacks = ['starter'];
-    this.save();
+    return GAMES.length;
   },
 
   adminAddRP(delta = 10000) {
     this.stats.lifetimeScore = Math.max(0, (this.stats.lifetimeScore || 0) + delta);
-    const newly = this.checkPackUnlocks();
     this.save();
-    return newly;
   },
 
   adminReviveAll() {
@@ -589,93 +399,15 @@ export const store = {
     this.save();
   },
 
-  get closet() {
-    if (!this.data.closet) this.data.closet = defaultCloset();
-    return this.data.closet;
-  },
-
-  isSkinUnlocked(skinId) {
-    const skin = SKINS.find((s) => s.id === skinId);
-    if (!skin || skin.unlockCost === 0) return true;
-    return (this.stats.lifetimeScore || 0) >= skin.unlockCost;
-  },
-
-  isHatUnlocked(hatId) {
-    const hat = HATS.find((h) => h.id === hatId);
-    if (!hat || hat.unlockCost === 0) return true;
-    return (this.stats.lifetimeScore || 0) >= hat.unlockCost;
-  },
-
-  equipSkin(skinId) {
-    if (!this.isSkinUnlocked(skinId)) return false;
-    this.closet.skinId = skinId;
-    this.save();
-    return true;
-  },
-
-  equipHat(hatId) {
-    if (!this.isHatUnlocked(hatId)) return false;
-    this.closet.hatId = hatId;
-    this.save();
-    return true;
-  },
-
-  get daily() {
-    if (!this.data.daily) this.data.daily = defaultDaily();
-    return this.data.daily;
-  },
-
-  getTodayDaily() {
-    const today = getUtcDayKey();
-    return this.daily.history?.[today] || null;
-  },
-
-  recordDailyResult(score) {
-    const today = getUtcDayKey();
-    const daily = this.daily;
-    const existing = daily.history[today];
-    const bestScore = existing ? Math.max(existing.score, Math.round(score)) : Math.round(score);
-    const bestMedalObj = getDailyMedal(bestScore);
-
-    if (!existing) {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      if (daily.lastCompletedDay === yesterday) {
-        daily.streak = (daily.streak || 0) + 1;
-      } else if (daily.lastCompletedDay !== today) {
-        daily.streak = 1;
-      }
-      daily.lastCompletedDay = today;
-      daily.bestStreak = Math.max(daily.bestStreak || 0, daily.streak);
-    }
-
-    daily.history[today] = {
-      score: bestScore,
-      medal: bestMedalObj ? bestMedalObj.id : 'none',
-      timestamp: Date.now(),
-    };
-
-    // Individual daily stages already credit netRP into lifetimeScore on survive/victory/death.
-    this.save();
-
-    return {
-      score: bestScore,
-      medal: bestMedalObj,
-      streak: daily.streak,
-      isNewDay: !existing,
-    };
-  },
-
   reset() {
     const likes = this.data.likes;
     const settings = this.data.settings || defaultSettings();
     const profile = this.data.profile || defaultProfile();
     const stats = this.data.stats || defaultStats();
-    const closet = this.data.closet || defaultCloset();
-    const daily = this.data.daily || defaultDaily();
     const progression = this.progression;
     const worlds = this.worlds;
     const quests = this.quests;
-    this.data = { started: true, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily, progression, worlds, quests };
+    this.data = { started: true, meta: freshMeta(), games: {}, likes, settings, profile, stats, progression, worlds, quests };
     this.save();
   },
 
@@ -684,12 +416,10 @@ export const store = {
     const settings = this.data.settings || defaultSettings();
     const profile = this.data.profile || defaultProfile();
     const stats = this.data.stats || defaultStats();
-    const closet = this.data.closet || defaultCloset();
-    const daily = this.data.daily || defaultDaily();
     const progression = this.progression;
     const worlds = this.worlds;
     const quests = this.quests;
-    this.data = { started: false, meta: freshMeta(), games: {}, likes, settings, profile, stats, closet, daily, progression, worlds, quests };
+    this.data = { started: false, meta: freshMeta(), games: {}, likes, settings, profile, stats, progression, worlds, quests };
     this.save();
   },
 
@@ -729,48 +459,27 @@ export const store = {
     return WORLD_1_NODES.reduce((sum, n) => sum + (this.getNodeState(n.id).stars || 0), 0);
   },
 
-  getNextUnclaimedChest() {
-    const stars = this.getWorld1Stars();
-    const claimed = this.worlds.claimedChests || [];
-    for (const chest of WORLD_1_CHESTS) {
-      if (!claimed.includes(chest.id)) {
-        return { ...chest, stars, ready: stars >= chest.starsReq };
-      }
-    }
-    return null;
+  isEndlessUnlocked() {
+    return Boolean(this.worlds?.nodes?.['1-6']?.cleared || this.worlds?.world2Unlocked);
   },
 
-  getClaimableChestCount() {
-    const stars = this.getWorld1Stars();
-    const claimed = this.worlds.claimedChests || [];
-    return WORLD_1_CHESTS.filter((c) => !claimed.includes(c.id) && stars >= c.starsReq).length;
-  },
-
-  isChestClaimed(chestId) {
-    return (this.worlds.claimedChests || []).includes(chestId);
-  },
-
-  claimStarChest(chestId) {
-    const chest = WORLD_1_CHESTS.find((c) => c.id === chestId);
-    if (!chest) return null;
-    if (this.isChestClaimed(chestId)) return null;
-    if (this.getWorld1Stars() < chest.starsReq) return null;
-
-    if (!Array.isArray(this.worlds.claimedChests)) this.worlds.claimedChests = [];
-    this.worlds.claimedChests.push(chest.id);
-    this.stats.lifetimeScore = (this.stats.lifetimeScore || 0) + (chest.rewardRP || 0);
-    const newlyUnlockedPacks = this.checkPackUnlocks();
-    this.save();
-    return { chest, newlyUnlockedPacks };
-  },
-
-  recordWorldRunResult(nodeId, rawRunScore = 0) {
+  recordWorldRunResult(nodeId, rawRunScore = 0, opts = {}) {
     const node = getWorldNodeById(nodeId);
     const score = Math.max(0, Math.round(rawRunScore || 0));
-    const starsEarned = getStarsForScore(node, score);
+    const bossVictory = Boolean(node.isBoss && opts?.bossVictory);
+    let starsEarned = 0;
+    if (node.isBoss) {
+      if (bossVictory) {
+        const hearts = Math.max(0, Number(opts?.heartsRemaining ?? 1));
+        const maxH = Math.max(1, Number(opts?.maxHearts ?? 5));
+        starsEarned = hearts >= maxH ? 3 : hearts >= 3 ? 2 : 1;
+      }
+    } else {
+      starsEarned = getStarsForScore(node, score);
+    }
     const prev = this.getNodeState(node.id);
     const prevCleared = !!prev.cleared;
-    const clearedNow = score >= node.clearScore;
+    const clearedNow = node.isBoss ? bossVictory : score >= node.clearScore;
     const isFirstClear = clearedNow && !prevCleared;
     const bonusRP = isFirstClear ? (node.firstClearBonusRP || 0) : 0;
 
@@ -806,7 +515,6 @@ export const store = {
 
     // Update Star Hunter quest if active
     this.recordQuestProgress('world1Stars', this.getWorld1Stars());
-    const newlyUnlockedPacks = this.checkPackUnlocks();
     this.save();
 
     return {
@@ -819,7 +527,6 @@ export const store = {
       firstClearBonusRP: bonusRP,
       nextUnlockedNode,
       world2JustUnlocked,
-      newlyUnlockedPacks,
     };
   },
 
@@ -867,8 +574,8 @@ export const store = {
       let nextVal = slot.progress || 0;
       if (metric === 'timersSurvived' || metric === 'stagesCleared') {
         nextVal = Math.min(tpl.target, nextVal + Math.max(0, value));
-      } else if (metric === 'prestige2' || metric === 'dailyPlayed') {
-        if (value >= 1) nextVal = Math.max(nextVal, metric === 'prestige2' ? (value >= 2 ? 1 : 0) : 1);
+      } else if (metric === 'prestige2') {
+        if (value >= 2) nextVal = 1;
       } else {
         nextVal = Math.min(tpl.target, Math.max(nextVal, Math.round(value || 0)));
       }
@@ -893,7 +600,7 @@ export const store = {
     if (this.quests.active.every((s) => s.claimed)) {
       setCompleted = true;
       this.quests.setIndex = (this.quests.setIndex || 1) + 1;
-      this.quests.multiplier = Math.min(2.0, Math.round(((this.quests.multiplier || 1.0) + 0.1) * 10) / 10);
+      this.quests.multiplier = Math.min(2.0, Math.round(((this.quests.multiplier || 1.0) + 0.15) * 100) / 100);
       // Rotate next 3 quests cleanly from pool
       const offset = ((this.quests.setIndex - 1) * 3) % QUEST_POOL.length;
       const nextSlots = [];
@@ -904,14 +611,12 @@ export const store = {
       this.quests.active = nextSlots;
     }
 
-    const newlyUnlockedPacks = this.checkPackUnlocks();
     this.save();
     return {
       quest: item,
       rewardRP: item.rewardRP,
       setCompleted,
       multiplier: this.getQuestMultiplier(),
-      newlyUnlockedPacks,
     };
   },
 

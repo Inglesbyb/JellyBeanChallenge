@@ -106,7 +106,7 @@ export class ColorClash extends Game {
     hint: 'DRAG & DROP Cards · PAINT the arena & dominate territory before the timer expires!',
     baseLikes: 7420,
     isPrestige: false,
-    parScore60s: 4200,
+    parScore60s: 3400,
     roundLen: 60,
     cue: 'PAINT THE ARENA!',
     prestigeCue: 'FASTER AI INK & PLAYS!',
@@ -259,12 +259,13 @@ export class ColorClash extends Game {
       this.gameWon = true;
       this.sounds.survive();
       this.haptics.success();
-      this.score += 2500;
+      this.score += 1800;
       this.fx.text(this.W / 2, 280, 'TURF KNOCKOUT! 🏆', '#ffd166', 32, 2.0);
       this.fx.text(this.W / 2, 320, 'TOTAL DOMINATION!', '#06d6a0', 20, 2.0);
       for (let i = 0; i < 6; i++) {
         this.fx.burst(100 + i * 50, 250, '#00b4d8', 16, 180, 0.7, 3.5, 120);
       }
+      this.complete('Turf Knockout! 🏆');
       return;
     }
 
@@ -276,12 +277,12 @@ export class ColorClash extends Game {
 
     // B. Match Timer Expired (0:00)
     if (this.matchTimer <= 0) {
-      if (this.bluePercent > this.redPercent) {
+      if (this.bluePercent >= this.redPercent) {
         if (!this.gameWon) {
           this.gameWon = true;
           this.sounds.survive();
           this.haptics.success();
-          this.score += 1000 + this.bluePercent * 25;
+          this.score += 800 + this.bluePercent * 20;
           this.fx.text(this.W / 2, 280, 'VICTORY! ⭐', '#ffd166', 34, 2.0);
           this.fx.text(this.W / 2, 320, `${this.bluePercent}% vs ${this.redPercent}%`, '#00b4d8', 22, 2.0);
         }
@@ -298,7 +299,9 @@ export class ColorClash extends Game {
   paintTile(col, row, team) {
     if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return;
     const idx = row * GRID_COLS + col;
+    const prev = this.grid[idx];
     this.grid[idx] = team;
+    if (team === 1 && prev !== 1) this.score += 3;
   }
 
   paintCircle(cx, cy, radiusPx, team) {

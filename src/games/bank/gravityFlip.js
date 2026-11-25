@@ -1,6 +1,6 @@
-import { Game } from '../engine/Game.js';
-import { FX } from '../engine/fx.js';
-import { drawBean } from '../engine/bean.js';
+import { Game } from '../../engine/Game.js';
+import { FX } from '../../engine/fx.js';
+import { drawBean } from '../../engine/bean.js';
 import {
   shadeColor,
   toyRim,
@@ -9,7 +9,7 @@ import {
   drawToySphere,
   drawToyBevelRect,
   traceRoundRect,
-} from '../engine/toyStyle.js';
+} from '../../engine/toyStyle.js';
 
 const TAU = Math.PI * 2;
 
@@ -21,7 +21,7 @@ export class GravityFlip extends Game {
     hint: 'TAP or SPACE to flip gravity!',
     baseLikes: 2980,
     isPrestige: false,
-    parScore60s: 2600,
+    parScore60s: 5500,
     roundLen: 60,
     cue: 'TAP TO FLIP GRAVITY!',
     prestigeCue: 'FASTER SCROLL · MORE SPIKES!',

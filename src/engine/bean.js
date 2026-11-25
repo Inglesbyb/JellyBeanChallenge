@@ -1,23 +1,19 @@
 // Master 3D Vinyl Toy Jellybean Mascot Renderer
 // Clean, soft-lit 3D toy aesthetics: smooth cylindrical lighting, seamless noodle limbs, and minimal crisp expressions.
 
-import { store, SKINS } from './store.js';
 import { shadeColor, mixColor, toyRim, toyLineW, drawToyShadow } from './toyStyle.js';
 
 const TAU = Math.PI * 2;
 
 export function drawBean(ctx, x, y, size = 30, opts = {}) {
-  const closet = store?.data?.closet || { skinId: 'cyan', hatId: 'none' };
-  const currentSkin = SKINS?.find((s) => s.id === closet.skinId) || { color: '#25e6ff', belly: '#1ec0db' };
-
   const {
-    color = currentSkin.color,
-    bellyColor = currentSkin.belly,
+    color = '#25e6ff',
+    bellyColor = '#1ec0db',
     dir = 1,
     walkT = 0,
     squash = 1,
     eyes = 'happy',
-    hat = (closet.hatId !== 'none' ? closet.hatId : null),
+    hat = null,
     ufo = false,
     holding = null,
     dead = false,

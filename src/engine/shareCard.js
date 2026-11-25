@@ -1,7 +1,7 @@
 // High-Res Shareable Run Poster Generator (TICKET-05)
 // Generates an 800x1060 portrait arcade card and handles Web Share API + PNG download.
 
-import { store, getRankTier, DAILY_MEDALS } from './store.js';
+import { store, getRankTier } from './store.js';
 import { drawBean } from './bean.js';
 
 const W = 800;
@@ -15,16 +15,14 @@ export function renderSharePoster(canvas, opts = {}) {
 
   const prof = store.profile;
   const stats = store.stats;
-  const daily = store.daily;
   const rank = getRankTier(stats.lifetimeScore || 0);
 
   const {
-    type = 'standard', // 'standard' | 'daily' | 'profile'
+    type = 'standard', // 'standard' | 'profile'
     score = store.meta.global || stats.highestRunScore || 0,
     cycle = store.meta.cycle || stats.maxCycle || 1,
-    dailyMedal = null,
     games = [], // array of { icon, title, state }
-    unlockedCount = store.getUnlockedGameIds?.().length || 20,
+    unlockedCount = store.getUnlockedGameIds?.().length || 21,
   } = opts;
 
   // 1. Deep Cybernetic Background
@@ -160,8 +158,7 @@ export function renderSharePoster(canvas, opts = {}) {
   ctx.textAlign = 'center';
   ctx.font = '800 15px "Outfit", sans-serif';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  const skinObj = store.closet;
-  ctx.fillText(`CAPTAIN BEAN · ${skinObj.skinId.toUpperCase()}`, W / 2, stageY + 115);
+  ctx.fillText('CROWNED HERO BEAN', W / 2, stageY + 115);
 
   // 8. Main Score & Achievement Banner
   const scoreCardY = 560;
@@ -183,7 +180,7 @@ export function renderSharePoster(canvas, opts = {}) {
   // Card Eyebrow
   ctx.font = '900 16px "Outfit", sans-serif';
   ctx.fillStyle = '#ffd166';
-  ctx.fillText(type === 'daily' ? '📅 DAILY CHALLENGE SEED' : '⚔️ ARCADE GAUNTLET RUN', W / 2, scoreCardY - 12);
+  ctx.fillText('⚔️ ARCADE GAUNTLET RUN', W / 2, scoreCardY - 12);
 
   // Score digits
   ctx.font = '900 76px "Outfit", sans-serif';
@@ -199,21 +196,15 @@ export function renderSharePoster(canvas, opts = {}) {
 
   // Subtitle / Milestone banner
   ctx.font = '800 20px "Outfit", sans-serif';
-  if (type === 'daily') {
-    const medalObj = dailyMedal || DAILY_MEDALS.find((m) => score >= m.minScore);
-    ctx.fillStyle = '#25e6ff';
-    ctx.fillText(medalObj ? `${medalObj.icon} ${medalObj.name.toUpperCase()} AWARDED · STREAK 🔥 ${daily.streak || 1} DAYS` : 'CHALLENGER COMPLETED', W / 2, scoreCardY + 112);
-  } else {
-    ctx.fillStyle = '#25e6ff';
-    ctx.fillText(`🔁 CYCLE ${cycle} SURVIVED · ${unlockedCount} MINI-GAMES ROTATION`, W / 2, scoreCardY + 112);
-  }
+  ctx.fillStyle = '#25e6ff';
+  ctx.fillText(`🔁 CYCLE ${cycle} SURVIVED · ${unlockedCount} MINI-GAMES ROTATION`, W / 2, scoreCardY + 112);
 
   // 9. 3-Stat Metrics Row
   const metricsY = 770;
   const metrics = [
     { num: (stats.timersSurvived || 0).toLocaleString(), lbl: '60s SURVIVED ⏱️' },
     { num: (stats.stagesCleared || 0).toLocaleString(), lbl: 'STAGES CLEARED ⭐' },
-    { num: `🔥 ${daily.streak || 0}`, lbl: 'DAILY STREAK' },
+    { num: String(stats.maxCycle || cycle || 1), lbl: 'MAX CYCLE 🔁' },
   ];
 
   const colW = (W - 130 - 30) / 3;
