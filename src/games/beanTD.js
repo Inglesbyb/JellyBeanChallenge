@@ -648,7 +648,7 @@ export class BeanTD extends Game {
       t.timer = t.cooldown;
       t.animScale = 1.35;
       t.attackFlash = 1.0;
-      this.sounds.tone({ f: 220, to: 110, dur: 0.12, vol: 0.25 });
+      this.sounds.cannon();
 
       const upg = proto.upgrades[t.upgradeLvl - 1];
       this.projectiles.push({
@@ -786,7 +786,7 @@ export class BeanTD extends Game {
     // 1. Lead Bloon Immunity (Sharp darts and tacks bounce off with metallic clink)
     if (b.isLead) {
       if (pType === 'dart' || pType === 'tack') {
-        this.sounds.tone({ f: 880, to: 440, type: 'square', dur: 0.05, vol: 0.25 });
+        this.sounds.clink();
         this.fx.burst(b.x, b.y, '#adb5bd', 6, 80, 0.25, 2.5);
         this.fx.text(b.x, b.y - 12, 'CLINK! 🛡️', '#e9ecef', 16, 0.6);
         return false;
@@ -796,7 +796,7 @@ export class BeanTD extends Game {
     // 2. Black Bloon Explosion Immunity
     if (b.isBlack) {
       if (pType === 'bomb') {
-        this.sounds.tone({ f: 300, to: 150, type: 'sine', dur: 0.06, vol: 0.2 });
+        this.sounds.drop();
         this.fx.burst(b.x, b.y, '#495057', 5, 60, 0.25, 2);
         this.fx.text(b.x, b.y - 12, 'IMMUNE! 💥', '#ced4da', 15, 0.6);
         return false;

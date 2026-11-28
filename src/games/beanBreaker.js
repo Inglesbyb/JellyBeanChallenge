@@ -35,7 +35,7 @@ export class BeanBreaker extends Game {
     hint: 'DRAG paddle · smash descending bricks!',
     baseLikes: 2840,
     isPrestige: true,
-    parScore60s: 2000,
+    parScore60s: 5200,
     roundLen: 60,
     cue: 'SMASH THE BRICKS!',
     prestigeCue: 'FASTER BALL · SLIMMER PADDLE!',

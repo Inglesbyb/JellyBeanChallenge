@@ -602,7 +602,7 @@ export class FruitMerge extends Game {
     this.fx.burst(bx, by, '#f43f5e', 30, 260, 0.7, 5, 300);
     this.fx.text(bx, by - 24, 'BOOM! TNT POP!', '#fde047', 24, 1.1);
     this.fx.shake(12, 0.4);
-    this.sounds.hit();
+    this.sounds.explosion();
     this.haptics.heavy();
 
     const victimCandidates = [...this.fruits];
@@ -705,6 +705,16 @@ export class FruitMerge extends Game {
     }
 
     this.overT = over ? this.overT + dt : Math.max(0, this.overT - dt * 2);
+    if (over && this.overT > 0.8 && !this.dead && !this.won) {
+      this._dangerBeepT = (this._dangerBeepT || 0) - dt;
+      if (this._dangerBeepT <= 0) {
+        this._dangerBeepT = 0.65;
+        this.sounds.tick(2);
+        this.haptics.light();
+      }
+    } else {
+      this._dangerBeepT = 0;
+    }
     if (this.overT > (this.diff.overflowGrace ?? 3.0)) {
       if (this.die('Jar overflowed!')) {
         this.fx.shake(12, 0.45);
@@ -784,6 +794,9 @@ export class FruitMerge extends Game {
       }
 
       this.sounds.merge(nextTier);
+      if (this.comboCount >= 2) {
+        this.sounds.stack(Math.min(10, this.comboCount + 2));
+      }
       nextTier >= 5 ? this.haptics.heavy() : this.haptics.light();
     }
   }

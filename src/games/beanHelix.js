@@ -324,12 +324,17 @@ export class BeanHelix extends Game {
       b.combo++;
       this.score += 60 * b.combo;
       this.sounds.slice?.();
+      this.sounds.stack?.(b.combo);
       this.haptics.light();
 
       // Multi-drop combo: dropping 2+ floors catches fire!
       if (b.combo >= 2) {
         b.isFire = true;
         b.flameTimer = 2.4;
+        if (b.combo === 2) {
+          this.sounds.boost?.();
+          this.fx.ring(this.W / 2, 420, '#ff9233', 140, 0.35, 4);
+        }
         this.fx.burst(this.W / 2, 420, ['#ff477e', '#ffd166', '#ff9233'], 18, 220, 0.45, 4);
         this.fx.text(this.W / 2, 370, `COMBO ×${b.combo}! 🔥 SMASH READY!`, '#ffd166', 22, 0.95);
       } else {
@@ -344,7 +349,8 @@ export class BeanHelix extends Game {
       b.combo = 0;
       b.isFire = false;
       this.score += 300;
-      this.sounds.hit?.();
+      this.sounds.shatter?.();
+      this.sounds.explosion?.();
       this.haptics.heavy();
       this.fx.shake(16, 0.4);
       this.fx.burst(this.W / 2, 430, ['#ffd166', '#ff477e', '#ff9f43', '#ffffff'], 36, 320, 0.7, 6);

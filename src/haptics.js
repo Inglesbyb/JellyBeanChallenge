@@ -8,7 +8,7 @@ import { store } from './engine/store.js';
 let lastHapticTime = 0;
 
 function canTrigger(minGap = 40) {
-  const isEnabled = store?.settings?.haptics ?? true;
+  const isEnabled = store?.settings?.hapticsEnabled ?? true;
   if (!isEnabled) return false;
   const now = performance.now();
   if (now - lastHapticTime < minGap) return false;
@@ -84,8 +84,10 @@ const rawHaptics = {
   },
 
   setEnabled(val) {
-    if (store?.settings) {
-      store.settings.haptics = Boolean(val);
+    if (store?.updateSettings) {
+      store.updateSettings({ hapticsEnabled: Boolean(val) });
+    } else if (store?.settings) {
+      store.settings.hapticsEnabled = Boolean(val);
       store.save();
     }
   },

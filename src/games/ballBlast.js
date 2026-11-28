@@ -95,6 +95,11 @@ export class BallBlast extends Game {
   }
 
   destroy() {
+    this._destroyed = true;
+    if (this.nextWaveTimer) {
+      clearTimeout(this.nextWaveTimer);
+      this.nextWaveTimer = null;
+    }
     window.removeEventListener('keydown', this.keyHandler);
     window.removeEventListener('keyup', this.keyHandler);
   }
@@ -181,8 +186,10 @@ export class BallBlast extends Game {
     }
 
     this.waveSpawnTimer = 0;
-    setTimeout(() => {
-      if (!this.dead) this.startWave(this.wave + 1);
+    if (this.nextWaveTimer) clearTimeout(this.nextWaveTimer);
+    this.nextWaveTimer = setTimeout(() => {
+      this.nextWaveTimer = null;
+      if (!this._destroyed && !this.dead && !this.won) this.startWave(this.wave + 1);
     }, 1500);
   }
 
@@ -460,7 +467,7 @@ export class BallBlast extends Game {
         b.y = GROUND_Y - b.r;
         // vy = -sqrt(2 * g * h)
         b.vy = -Math.sqrt(2 * GRAVITY * b.bounceH);
-        this.sounds.tone({ f: 180, to: 90, dur: 0.05, vol: 0.15 });
+        this.sounds.bounce();
         this.fx.burst(b.x, GROUND_Y, '#ffd166', 5, 70, 0.2, 2);
       }
 

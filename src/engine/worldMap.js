@@ -6,7 +6,7 @@ import {
   getWorldById,
   getWorldNodeById,
 } from '../games/registry.js';
-import { drawComicStarburst } from '../games/weeblAtlas.js';
+import { drawComicStarburst, drawHeroCharacter, drawSunburst } from '../games/weeblAtlas.js';
 
 let _heroMapSprite = null;
 function getHeroMapSprite() {
@@ -28,6 +28,25 @@ function getWorld2MapSprite() {
     _world2MapSprite = img;
   }
   return _world2MapSprite.complete && _world2MapSprite.naturalWidth > 0 ? _world2MapSprite : null;
+}
+
+const _summaryAssets = {};
+function getSummaryAsset(key, src) {
+  if (typeof Image === 'undefined') return null;
+  if (!_summaryAssets[key]) {
+    const img = new Image();
+    img.src = src;
+    _summaryAssets[key] = img;
+  }
+  const img = _summaryAssets[key];
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+function preloadSummaryAssets() {
+  getSummaryAsset('bg', '/assets/world1/summary-stage-bg.jpg');
+  getSummaryAsset('0star', '/assets/world1/hero-summary-0star.png');
+  getSummaryAsset('1star', '/assets/world1/hero-summary-1star.png');
+  getSummaryAsset('rally', '/assets/world1/hero-summary-rally.png');
+  getSummaryAsset('cheer', '/assets/world1/hero-summary-cheer.png');
 }
 
 export const STAGE_W = 450;
@@ -776,5 +795,276 @@ export class WorldMapScene {
     ctx.restore();
 
     this.drawWeeblHeroOnMap(ctx, x, y - 1, hop, this.isWalking ? this.t * 12 : this.t * 3.4, this.beanDir);
+  }
+}
+
+function drawWeeblCloud(ctx, cx, cy, scale = 1) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(-34, 10);
+    ctx.bezierCurveTo(-46, 10, -48, -8, -32, -10);
+    ctx.bezierCurveTo(-28, -26, -4, -30, 6, -18);
+    ctx.bezierCurveTo(18, -26, 38, -18, 36, -3);
+    ctx.bezierCurveTo(48, -1, 46, 10, 34, 10);
+    ctx.closePath();
+  };
+
+  trace();
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = '#dbeafe';
+  ctx.fillRect(-50, 4, 100, 10);
+  ctx.restore();
+
+  trace();
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2.8;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Live 60fps HD Cel-Cartoon ("Weebl's Stuff") Run Summary Stage:
+ * Renders a bright cartoon sky, drifting inked clouds, spinning Weebl sunburst,
+ * rolling emerald hills, celebratory confetti, and animated 3D Crowned Hero Bean.
+ */
+export class SummaryScene {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.raf = null;
+    this.t = 0;
+    this.last = 0;
+    this.cleared = false;
+    this.isBoss = false;
+    this.stars = 0;
+    this.bounceT = 0;
+    this.sparkles = [];
+    this.confetti = [];
+    preloadSummaryAssets();
+  }
+
+  start({ cleared = false, isBoss = false, stars = 0 } = {}) {
+    this.stop();
+    if (!this.canvas) return;
+    preloadSummaryAssets();
+    this.cleared = Boolean(cleared);
+    this.isBoss = Boolean(isBoss);
+    this.stars = Math.max(0, Math.min(3, Number(stars) || 0));
+    this.t = 0;
+    this.bounceT = this.stars >= 2 ? 1.0 : 0;
+    this.sparkles = [];
+    this.confetti = [];
+
+    if (this.stars >= 2) {
+      this._spawnBurst(225, 345, 26, ['#fde047', '#4ade80', '#38bdf8', '#fb7185', '#ffffff']);
+      const colors = ['#fde047', '#4ade80', '#38bdf8', '#fb7185', '#f97316', '#c084fc'];
+      for (let i = 0; i < 24; i++) {
+        this.confetti.push({
+          x: Math.random() * STAGE_W,
+          y: -20 - Math.random() * 260,
+          vx: (Math.random() - 0.5) * 34,
+          vy: 55 + Math.random() * 65,
+          rot: Math.random() * Math.PI * 2,
+          vrot: (Math.random() - 0.5) * 5,
+          w: 7 + Math.random() * 5,
+          h: 5 + Math.random() * 4,
+          color: colors[i % colors.length],
+        });
+      }
+    }
+
+    this.last = performance.now();
+    const tick = (now) => {
+      const dt = Math.min(0.05, Math.max(0.001, (now - this.last) / 1000));
+      this.last = now;
+      this.t += dt;
+      if (this.bounceT > 0) this.bounceT = Math.max(0, this.bounceT - dt * 1.85);
+      this.updateParticles(dt);
+      this.render();
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+
+  stop() {
+    if (this.raf) {
+      cancelAnimationFrame(this.raf);
+      this.raf = null;
+    }
+  }
+
+  triggerBounce() {
+    this.bounceT = 1.0;
+    this._spawnBurst(225, 345, 18, ['#fde047', '#4ade80', '#38bdf8', '#fb7185', '#ffffff']);
+  }
+
+  _spawnBurst(cx, cy, count, palette) {
+    for (let i = 0; i < count; i++) {
+      const ang = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.35;
+      const spd = 75 + Math.random() * 130;
+      this.sparkles.push({
+        x: cx + (Math.random() - 0.5) * 28,
+        y: cy + (Math.random() - 0.5) * 24,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 65,
+        life: 0.75 + Math.random() * 0.4,
+        maxLife: 1.15,
+        r: 3.4 + Math.random() * 3.4,
+        color: palette[i % palette.length],
+      });
+    }
+  }
+
+  updateParticles(dt) {
+    for (let i = this.sparkles.length - 1; i >= 0; i--) {
+      const s = this.sparkles[i];
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vy += 260 * dt;
+      s.life -= dt;
+      if (s.life <= 0) this.sparkles.splice(i, 1);
+    }
+    for (const c of this.confetti) {
+      c.x += (c.vx + Math.sin(this.t * 3 + c.y * 0.02) * 18) * dt;
+      c.y += c.vy * dt;
+      c.rot += c.vrot * dt;
+      if (c.y > STAGE_H + 20) {
+        c.y = -18;
+        c.x = Math.random() * STAGE_W;
+      }
+    }
+  }
+
+  render() {
+    const ctx = syncCanvasDPR(this.canvas);
+    if (!ctx) return;
+    ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+
+    const prevSmooth = ctx.imageSmoothingEnabled;
+    const prevQual = ctx.imageSmoothingQuality;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    const bgImg = getSummaryAsset('bg', '/assets/world1/summary-stage-bg.jpg');
+    if (bgImg) {
+      const drawH = (STAGE_W / bgImg.naturalWidth) * bgImg.naturalHeight;
+      ctx.drawImage(bgImg, 0, 0, STAGE_W, Math.max(STAGE_H, drawH));
+    } else {
+      // Fallback sky & hills while image decodes
+      const sky = ctx.createLinearGradient(0, 0, 0, 420);
+      sky.addColorStop(0, '#0284c7');
+      sky.addColorStop(0.62, '#38bdf8');
+      sky.addColorStop(1, '#fef08a');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+      drawSunburst(ctx, 225, 340, 175, this.t * 0.25, 14, 0.9, false);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(0, 380, STAGE_W, STAGE_H - 380);
+    }
+
+    // Subtle sunlit halo & Starburst Pop behind King Jelly on Clear or Tap
+    const footY = 478;
+    const tapLift = this.bounceT > 0 ? Math.sin(this.bounceT * Math.PI) * 18 : 0;
+    const idleBob = Math.sin(this.t * 3.4) * 3.2;
+
+    if (this.bounceT > 0.22) {
+      const k = Math.min(1, (this.bounceT - 0.22) / 0.78);
+      drawComicStarburst(
+        ctx,
+        225,
+        345,
+        88 * k,
+        42 * k,
+        10,
+        '#fef08a',
+        '#000000',
+        this.t * 4.2,
+        3.0,
+      );
+    }
+
+    // Ground contact shadow on the stone pad
+    const shadowScale = Math.max(0.72, 1 - tapLift * 0.012);
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+    ctx.beginPath();
+    ctx.ellipse(225, footY - 3, 56 * shadowScale, 12 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Story-Quality HD King Jelly Illustration per Star Tier (0, 1, 2, 3)
+    const poseMap = {
+      0: ['0star', '/assets/world1/hero-summary-0star.png'],
+      1: ['1star', '/assets/world1/hero-summary-1star.png'],
+      2: ['rally', '/assets/world1/hero-summary-rally.png'],
+      3: ['cheer', '/assets/world1/hero-summary-cheer.png'],
+    };
+    const [poseKey, poseSrc] = poseMap[this.stars] || poseMap[0];
+    const heroImg = getSummaryAsset(poseKey, poseSrc);
+
+    const sqY = this.bounceT > 0
+      ? 1 + Math.sin(this.bounceT * Math.PI * 2) * 0.07
+      : 1 + Math.sin(this.t * (this.stars >= 2 ? 3.4 : 2.1)) * 0.015;
+    const sqX = 2 - sqY;
+
+    if (heroImg) {
+      const drawH = 252;
+      const drawW = (heroImg.naturalWidth / heroImg.naturalHeight) * drawH;
+      ctx.save();
+      ctx.translate(225, footY - tapLift - Math.max(0, idleBob * (this.stars >= 2 ? 1 : 0.45)));
+      ctx.scale(sqX, sqY);
+      ctx.drawImage(heroImg, -drawW * 0.5, -drawH, drawW, drawH);
+      ctx.restore();
+    } else {
+      drawHeroCharacter(ctx, 225, footY - tapLift, 142, {
+        view: 'front',
+        dir: 1,
+        state: this.stars >= 2 ? 'cheer' : 'idle',
+        expr: this.stars === 0 ? 'panic' : 'happy',
+        t: this.t * 2.2,
+        squashX: sqX,
+        squashY: sqY,
+      });
+    }
+
+    ctx.imageSmoothingEnabled = prevSmooth;
+    ctx.imageSmoothingQuality = prevQual;
+
+    // Confetti & Comic Burst Sparkles
+    for (const c of this.confetti) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.rot);
+      ctx.fillStyle = c.color;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.rect(-c.w * 0.5, -c.h * 0.5, c.w, c.h);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const s of this.sparkles) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, s.life / s.maxLife));
+      ctx.fillStyle = s.color;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }

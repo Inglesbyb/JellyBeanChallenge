@@ -7,6 +7,7 @@ import {
   getWorldNodeById,
   getStarsForScore,
 } from '../games/registry.js';
+import { COMIC_COLLECTIBLES } from './storyComic.js';
 
 const KEY = 'GAME_REELS_V3';
 const LEGACY_KEY = 'GAME_REELS_V2';
@@ -48,6 +49,7 @@ const freshMeta = () => ({
 
 const defaultSettings = () => ({
   sfxVolume: 0.8,
+  musicVolume: 0.45,
   hapticsEnabled: true,
   screenShakeEnabled: true,
 });
@@ -86,6 +88,54 @@ const defaultWorlds = () => ({
   },
   world2Unlocked: false,
 });
+
+const defaultCollectibles = () => {
+  const unlockedComics = {};
+  const seenComics = {};
+  for (const c of COMIC_COLLECTIBLES) {
+    unlockedComics[c.id] = !!c.unlockedByDefault;
+    seenComics[c.id] = !!c.unlockedByDefault;
+  }
+  return {
+    unlockedComics,
+    seenComics,
+    unlockedAt: {},
+  };
+};
+
+function normalizeCollectiblesState(raw, worlds) {
+  const base = defaultCollectibles();
+  const col = {
+    unlockedComics: { ...base.unlockedComics, ...(raw?.unlockedComics || {}) },
+    seenComics: { ...base.seenComics, ...(raw?.seenComics || {}) },
+    unlockedAt: { ...(raw?.unlockedAt || {}) },
+  };
+  for (const c of COMIC_COLLECTIBLES) {
+    if (c.unlockedByDefault) {
+      col.unlockedComics[c.id] = true;
+      if (col.seenComics[c.id] === undefined) col.seenComics[c.id] = true;
+    }
+  }
+  if (worlds?.nodes?.['1-1']?.cleared) {
+    col.unlockedComics.pub_call_comic = true;
+  }
+  if (worlds?.nodes?.['1-2']?.cleared) {
+    col.unlockedComics.queen_40th_comic = true;
+  }
+  if (worlds?.nodes?.['1-3']?.cleared) {
+    col.unlockedComics.klarna_pizza_comic = true;
+  }
+  if (worlds?.nodes?.['1-4']?.cleared) {
+    col.unlockedComics.asbo_prep_comic = true;
+  }
+  if (worlds?.nodes?.['1-5']?.cleared) {
+    col.unlockedComics.karate_pickup_comic = true;
+  }
+  if (worlds?.nodes?.['1-6']?.cleared || worlds?.world2Unlocked) {
+    col.unlockedComics.ending_comic = true;
+  }
+  return col;
+}
 
 function normalizeWorldsState(raw) {
   const base = defaultWorlds();
@@ -140,6 +190,7 @@ export const store = {
     stats: defaultStats(),
     worlds: defaultWorlds(),
     quests: defaultQuests(),
+    collectibles: defaultCollectibles(),
   },
 
   load() {
@@ -171,6 +222,7 @@ export const store = {
         }
         const worlds = normalizeWorldsState(p.worlds);
         const quests = normalizeQuestsState(p.quests);
+        const collectibles = normalizeCollectiblesState(p.collectibles, worlds);
 
         this.data = {
           started: !!p.started,
@@ -183,6 +235,7 @@ export const store = {
           stats,
           worlds,
           quests,
+          collectibles,
         };
         return;
       }
@@ -202,6 +255,7 @@ export const store = {
           stats: defaultStats(),
           worlds: defaultWorlds(),
           quests: defaultQuests(),
+          collectibles: defaultCollectibles(),
         };
         this.save();
       }
@@ -407,7 +461,9 @@ export const store = {
     const progression = this.progression;
     const worlds = this.worlds;
     const quests = this.quests;
-    this.data = { started: true, meta: freshMeta(), games: {}, likes, settings, profile, stats, progression, worlds, quests };
+    const collectibles = this.collectibles;
+    const storySeen = !!this.data.storySeen;
+    this.data = { started: true, storySeen, meta: freshMeta(), games: {}, likes, settings, profile, stats, progression, worlds, quests, collectibles };
     this.save();
   },
 
@@ -419,7 +475,9 @@ export const store = {
     const progression = this.progression;
     const worlds = this.worlds;
     const quests = this.quests;
-    this.data = { started: false, meta: freshMeta(), games: {}, likes, settings, profile, stats, progression, worlds, quests };
+    const collectibles = this.collectibles;
+    const storySeen = !!this.data.storySeen;
+    this.data = { started: false, storySeen, meta: freshMeta(), games: {}, likes, settings, profile, stats, progression, worlds, quests, collectibles };
     this.save();
   },
 
@@ -509,6 +567,24 @@ export const store = {
       }
     }
 
+    let unlockedComicId = null;
+    if (clearedNow) {
+      if (node.id === '1-1' && this.unlockComic('pub_call_comic')) {
+        unlockedComicId = 'pub_call_comic';
+      } else if (node.id === '1-2' && this.unlockComic('queen_40th_comic')) {
+        unlockedComicId = 'queen_40th_comic';
+      } else if (node.id === '1-3' && this.unlockComic('klarna_pizza_comic')) {
+        unlockedComicId = 'klarna_pizza_comic';
+      } else if (node.id === '1-4' && this.unlockComic('asbo_prep_comic')) {
+        unlockedComicId = 'asbo_prep_comic';
+      } else if (node.id === '1-5' && this.unlockComic('karate_pickup_comic')) {
+        unlockedComicId = 'karate_pickup_comic';
+      } else if (node.isBoss && this.unlockComic('ending_comic')) {
+        unlockedComicId = 'ending_comic';
+      }
+    }
+    const comicJustUnlocked = Boolean(unlockedComicId);
+
     if (bonusRP > 0) {
       this.stats.lifetimeScore = (this.stats.lifetimeScore || 0) + bonusRP;
     }
@@ -528,7 +604,77 @@ export const store = {
       nextNode,
       nextUnlockedNode,
       world2JustUnlocked,
+      comicJustUnlocked,
+      unlockedComicId,
     };
+  },
+
+  /* ----------------------------------------------------------- Collectibles · Comics */
+  get collectibles() {
+    if (!this.data.collectibles) {
+      this.data.collectibles = normalizeCollectiblesState(null, this.worlds);
+    }
+    return this.data.collectibles;
+  },
+
+  isComicUnlocked(comicId) {
+    return Boolean(this.collectibles.unlockedComics?.[comicId]);
+  },
+
+  unlockComic(comicId) {
+    const exists = COMIC_COLLECTIBLES.some((c) => c.id === comicId);
+    if (!exists) return false;
+    const col = this.collectibles;
+    if (col.unlockedComics[comicId]) return false;
+    col.unlockedComics[comicId] = true;
+    col.seenComics[comicId] = false;
+    col.unlockedAt[comicId] = Date.now();
+    this.save();
+    return true;
+  },
+
+  getUnseenComics() {
+    const col = this.collectibles;
+    return COMIC_COLLECTIBLES.filter((c) => col.unlockedComics[c.id] && !col.seenComics[c.id]);
+  },
+
+  hasUnseenComics() {
+    return this.getUnseenComics().length > 0;
+  },
+
+  markComicSeen(comicId) {
+    const col = this.collectibles;
+    if (!comicId || !col.unlockedComics[comicId] || col.seenComics[comicId]) return false;
+    col.seenComics[comicId] = true;
+    this.save();
+    return true;
+  },
+
+  markComicsViewed() {
+    const col = this.collectibles;
+    let changed = false;
+    for (const c of COMIC_COLLECTIBLES) {
+      if (col.unlockedComics[c.id] && !col.seenComics[c.id]) {
+        col.seenComics[c.id] = true;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+    return changed;
+  },
+
+  getUnlockedComicsCount() {
+    const col = this.collectibles;
+    return COMIC_COLLECTIBLES.filter((c) => col.unlockedComics[c.id]).length;
+  },
+
+  getComicsCatalog() {
+    const col = this.collectibles;
+    return COMIC_COLLECTIBLES.map((c) => ({
+      ...c,
+      unlocked: Boolean(col.unlockedComics[c.id]),
+      isNew: Boolean(col.unlockedComics[c.id] && !col.seenComics[c.id]),
+    }));
   },
 
   /* ----------------------------------------------------------- Quests & Multiplier */

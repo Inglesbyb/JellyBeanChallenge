@@ -524,7 +524,7 @@ export class ColorClash extends Game {
         u.timer -= dt;
         if (u.timer <= 0) {
           u.timer = u.cooldown;
-          this.sounds.tone({ f: 380, to: 190, dur: 0.08, vol: 0.2 });
+          this.sounds.cannon();
           [-0.14, 0, 0.14].forEach((spread) => {
             const a = u.angle + spread;
             this.projectiles.push({

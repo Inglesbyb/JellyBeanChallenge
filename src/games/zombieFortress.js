@@ -134,7 +134,7 @@ export class ZombieFortress extends Game {
     hint: 'DRAG to aim & unleash heavy fire · SPEND gold live on Upgrades · DEFEND the wall!',
     baseLikes: 3420,
     isPrestige: false,
-    parScore60s: 2600,
+    parScore60s: 4800,
     cue: 'DEFEND THE WALL!',
     prestigeCue: 'TOUGHER HORDE · FASTER ZOMBIES!',
     scaling: {

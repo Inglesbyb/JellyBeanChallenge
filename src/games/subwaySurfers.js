@@ -999,8 +999,7 @@ export class SubwaySurfers extends Game {
   }
 
   playTrainHorn() {
-    this.sounds.tone({ f: 460, to: 440, type: 'triangle', dur: 0.28, vol: 0.24 });
-    this.sounds.tone({ f: 580, to: 550, type: 'triangle', dur: 0.28, vol: 0.22, delay: 0.05 });
+    this.sounds.trainHorn();
   }
 
   applyPowerup(power) {

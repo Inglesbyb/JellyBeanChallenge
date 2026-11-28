@@ -407,6 +407,13 @@ export class TowerSlice extends Game {
       this.fx.text(this.W / 2, y - 28, title, '#ffe066', 22, 1.0);
 
       this.sounds.stack(this.combo);
+      if (isMilestone) {
+        this.sounds.powerup?.();
+        this.fx.shake(6, 0.16);
+      } else if (this.combo >= 3) {
+        this.fx.shake(3.5, 0.12);
+      }
+      this.fx.burst(top.x + top.w / 2, y, '#ffe066', isMilestone ? 20 : 12, 180, 0.45, 3.5);
       this.haptics.medium();
     } else {
       const overlap = cur.w - Math.abs(delta);
@@ -471,6 +478,7 @@ export class TowerSlice extends Game {
       this.sway = clamp(delta * 0.05, -3.2, 3.2); // Tower wobbles from off-center impact
       this.sounds.slice();
       this.sounds.stack(1);
+      this.fx.shake(2.5, 0.1);
       this.haptics.light();
     }
 

@@ -3,6 +3,8 @@
 
 import { App } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { sounds } from '../audio.js';
+import { bgm } from '../bgm.js';
 
 export function setupNativeAndroidBridge(reel) {
   // 1. Hardware Back Button Navigation
@@ -10,9 +12,32 @@ export function setupNativeAndroidBridge(reel) {
     App.addListener('backButton', () => {
       handleAndroidBack(reel);
     });
+    App.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) {
+        if (reel?.mode === 'playing') reel.pause();
+        bgm.setDucked(true);
+        sounds.suspend();
+      } else {
+        sounds.resume();
+        bgm.setDucked(reel?.mode === 'paused');
+      }
+    });
   } catch (err) {
     // Non-native / Web browser fallback - App listener is a no-op
     console.log('[NativeBridge] Running in web browser context');
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (reel?.mode === 'playing') reel.pause();
+        bgm.setDucked(true);
+        sounds.suspend();
+      } else {
+        sounds.resume();
+        bgm.setDucked(reel?.mode === 'paused');
+      }
+    });
   }
 
   // 2. Immersive System Status Bar
@@ -53,6 +78,13 @@ export function handleAndroidBack(reel) {
   const profileModal = $('#profileModal');
   if (profileModal && !profileModal.classList.contains('hidden')) {
     reel.closeProfile();
+    return;
+  }
+
+  // 2b. Collectables · Comics Collection Modal
+  const comicsModal = $('#comicsModal');
+  if (comicsModal && !comicsModal.classList.contains('hidden')) {
+    reel.closeComicsModal();
     return;
   }
 

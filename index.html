@@ -10,9 +10,6 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
     <link rel="apple-touch-icon" href="/icon-512.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fredoka:wght@700&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app">
@@ -43,6 +40,7 @@
           <div class="riw-pill" id="riwPill">PRESTIGE 1</div>
           <div class="riw-game" id="riwGame">🎮 Game Title</div>
           <div class="riw-cue" id="riwCue">ACTION CUE!</div>
+          <div class="riw-gesture" id="riwGesture"></div>
           <div class="riw-sub" id="riwSub"></div>
           <div class="riw-deltas" id="riwDeltas"></div>
         </div>
@@ -198,6 +196,21 @@
                   </svg>
                   <small>Plaza</small>
                 </button>
+                <button type="button" class="pnav-btn" id="btnOpenComicsPlaza" aria-label="Open Comics Collectables">
+                  <svg class="wbl-nav-ico" viewBox="0 0 96 84" aria-hidden="true">
+                    <!-- Chunky Weebl Comic Book Issue Stack with Yellow/Purple Cover & Star Badge -->
+                    <g transform="rotate(-5 48 44)">
+                      <rect x="23" y="10" width="54" height="62" rx="7" fill="#fde047" stroke="#000" stroke-width="4.6"/>
+                      <rect x="18" y="13" width="54" height="62" rx="7" fill="#a855f7" stroke="#000" stroke-width="4.8"/>
+                      <rect x="18" y="13" width="12" height="62" rx="4" fill="#6b21a8" stroke="#000" stroke-width="4"/>
+                      <rect x="34" y="21" width="32" height="22" rx="4" fill="#38bdf8" stroke="#000" stroke-width="3.6"/>
+                      <polygon points="50,24 53,29.5 59,30.5 54.5,34.8 55.8,40.5 50,37.4 44.2,40.5 45.5,34.8 41,30.5 47,29.5" fill="#facc15" stroke="#000" stroke-width="2.2" stroke-linejoin="round"/>
+                      <rect x="34" y="49" width="30" height="7" rx="3.5" fill="#fde047" stroke="#000" stroke-width="2.8"/>
+                      <rect x="34" y="60" width="22" height="6" rx="3" fill="#e9d5ff" stroke="#000" stroke-width="2.4"/>
+                    </g>
+                  </svg>
+                  <small>Comics</small><span class="nav-dot hidden" id="plazaComicsDot">!</span>
+                </button>
                 <button type="button" class="pnav-btn" id="btnMenuSettings">
                   <svg class="wbl-nav-ico" viewBox="0 0 96 84" aria-hidden="true">
                     <!-- Chunky 3D Cel-Shaded Sky-Silver & Gold Candy Menu Bars -->
@@ -235,7 +248,7 @@
 
             <div class="comic-stage-wrap">
               <article class="comic-stage" id="comicStage" aria-live="polite">
-                <img id="comicPanelArt" class="comic-panel-art" src="/assets/story/panel_01.jpg" alt="" />
+                <img id="comicPanelArt" class="comic-panel-art" src="/assets/story/panel_01.jpg" alt="" draggable="false" />
                 <div class="comic-vignette" aria-hidden="true"></div>
                 <div id="comicCaptionBanner" class="comic-caption"></div>
                 <div id="comicBubblesLayer" class="comic-bubbles-layer"></div>
@@ -295,32 +308,41 @@
           </div>
         </section>
 
-        <!-- Cycle summary -->
-        <section id="summary" class="overlay hidden">
-          <div class="menu-inner">
-            <div class="eyebrow" id="sumEyebrow">CYCLE 1 COMPLETE</div>
-            <h2 class="sum-title" id="sumTitle">Reel Cleared</h2>
-            <div class="sum-chips" id="sumChips"></div>
-            <div class="mult-card">
-              <div class="mult-label">SURVIVAL MULTIPLIER</div>
-              <div class="mult-val" id="sumMult">×1.0</div>
-              <div class="mult-sub" id="sumSub"></div>
-            </div>
-            <div class="summary-world-box hidden" id="summaryWorldBox">
-              <div class="swb-head">
-                <span id="swbNodeTitle">WORLD 1 · 1-1 SNACK STREET</span>
-                <span id="swbNodeGoal">0 / 4,000 PTS</span>
+        <!-- Run Summary (Simple HD Cel-Cartoon Weebl Screen) -->
+        <section id="summary" class="overlay hidden summary-weebl" aria-label="Run Summary">
+          <canvas id="summaryCanvas" width="450" height="800" aria-hidden="true"></canvas>
+          <button type="button" class="summary-bean-hit" id="summaryBeanBtn" aria-label="Tap Jelly Bean">
+            <span class="sr-only">Tap Jelly Bean</span>
+          </button>
+
+          <div class="menu-inner summary-inner">
+            <header class="summary-hero-head">
+              <div class="summary-stage-pill" id="sumEyebrow">1-1 · SNACK STREET</div>
+              <h2 class="summary-comic-title" id="sumTitle">NICE TRY!</h2>
+            </header>
+
+            <div class="summary-bottom-stack">
+              <div class="summary-weebl-card">
+                <div class="swc-stars" id="swbStars" aria-label="Stars earned"></div>
+
+                <div class="swc-score-row">
+                  <span class="swc-score-num" id="sumScore">0</span>
+                  <span class="swc-score-unit">PTS</span>
+                </div>
+                <div class="swc-meta" id="sumSub">Goal: 4,000 PTS</div>
+
+                <div class="summary-progress-wrap" id="summaryWorldBox">
+                  <div class="swc-bar-track">
+                    <div class="swc-bar-fill" id="swbBarFill" style="width: 0%;"></div>
+                  </div>
+                  <div class="swc-status hidden" id="swbUnlockBanner"></div>
+                  <button type="button" class="swc-comic-notice hidden" id="sumComicNoticeBtn"></button>
+                </div>
               </div>
-              <div class="swb-stars" id="swbStars">☆☆☆</div>
-              <div class="pack-bar-bg">
-                <div class="pack-bar-fill" id="swbBarFill" style="width: 0%;"></div>
-              </div>
-              <div class="swb-unlock hidden" id="swbUnlockBanner"></div>
+
+              <button type="button" class="btn summary-cta-btn" id="btnNext">🗺️ WORLD 1 MAP</button>
+              <button type="button" class="summary-plaza-link hidden" id="btnSummaryPlaza">🏠 BACK TO PLAZA</button>
             </div>
-            <button class="btn" id="btnNext">KEEP GOING →</button>
-            <button class="btn ghost hidden" id="btnRetryWorldNode">🔄 RETRY NODE</button>
-            <button class="btn ghost share-btn" id="btnShareRun">📸 SHARE RUN POSTER</button>
-            <p class="foot" id="sumFoot">Survive cycles and keep your streak alive.</p>
           </div>
         </section>
 
@@ -339,6 +361,15 @@
               <li><b id="stageUnlockIcon">🐠</b><span id="stageUnlockReels"><em>Reef Basin · 8 Reels</em> — now unlocked and ready to play!</span></li>
               <li><b>⭐</b><span id="stageUnlockBonus"><em>+1,000 Bonus RP</em> added to your Crown Rank!</span></li>
             </ul>
+            <div class="unlock-comic-spotlight hidden" id="stageUnlockComicCard">
+              <img class="ucs-cover" id="stageUnlockComicCover" src="/assets/story/panel_01.jpg" alt="Unlocked comic cover" />
+              <div class="ucs-info">
+                <span class="ucs-badge">📖 NEW COMIC UNLOCKED!</span>
+                <div class="ucs-title" id="stageUnlockComicTitle">ISSUE #02 · KING JELLY'S PUB CALL</div>
+                <div class="ucs-desc" id="stageUnlockComicDesc">Added to Collectables!</div>
+                <button type="button" class="ucs-read-btn" id="btnStageUnlockReadComic">READ COMIC NOW ▶</button>
+              </div>
+            </div>
             <div class="lock-cta-group">
               <button type="button" class="btn" id="btnStageUnlockGoMap">🗺️ OPEN WORLD 1 MAP ▶</button>
               <button type="button" class="btn ghost" id="btnStageUnlockStay">VIEW SUMMARY ✓</button>
@@ -372,11 +403,23 @@
               <div class="setting-row">
                 <div class="setting-label-col">
                   <div class="setting-name">🔊 SFX Volume</div>
-                  <div class="setting-desc">Procedural audio & arcade effects</div>
+                  <div class="setting-desc">Procedural audio &amp; arcade effects</div>
                 </div>
                 <div class="setting-slider-col">
                   <input type="range" id="settingVolume" min="0" max="100" step="5" value="80" aria-label="Sound Effects Volume" />
                   <span class="slider-val" id="settingVolumeVal">80%</span>
+                </div>
+              </div>
+
+              <!-- Music Volume -->
+              <div class="setting-row">
+                <div class="setting-label-col">
+                  <div class="setting-name">🎵 Music Volume</div>
+                  <div class="setting-desc">Adaptive plaza, gauntlet &amp; boss groove</div>
+                </div>
+                <div class="setting-slider-col">
+                  <input type="range" id="settingMusic" min="0" max="100" step="5" value="45" aria-label="Background Music Volume" />
+                  <span class="slider-val" id="settingMusicVal">45%</span>
                 </div>
               </div>
 
@@ -411,6 +454,15 @@
                   <div class="setting-desc">Watch the Scouse comic intro &amp; survival guide</div>
                 </div>
                 <button type="button" class="setting-link-btn" id="btnOpenStoryFromSettings">WATCH ▶</button>
+              </div>
+
+              <!-- Ending Epilogue Comic Replay (shown once Lord Brim is defeated) -->
+              <div class="setting-row hidden" id="settingEndingRow">
+                <div class="setting-label-col">
+                  <div class="setting-name">🎬 Ending Epilogue Comic</div>
+                  <div class="setting-desc">Replay the Citadel finale &amp; World 2 teaser</div>
+                </div>
+                <button type="button" class="setting-link-btn" id="btnOpenEndingFromSettings">WATCH ▶</button>
               </div>
 
               <!-- Privacy Policy Link (TICKET-09) -->
@@ -617,6 +669,10 @@
                   <svg class="wmp-svg" viewBox="0 0 38 32" aria-hidden="true"><rect x="8" y="4" width="20" height="24" rx="3" fill="#b45309" stroke="#000" stroke-width="2.2"/><rect x="11" y="7" width="14" height="18" rx="1.5" fill="#fef9c3" stroke="#000" stroke-width="1.6"/><path d="M14 12h8M14 17h8M14 21h5" stroke="#64748b" stroke-width="1.8" stroke-linecap="round"/></svg>
                   <span>Quests</span><span class="wm-q-dot hidden" id="worldQuestDot">!</span>
                 </button>
+                <button type="button" class="wm-pill-btn comics" id="btnWorldOpenComics" aria-label="Open Comics Collectables">
+                  <svg class="wmp-svg" viewBox="0 0 38 32" aria-hidden="true"><rect x="11" y="4" width="17" height="23" rx="3" fill="#fde047" stroke="#000" stroke-width="2"/><rect x="8" y="6" width="17" height="23" rx="3" fill="#a855f7" stroke="#000" stroke-width="2.2"/><rect x="12" y="10" width="9" height="7" rx="1.5" fill="#38bdf8" stroke="#000" stroke-width="1.6"/><path d="M12 21h9" stroke="#fde047" stroke-width="2" stroke-linecap="round"/></svg>
+                  <span>Comics</span><span class="wm-q-dot hidden" id="worldComicsDot">!</span>
+                </button>
                 <button type="button" class="wm-pill-btn endless" id="btnWorldPlayEndless">
                   <svg class="wmp-svg wmp-inf" viewBox="0 0 48 26" aria-hidden="true"><defs><linearGradient id="wmInfG" x1="0%" y1="50%" x2="100%" y2="50%"><stop offset="0%" stop-color="#fbbf24"/><stop offset="40%" stop-color="#ef4444"/><stop offset="56%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient></defs><path d="M12.5 5.5C7.2 5.5 4 8.8 4 13s3.2 7.5 8.5 7.5c5.2 0 8.5-5 11.5-7.5 3-2.5 6.3-7.5 11.5-7.5 5.3 0 8.5 3.3 8.5 7.5s-3.2 7.5-8.5 7.5c-5.2 0-8.5-5-11.5-7.5-3-2.5-6.3-7.5-11.5-7.5z" fill="none" stroke="#000000" stroke-width="8" stroke-linejoin="round"/><path d="M12.5 5.5C7.2 5.5 4 8.8 4 13s3.2 7.5 8.5 7.5c5.2 0 8.5-5 11.5-7.5 3-2.5 6.3-7.5 11.5-7.5 5.3 0 8.5 3.3 8.5 7.5s-3.2 7.5-8.5 7.5c-5.2 0-8.5-5-11.5-7.5-3-2.5-6.3-7.5-11.5-7.5z" fill="none" stroke="url(#wmInfG)" stroke-width="4.2" stroke-linejoin="round"/></svg>
                   <span>Endless</span>
@@ -665,6 +721,33 @@
           </div>
         </section>
 
+        <!-- Collectables · Comics Section Modal -->
+        <section id="comicsModal" class="overlay hidden" aria-modal="true" role="dialog" aria-labelledby="comicsTitle">
+          <div class="packs-card comics-card">
+            <div class="profile-header">
+              <div class="profile-title-group">
+                <div class="eyebrow">COLLECTABLES · ARCADE ARCHIVE</div>
+                <h2 class="profile-title" id="comicsTitle">COMICS SECTION</h2>
+              </div>
+              <button class="modal-close" id="btnComicsClose" aria-label="Close comics section">✕</button>
+            </div>
+
+            <div class="comics-cat-bar">
+              <span class="comics-cat-pill active">📖 COMICS</span>
+              <span class="comics-count-pill" id="comicsCollectedCount">1 / 7 COLLECTED</span>
+            </div>
+
+            <div class="comics-shelf-list" id="comicsShelfList"></div>
+
+            <div class="comics-teaser-note">
+              <span>🌀</span>
+              <span>More collectable comics &amp; bonus rewards coming in World 2!</span>
+            </div>
+
+            <button type="button" class="btn" id="btnComicsDone">BACK TO PLAZA ✓</button>
+          </div>
+        </section>
+
         <!-- Floating Admin Mode Quick Dock (Hidden unless Admin Mode / Dev active) -->
         <div class="admin-dock hidden" id="adminDock">
           <button type="button" class="admin-pill" id="btnAdminPrevQuick" aria-label="Previous Game" title="Previous Game ([)">⏮</button>
@@ -695,6 +778,7 @@
               <button type="button" class="admin-ctrl-btn" id="btnAdminRevive">❤️ REVIVE ALL</button>
               <button type="button" class="admin-ctrl-btn" id="btnAdminPrestige">★ PRESTIGE +1</button>
               <button type="button" class="admin-ctrl-btn" id="btnAdminUnlockWorld">🗺️ UNLOCK W1</button>
+              <button type="button" class="admin-ctrl-btn" id="btnAdminEndingComic">🎬 ENDING COMIC</button>
             </div>
 
             <div class="admin-game-list" id="adminGameList"></div>

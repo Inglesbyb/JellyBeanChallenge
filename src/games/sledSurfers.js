@@ -52,7 +52,7 @@ export class SledSurfers extends Game {
     hint: 'DRAG Left/Right to BANK · Hit RAMPS for AIR TIME · FLIP in mid-air for BOOST!',
     baseLikes: 9180,
     isPrestige: false,
-    parScore60s: 7500,
+    parScore60s: 15000,
     roundLen: 90,
     cue: 'BANK & DO FLIPS!',
     prestigeCue: 'FASTER SLIDE · FIERCER RIVALS!',

@@ -178,7 +178,7 @@ export function validateAllGames(games = GAMES) {
 }
 
 // Single Source of Truth for World 1 Overworld Progression (4 -> 8 -> 12 -> 16 -> 20 Reels, then 1-6 Boss Finale)
-// Star thresholds are calibrated to Reel.js normalized RP + survival/victory payouts (~1,200–1,650 PTS/reel).
+// Proportional per-reel effort across all 5 stages: 1★ = 1,125 PTS/reel (75% C1 par), 2★ = 1,500 PTS/reel (100% C1 par), 3★ = 2,250 PTS/reel (C2 push).
 export const WORLD_1_NODES = [
   {
     id: '1-1',
@@ -188,8 +188,8 @@ export const WORLD_1_NODES = [
     title: 'Snack Street',
     subtitle: 'Starter Square · 4 Reels',
     icon: '🍔',
-    clearScore: 4000,
-    starScores: [4000, 6000, 9000],
+    clearScore: 4500,
+    starScores: [4500, 6000, 9000],
     firstClearBonusRP: 500,
     gameIds: STARTER_GAMES.slice(0, 4).map((G) => G.meta.id),
     pos: { x: 200, y: 635 },
@@ -203,8 +203,8 @@ export const WORLD_1_NODES = [
     title: 'Harbor Drop',
     subtitle: 'Reef Basin · 8 Reels',
     icon: '🐠',
-    clearScore: 8500,
-    starScores: [8500, 12000, 17500],
+    clearScore: 9000,
+    starScores: [9000, 12000, 18000],
     firstClearBonusRP: 1000,
     gameIds: STARTER_GAMES.slice(0, 8).map((G) => G.meta.id),
     pos: { x: 308, y: 535 },
@@ -223,8 +223,8 @@ export const WORLD_1_NODES = [
     title: 'Brick District',
     subtitle: 'Spire Crossing · 12 Reels',
     icon: '🏰',
-    clearScore: 13000,
-    starScores: [13000, 18000, 25000],
+    clearScore: 13500,
+    starScores: [13500, 18000, 27000],
     firstClearBonusRP: 1500,
     gameIds: STARTER_GAMES.slice(0, 12).map((G) => G.meta.id),
     pos: { x: 155, y: 434 },
@@ -244,8 +244,8 @@ export const WORLD_1_NODES = [
     title: 'Skyline Siege',
     subtitle: 'Carnival Ridge · 16 Reels',
     icon: '🎪',
-    clearScore: 17500,
-    starScores: [17500, 24000, 33000],
+    clearScore: 18000,
+    starScores: [18000, 24000, 36000],
     firstClearBonusRP: 2000,
     gameIds: STARTER_GAMES.slice(0, 16).map((G) => G.meta.id),
     pos: { x: 306, y: 369 },
@@ -265,9 +265,9 @@ export const WORLD_1_NODES = [
     title: 'Apex Spire',
     subtitle: 'Helix Terrace · 20 Reels',
     icon: '🌀',
-    clearScore: 22000,
-    starScores: [22000, 30000, 42000],
-    firstClearBonusRP: 3500,
+    clearScore: 22500,
+    starScores: [22500, 30000, 45000],
+    firstClearBonusRP: 2500,
     gameIds: STARTER_GAMES.slice(0, 20).map((G) => G.meta.id),
     pos: { x: 188, y: 271 },
     pathFromPrev: [

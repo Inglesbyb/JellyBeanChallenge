@@ -398,10 +398,17 @@ export class PaperIo extends Game {
     if (!p.alive) return;
 
     // Turbo Boost handling (Spacebar, Shift, or multi-touch hold)
+    const wasBoost = p.boost;
     const wantsBoost = this.input.key(' ', 'shift') || (this.input.down && this.input.pointerCount >= 2);
     if (wantsBoost && p.stamina > 10) {
       p.boost = true;
       p.stamina = Math.max(0, p.stamina - dt * 48);
+      if (!wasBoost) {
+        this.sounds.boost();
+        this.haptics.light();
+        this.fx.ring(p.x, p.y, '#25e6ff', 75, 0.3, 3);
+        this.fx.burst(p.x, p.y, '#25e6ff', 10, 140, 0.35, 3);
+      }
     } else {
       p.boost = false;
       p.stamina = Math.min(100, p.stamina + dt * 26);
@@ -696,9 +703,16 @@ export class PaperIo extends Game {
           if (e.isHuman) {
             this.score += bonusPts;
             const pct = (captured / PLAYABLE_CELLS) * 100;
-            this.sounds.gate(true);
-            this.sounds.bubble();
-            this.haptics.medium();
+            if (pct >= 4.0) {
+              this.sounds.up();
+              this.fx.shake(5, 0.16);
+              this.haptics.heavy();
+            } else {
+              this.sounds.gate(true);
+              this.sounds.bubble();
+              this.haptics.medium();
+            }
+            this.fx.burst(e.x, e.y, '#ff007f', pct >= 4.0 ? 22 : 10, 210, 0.48, 3.5);
             this.fx.text(e.x, e.y - 30, `+${pct.toFixed(1)}% TURF! 🗺️`, '#ff007f', 26, 0.95);
             this.conquerWaves.push({ x: e.x, y: e.y, r: 20, t: 0, color: '#ff007f' });
           } else {
@@ -769,6 +783,7 @@ export class PaperIo extends Game {
           if (attacker.isHuman) {
             this.score += 1000;
             this.sounds.slice();
+            this.sounds.explosion();
             this.haptics.heavy();
             this.fx.burst(victim.x, victim.y, victim.color, 45, 300, 0.8, 5);
             this.fx.ring(victim.x, victim.y, victim.color, 160, 0.6, 5);

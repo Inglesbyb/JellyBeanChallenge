@@ -1,11 +1,12 @@
 import { sounds } from '../audio.js';
+import { bgm } from '../bgm.js';
 import { haptics } from '../haptics.js';
 import { store, getRankTier, RANKS } from './store.js';
 import { drawBean } from './bean.js';
 import { renderSharePoster, shareCardFile, downloadCardPNG } from './shareCard.js';
 import { setupNativeAndroidBridge } from './nativeAndroid.js';
-import { PlazaScene, WorldMapScene } from './worldMap.js';
-import { StoryComicDeck } from './storyComic.js';
+import { PlazaScene, WorldMapScene, SummaryScene } from './worldMap.js';
+import { StoryComicDeck, COMIC_COLLECTIBLES } from './storyComic.js';
 import { Input } from './input.js';
 import {
   GAMES,
@@ -70,12 +71,42 @@ export class Reel {
     this.homeBeanSparkles = [];
     this.activeWorldNodeId = store.worlds.selectedNodeId || '1-1';
     this._pendingBossVictory = null;
+    this._pendingBossUnlockModal = null;
+    this._returnToComicsAfterComic = false;
     this.plazaScene = new PlazaScene($('#plazaCanvas'));
     this.worldMapScene = new WorldMapScene($('#worldMapCanvas'));
+    this.summaryScene = new SummaryScene($('#summaryCanvas'));
     this.storyComic = new StoryComicDeck({
       onComplete: ({ completed, scope }) => {
+        const returnToComics = this._returnToComicsAfterComic;
+        this._returnToComicsAfterComic = false;
+        if (scope === 'ending') {
+          this.closeHowTo({ skipSound: true });
+          if (completed || !returnToComics) {
+            this.hideSummary();
+            this.openWorldMap();
+            if (this._pendingBossUnlockModal) {
+              const unlockRes = this._pendingBossUnlockModal;
+              this._pendingBossUnlockModal = null;
+              this.openStageUnlockModal(unlockRes);
+            }
+          } else {
+            this.openComicsModal({ skipMarkSeen: true });
+          }
+          return;
+        }
+        if (scope === 'pub_call' || scope === 'queen_40th' || scope === 'klarna_pizza' || scope === 'asbo_prep' || scope === 'karate_pickup') {
+          this.closeHowTo({ skipSound: true });
+          if (returnToComics) {
+            this.openComicsModal({ skipMarkSeen: true });
+          }
+          return;
+        }
         if (completed || scope === 'story') store.markStorySeen();
         this.closeHowTo({ skipSound: true });
+        if (!completed && returnToComics) {
+          this.openComicsModal({ skipMarkSeen: true });
+        }
       },
     });
 
@@ -108,6 +139,12 @@ export class Reel {
     this.startHomeBeanPreview();
     setupNativeAndroidBridge(this);
     this.resize();
+    bgm.setTheme('plaza');
+    if (typeof window !== 'undefined') {
+      const unlockBgm = () => bgm.unlockAndSync();
+      window.addEventListener('pointerdown', unlockBgm, { once: true, capture: true });
+      window.addEventListener('keydown', unlockBgm, { once: true, capture: true });
+    }
     window.addEventListener('resize', () => this.resize());
 
     this.last = performance.now();
@@ -299,6 +336,21 @@ export class Reel {
       });
     }
 
+    ['#btnOpenComicsPlaza', '#btnWorldOpenComics'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.onclick = () => this.openComicsModal();
+    });
+    const btnComicsClose = $('#btnComicsClose');
+    if (btnComicsClose) btnComicsClose.onclick = () => this.closeComicsModal();
+    const btnComicsDone = $('#btnComicsDone');
+    if (btnComicsDone) btnComicsDone.onclick = () => this.closeComicsModal();
+    const comicsModal = $('#comicsModal');
+    if (comicsModal) {
+      comicsModal.addEventListener('click', (e) => {
+        if (e.target === comicsModal) this.closeComicsModal();
+      });
+    }
+
     const btnBackPlaza = $('#btnWorldBackPlaza');
     if (btnBackPlaza) btnBackPlaza.onclick = () => this.closeWorldMap();
     const btnWorldEndless = $('#btnWorldPlayEndless');
@@ -352,7 +404,7 @@ export class Reel {
     if (btnStageUnlockGoMap) {
       btnStageUnlockGoMap.onclick = () => {
         this.closeStageUnlockModal({ skipSound: true });
-        $('#summary')?.classList.add('hidden');
+        this.hideSummary();
         this.openWorldMap();
       };
     }
@@ -382,14 +434,26 @@ export class Reel {
         this.openHowTo({ scope: 'story', lockUntilComplete: false });
       };
     }
+    const btnEndingFromSettings = $('#btnOpenEndingFromSettings');
+    if (btnEndingFromSettings) {
+      btnEndingFromSettings.onclick = () => {
+        this._pendingBossUnlockModal = null;
+        $('#settingsModal')?.classList.add('hidden');
+        this.openEndingComic({ lockUntilComplete: false });
+      };
+    }
 
     const btnMute = $('#btnMute');
     const muteIco = $('#muteIco');
     if (btnMute) {
       btnMute.onclick = () => {
         sounds.setMuted(!sounds.muted);
+        bgm.setMuted(sounds.muted);
         if (muteIco) muteIco.textContent = sounds.muted ? '🔇' : '🔊';
-        if (!sounds.muted) sounds.like();
+        if (!sounds.muted) {
+          sounds.like();
+          bgm.unlockAndSync();
+        }
       };
     }
     if (muteIco) muteIco.textContent = sounds.muted ? '🔇' : '🔊';
@@ -414,15 +478,31 @@ export class Reel {
     // Settings inputs
     const volInput = $('#settingVolume');
     const volVal = $('#settingVolumeVal');
+    const musicInput = $('#settingMusic');
+    const musicVal = $('#settingMusicVal');
     const hapticsInput = $('#settingHaptics');
     const shakeInput = $('#settingShake');
 
     const s = store.settings;
     volInput.value = Math.round((s.sfxVolume ?? 0.8) * 100);
     volVal.textContent = `${volInput.value}%`;
+    const mVol = s.musicVolume ?? 0.45;
+    if (musicInput && musicVal) {
+      musicInput.value = Math.round(mVol * 100);
+      musicVal.textContent = `${musicInput.value}%`;
+      musicInput.oninput = (e) => {
+        const v = Number(e.target.value);
+        musicVal.textContent = `${v}%`;
+        const scaled = v / 100;
+        store.updateSettings({ musicVolume: scaled });
+        bgm.setVolume(scaled);
+      };
+    }
     hapticsInput.checked = s.hapticsEnabled !== false;
     shakeInput.checked = s.screenShakeEnabled !== false;
     sounds.setVolume(s.sfxVolume ?? 0.8);
+    bgm.setVolume(mVol);
+    bgm.setMuted(sounds.muted);
     haptics.setEnabled(s.hapticsEnabled !== false);
 
     volInput.oninput = (e) => {
@@ -512,26 +592,33 @@ export class Reel {
     if (btnAdminPrestige) btnAdminPrestige.onclick = () => this.adminPromoteCurrentGame();
     const btnAdminUnlockWorld = $('#btnAdminUnlockWorld');
     if (btnAdminUnlockWorld) btnAdminUnlockWorld.onclick = () => this.adminToggleWorld1();
+    const btnAdminEndingComic = $('#btnAdminEndingComic');
+    if (btnAdminEndingComic) {
+      btnAdminEndingComic.onclick = () => {
+        this._pendingBossUnlockModal = null;
+        this.closeAdminModal();
+        this.openEndingComic({ lockUntilComplete: false });
+      };
+    }
 
-    // Share Card controls (TICKET-05)
-    const btnShareRun = $('#btnShareRun');
-    if (btnShareRun) {
-      btnShareRun.onclick = () => {
-        const unlocked = this.getUnlockedIndices();
-        this.openShareModal({
-          type: 'standard',
-          score: store.meta.global,
-          cycle: store.meta.cycle,
-          unlockedCount: unlocked.length,
-          games: unlocked.map((idx) => {
-            const g = GAMES[idx];
-            return {
-              icon: g.meta.icon,
-              title: g.meta.title,
-              state: store.isEliminated(g.meta.id) ? 'eliminated' : 'alive',
-            };
-          }),
-        });
+    const summaryBeanBtn = $('#summaryBeanBtn');
+    if (summaryBeanBtn) {
+      summaryBeanBtn.onclick = () => {
+        sounds.init();
+        sounds.bubble();
+        haptics.light();
+        this.summaryScene?.triggerBounce();
+      };
+    }
+    const btnSummaryPlaza = $('#btnSummaryPlaza');
+    if (btnSummaryPlaza) {
+      btnSummaryPlaza.onclick = () => {
+        this.hideSummary();
+        this._resetToMenuSurface();
+        $('#menu')?.classList.remove('hidden');
+        $('#btnPlay')?.classList.remove('hidden');
+        this.startHomeBeanPreview();
+        sounds.whoosh();
       };
     }
     const btnShareClose = $('#btnShareClose');
@@ -624,6 +711,9 @@ export class Reel {
           return;
         } else if (!$('#questsModal')?.classList.contains('hidden')) {
           this.closeQuestsModal();
+          return;
+        } else if (!$('#comicsModal')?.classList.contains('hidden')) {
+          this.closeComicsModal();
           return;
         } else if (!$('#settingsModal').classList.contains('hidden')) {
           this.closeSettings();
@@ -794,7 +884,7 @@ export class Reel {
     $('#menu')?.classList.add('hidden');
     $('#worldMapOverlay')?.classList.add('hidden');
     $('#questsModal')?.classList.add('hidden');
-    $('#summary')?.classList.add('hidden');
+    this.hideSummary();
     $('#hud')?.classList.remove('hidden');
     this.stopHomeBeanPreview();
     this.worldMapScene?.stop();
@@ -896,6 +986,7 @@ export class Reel {
     const pillEl = $('#riwPill');
     const gameEl = $('#riwGame');
     const cueEl = $('#riwCue');
+    const gestureEl = $('#riwGesture');
     const subEl = $('#riwSub');
     const deltasEl = $('#riwDeltas');
 
@@ -921,6 +1012,22 @@ export class Reel {
 
     if (cueEl) {
       cueEl.textContent = isPrestigeUp ? wrap.prestigeCue : wrap.cue;
+    }
+
+    if (gestureEl) {
+      if (!isPrestigeUp && wrap.hint) {
+        const h = wrap.hint.toLowerCase();
+        let g = '👆 TAP OR DRAG';
+        if (h.includes('swipe')) g = '👆 SWIPE TO MOVE';
+        else if (h.includes('draw')) g = '✏️ DRAW SHIELD LINE';
+        else if (h.includes('drag') && h.includes('release')) g = '👆 DRAG & RELEASE';
+        else if (h.includes('drag')) g = '👆 TOUCH & DRAG';
+        else if (h.includes('hold')) g = '👆 HOLD & STEER';
+        else if (h.includes('tap')) g = '👆 TAP TO ACT';
+        gestureEl.textContent = g;
+      } else {
+        gestureEl.textContent = '';
+      }
     }
 
     if (subEl) {
@@ -995,7 +1102,7 @@ export class Reel {
     $('#menu')?.classList.add('hidden');
     $('#worldMapOverlay')?.classList.add('hidden');
     $('#questsModal')?.classList.add('hidden');
-    $('#summary')?.classList.add('hidden');
+    this.hideSummary();
     this.stopHomeBeanPreview();
     this.worldMapScene?.stop();
     $('#hud')?.classList.remove('hidden');
@@ -1053,6 +1160,8 @@ export class Reel {
     this.lastSecs = -1;
     this.lastScoreShown = -1;
     this.stage.classList.remove('urgent');
+    bgm.setDucked(false);
+    bgm.setTheme(G.meta.id === 'citadel-siege' ? 'boss' : 'arcade', { prestige, urgent: false });
 
     const infoTitle = $('#infoTitle');
     if (infoTitle) infoTitle.textContent = `${G.meta.icon}  ${G.meta.title}`;
@@ -1365,30 +1474,46 @@ export class Reel {
     this.renderPips();
   }
 
+  hideSummary() {
+    this.summaryScene?.stop();
+    $('#summary')?.classList.add('hidden');
+  }
+
+  _renderSummaryStars(starsEarned = 0) {
+    const el = $('#swbStars');
+    if (!el) return;
+    el.innerHTML = [0, 1, 2].map((idx) => {
+      const lit = idx < starsEarned;
+      const fill = lit ? '#facc15' : '#cbd5e1';
+      const gloss = lit ? '#fef08a' : '#e2e8f0';
+      return `<svg class="swc-star ${lit ? 'is-lit' : ''}" viewBox="0 0 32 32" aria-hidden="true">
+        <polygon points="16,2 20.5,11 30.5,12.4 23.2,19.4 25,29.5 16,24.6 7,29.5 8.8,19.4 1.5,12.4 11.5,11" fill="${fill}" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
+        <polygon points="16,4.8 18.8,11.6 11.6,13.1" fill="${gloss}"/>
+      </svg>`;
+    }).join('');
+  }
+
   showRunOver(opts = {}) {
     this.mode = 'summary';
     this._pendingBossVictory = null;
     this.destroyGame();
+    $('#hud')?.classList.add('hidden');
+    this.stage?.classList.remove('urgent');
 
     const totalScore = store.meta.global;
     const cycles = store.meta.cycle;
 
     store.recordRunProgress(cycles, totalScore);
-    const unlocked = this.getUnlockedIndices();
-    const chipsEl = $('#sumChips');
-    chipsEl.innerHTML = unlocked.map((i) => {
-      const g = GAMES[i];
-      const cls = opts?.bossVictory ? 'chip cleared' : 'chip eliminated';
-      const stTxt = opts?.bossVictory ? 'Vanquished!' : 'Eliminated';
-      return `<div class="${cls}" data-i="${i}" title="${g.meta.title} (${stTxt})">${g.meta.icon}</div>`;
-    }).join('');
-    chipsEl.onclick = null;
 
+    const summaryEl = $('#summary');
+    const starsEl = $('#swbStars');
     const worldBox = $('#summaryWorldBox');
-    const retryWorldBtn = $('#btnRetryWorldNode');
     const btnNext = $('#btnNext');
-    const footEl = $('#sumFoot');
+    const plazaBtn = $('#btnSummaryPlaza');
+    const scoreEl = $('#sumScore');
+    if (scoreEl) scoreEl.textContent = totalScore.toLocaleString();
 
+    const unlocked = this.getUnlockedIndices();
     let worldRes = null;
     if (this.runType === 'world') {
       const wRes = store.recordWorldRunResult(this.activeWorldNodeId, totalScore, opts);
@@ -1400,37 +1525,31 @@ export class Reel {
         sounds.up();
         haptics.success();
         this.flash('ok');
+        bgm.setTheme('summary');
       } else {
         sounds.fail();
         haptics.fail();
         this.flash('fail');
+        bgm.setTheme('plaza');
       }
+      bgm.setDucked(false);
 
-      $('#sumEyebrow').textContent = wRes.clearedNow
-        ? (wRes.node.isBoss ? 'LORD BRIM DEFEATED! 👑' : 'STAGE CLEARED! ⭐')
-        : (wRes.node.isBoss ? 'DEFEATED BY LORD BRIM 💀' : 'RUN ENDED');
-      $('#sumTitle').textContent = `${wRes.node.code} · ${wRes.node.title}`;
-      $('#sumMult').textContent = `×${this.getRunMultiplier().toFixed(2)}`;
-      $('#sumSub').textContent = wRes.node.isBoss && wRes.clearedNow
-        ? `Citadel Victory · ${opts.heartsRemaining ?? 1}/${opts.maxHearts ?? 5} ♥ Remaining`
-        : `Run Score: ${totalScore.toLocaleString()} PTS · Cycle ${cycles}`;
+      summaryEl?.classList.toggle('is-cleared', Boolean(wRes.clearedNow));
+      $('#sumEyebrow').textContent = `${wRes.node.code} · ${wRes.node.title}`;
+      $('#sumTitle').textContent = wRes.clearedNow
+        ? (wRes.node.isBoss ? 'BOSS CRUSHED!' : 'STAGE CLEARED!')
+        : (wRes.node.isBoss ? 'SO CLOSE!' : 'RUN ENDED!');
+      $('#sumSub').textContent = wRes.node.isBoss
+        ? (wRes.clearedNow
+          ? `${opts.heartsRemaining ?? 1}/${opts.maxHearts ?? 5} ♥ Remaining`
+          : 'Defeat Lord Brim to clear!')
+        : `Goal: ${wRes.node.clearScore.toLocaleString()} PTS`;
+
+      starsEl?.classList.remove('hidden');
+      this._renderSummaryStars(wRes.starsEarned);
 
       if (worldBox) {
         worldBox.classList.remove('hidden');
-        const setTxt = (sel, txt) => {
-          const el = $(sel);
-          if (el) el.textContent = txt;
-        };
-        setTxt('#swbNodeTitle', `${wRes.node.code} · ${wRes.node.title.toUpperCase()}`);
-        setTxt(
-          '#swbNodeGoal',
-          wRes.node.isBoss
-            ? (wRes.clearedNow
-              ? `BOSS VANQUISHED! (${opts.heartsRemaining ?? 1}/${opts.maxHearts ?? 5} ♥)`
-              : `CITADEL STANDS (${totalScore.toLocaleString()} PTS)`)
-            : `${totalScore.toLocaleString()} / ${wRes.node.clearScore.toLocaleString()} PTS`,
-        );
-        setTxt('#swbStars', `${'★'.repeat(wRes.starsEarned)}${'☆'.repeat(3 - wRes.starsEarned)}`);
         const fill = $('#swbBarFill');
         if (fill) {
           fill.style.width = wRes.node.isBoss
@@ -1439,81 +1558,79 @@ export class Reel {
         }
         const bannerEl = $('#swbUnlockBanner');
         if (bannerEl) {
+          bannerEl.classList.remove('hidden');
           if (wRes.nextUnlockedNode) {
-            bannerEl.classList.remove('hidden');
-            const nextDesc = wRes.nextUnlockedNode.isBoss ? 'FINAL BOSS' : `${wRes.nextUnlockedNode.gameIds.length} REELS`;
-            bannerEl.textContent = `🔓 ${wRes.nextUnlockedNode.code} ${wRes.nextUnlockedNode.title.toUpperCase()} (${nextDesc}) UNLOCKED! +${wRes.firstClearBonusRP.toLocaleString()} RP`;
+            bannerEl.textContent = `🔓 ${wRes.nextUnlockedNode.code} ${wRes.nextUnlockedNode.title.toUpperCase()} UNLOCKED!`;
           } else if (wRes.world2JustUnlocked || (wRes.node.isBoss && wRes.clearedNow)) {
-            bannerEl.classList.remove('hidden');
-            bannerEl.textContent = wRes.world2JustUnlocked
-              ? `👑 LORD BRIM DEFEATED! ENDLESS MODE UNLOCKED! +${wRes.firstClearBonusRP.toLocaleString()} BONUS RP!`
-              : '👑 WORLD 2 PORTAL & ENDLESS MODE STAND READY!';
-          } else if (wRes.clearedNow && wRes.nextNode) {
-            bannerEl.classList.remove('hidden');
-            const nextDesc = wRes.nextNode.isBoss ? 'FINAL BOSS' : `${wRes.nextNode.gameIds.length} REELS`;
-            bannerEl.textContent = `✓ STAGE CLEARED · NEXT UP: ${wRes.nextNode.code} ${wRes.nextNode.title.toUpperCase()} (${nextDesc})`;
-          } else if (!wRes.clearedNow) {
-            bannerEl.classList.remove('hidden');
-            if (wRes.node.isBoss) {
-              bannerEl.textContent = "Shatter Lord Brim's Citadel to awaken the World 2 Portal!";
-            } else {
-              const need = Math.max(0, wRes.node.clearScore - totalScore);
-              bannerEl.textContent = `Need ${need.toLocaleString()} more PTS in one run to unlock next node!`;
-            }
+            bannerEl.textContent = '👑 ENDLESS MODE UNLOCKED!';
+          } else if (wRes.clearedNow) {
+            bannerEl.textContent = '★ STAGE CLEARED! ★';
+          } else if (wRes.node.isBoss) {
+            bannerEl.textContent = "SMASH LORD BRIM'S CITADEL!";
           } else {
-            bannerEl.classList.add('hidden');
+            const need = Math.max(0, wRes.node.clearScore - totalScore);
+            bannerEl.textContent = `${need.toLocaleString()} PTS TO CLEAR`;
+          }
+        }
+        const comicNoticeBtn = $('#sumComicNoticeBtn');
+        if (comicNoticeBtn) {
+          const unlockedComic = wRes.unlockedComicId
+            ? COMIC_COLLECTIBLES.find((c) => c.id === wRes.unlockedComicId)
+            : null;
+          const showNotice = Boolean(unlockedComic && !store.collectibles.seenComics?.[unlockedComic.id]);
+          comicNoticeBtn.classList.toggle('hidden', !showNotice);
+          if (showNotice) {
+            comicNoticeBtn.textContent = `📖 NEW COMIC: ${unlockedComic.issueNumber} — TAP TO READ!`;
+            comicNoticeBtn.onclick = () => this.openComicById(unlockedComic.id, { returnToComics: false });
+          } else {
+            comicNoticeBtn.onclick = null;
           }
         }
       }
 
-      if (footEl) {
-        footEl.textContent = wRes.clearedNow
-          ? 'Awesome run! Head back to the World 1 Map to walk forward.'
-          : (wRes.node.isBoss
-            ? 'Forge Scrap on the Anvil to build Ammo & Castle Walls, then crush Lord Brim!'
-            : 'Survive longer and build your Prestige multiplier to clear this node!');
-      }
-
       btnNext.textContent = '🗺️ WORLD 1 MAP';
       btnNext.onclick = () => {
-        $('#summary').classList.add('hidden');
+        this.hideSummary();
         this.openWorldMap();
       };
-      if (retryWorldBtn) {
-        retryWorldBtn.classList.remove('hidden');
-        retryWorldBtn.textContent = `🔄 RETRY ${wRes.node.code}`;
-        retryWorldBtn.onclick = () => {
-          $('#summary').classList.add('hidden');
-          this.startWorldRun(wRes.node.id);
-        };
-      }
+      plazaBtn?.classList.add('hidden');
     } else {
       sounds.fail();
       haptics.fail();
       this.flash('fail');
       this.renderProfileUI();
 
+      summaryEl?.classList.remove('is-cleared');
+      starsEl?.classList.add('hidden');
       if (worldBox) worldBox.classList.add('hidden');
-      if (retryWorldBtn) retryWorldBtn.classList.add('hidden');
+      $('#sumComicNoticeBtn')?.classList.add('hidden');
 
-      $('#sumEyebrow').textContent = 'GAUNTLET TERMINATED';
-      $('#sumTitle').textContent = 'All Games Eliminated!';
-      $('#sumMult').textContent = `CYCLE ${cycles}`;
-      $('#sumSub').textContent = `Total Score: ${totalScore.toLocaleString()} PTS · All ${unlocked.length} active games succumbed!`;
-      if (footEl) footEl.textContent = `All ${unlocked.length} active games succumbed to the gauntlet. Can you survive longer next run?`;
+      $('#sumEyebrow').textContent = 'ENDLESS GAUNTLET';
+      $('#sumTitle').textContent = 'RUN COMPLETE!';
+      $('#sumSub').textContent = `Cycle ${cycles} · ${unlocked.length} Reels`;
 
-      btnNext.textContent = 'START NEW RUN 🔄';
+      btnNext.textContent = '▶ PLAY AGAIN';
       btnNext.onclick = () => {
-        $('#summary').classList.add('hidden');
+        this.hideSummary();
         this.startRun(false);
       };
+      plazaBtn?.classList.remove('hidden');
     }
 
     this.renderPlazaUI();
-    $('#summary').classList.remove('hidden');
+    summaryEl?.classList.remove('hidden');
+    this.summaryScene?.start({
+      cleared: Boolean(worldRes?.clearedNow),
+      isBoss: Boolean(worldRes?.node?.isBoss),
+      stars: worldRes?.starsEarned || 0,
+    });
     this.lastScoreShown = -1;
 
-    if (this.runType === 'world' && worldRes && (worldRes.nextUnlockedNode || worldRes.world2JustUnlocked)) {
+    const isBossClear = this.runType === 'world' && Boolean(worldRes?.node?.isBoss && worldRes?.clearedNow);
+    if (isBossClear) {
+      this._pendingBossUnlockModal = (worldRes.world2JustUnlocked || worldRes.comicJustUnlocked) ? worldRes : null;
+      this.openEndingComic({ lockUntilComplete: false });
+    } else if (this.runType === 'world' && worldRes && (worldRes.nextUnlockedNode || worldRes.world2JustUnlocked || worldRes.comicJustUnlocked)) {
       this.openStageUnlockModal(worldRes);
     }
   }
@@ -1530,6 +1647,19 @@ export class Reel {
       if (el) el.innerHTML = html;
     };
 
+    const onMapAlready = !$('#worldMapOverlay')?.classList.contains('hidden');
+    const goMapBtn = $('#btnStageUnlockGoMap');
+    const stayBtn = $('#btnStageUnlockStay');
+    if (goMapBtn) goMapBtn.textContent = onMapAlready ? 'AWESOME! ✓' : '🗺️ OPEN WORLD 1 MAP ▶';
+    if (stayBtn) {
+      stayBtn.textContent = 'VIEW SUMMARY ✓';
+      stayBtn.classList.toggle('hidden', onMapAlready);
+    }
+
+    const comic = wRes.unlockedComicId
+      ? COMIC_COLLECTIBLES.find((c) => c.id === wRes.unlockedComicId)
+      : null;
+
     if (wRes.nextUnlockedNode) {
       const next = wRes.nextUnlockedNode;
       const nextDesc = next.isBoss ? 'FINAL BOSS' : `${next.gameIds.length} Reels`;
@@ -1538,12 +1668,13 @@ export class Reel {
       setTxt('#stageUnlockMsg', `You crushed ${wRes.node.code} with ${wRes.score.toLocaleString()} PTS and unlocked ${next.code} on the World 1 Map!`);
       setTxt('#stageUnlockIcon', next.icon || '🗺️');
       setHtml('#stageUnlockReels', `<em>${next.subtitle || `${next.title} · ${nextDesc}`}</em> — ready to play!`);
-      setHtml(
-        '#stageUnlockBonus',
-        wRes.firstClearBonusRP > 0
-          ? `<em>+${wRes.firstClearBonusRP.toLocaleString()} First-Clear Bonus RP</em> added to your rank!`
-          : `<em>${'★'.repeat(wRes.starsEarned)} Earned</em> — head to the map to walk forward!`,
-      );
+      const bonusHtml = wRes.firstClearBonusRP > 0
+        ? `<em>+${wRes.firstClearBonusRP.toLocaleString()} First-Clear Bonus RP</em> added to your rank!`
+        : `<em>${'★'.repeat(wRes.starsEarned)} Earned</em> — head to the map to walk forward!`;
+      const unlockComicNote = comic
+        ? `<br/>📖 <em>${comic.issueNumber} "${comic.title}"</em> added to Comics Collectables!`
+        : '';
+      setHtml('#stageUnlockBonus', `${bonusHtml}${unlockComicNote}`);
     } else if (wRes.world2JustUnlocked) {
       setTxt('#stageUnlockEyebrow', 'LORD BRIM VANQUISHED! 👑');
       setTxt('#stageUnlockTitle', 'ENDLESS MODE UNLOCKED!');
@@ -1553,13 +1684,42 @@ export class Reel {
       setHtml(
         '#stageUnlockBonus',
         wRes.firstClearBonusRP > 0
-          ? `<em>+${wRes.firstClearBonusRP.toLocaleString()} First-Clear Bonus RP</em> added to your Crown Rank!`
-          : '<em>World 1 Conquered!</em> Endless Mode is live on the Plaza.',
+          ? `<em>+${wRes.firstClearBonusRP.toLocaleString()} First-Clear Bonus RP</em> &amp; <strong>Issue #07 Ending Comic</strong> added to Collectables!`
+          : '<em>World 1 Conquered!</em> Endless Mode &amp; Issue #07 Ending Comic unlocked in Collectables!',
       );
+    } else if (comic) {
+      setTxt('#stageUnlockEyebrow', 'NEW COMIC UNLOCKED! 📖');
+      setTxt('#stageUnlockTitle', `${comic.issueNumber} · ${comic.title}`);
+      setTxt('#stageUnlockMsg', `You cleared ${wRes.node.code} with ${wRes.score.toLocaleString()} PTS and unlocked a brand-new Collectables comic!`);
+      setTxt('#stageUnlockIcon', '📖');
+      setHtml('#stageUnlockReels', `<em>${comic.panelCountLabel}</em> — added to your Comics shelf!`);
+      setHtml('#stageUnlockBonus', `<em>${'★'.repeat(Math.max(1, wRes.starsEarned))} Earned</em> on ${wRes.node.code} · ${wRes.node.title}!`);
+    }
+
+    const comicCard = $('#stageUnlockComicCard');
+    if (comicCard) {
+      comicCard.classList.toggle('hidden', !comic);
+      if (comic) {
+        const coverEl = $('#stageUnlockComicCover');
+        if (coverEl) {
+          coverEl.src = comic.cover;
+          coverEl.alt = `${comic.issueNumber} cover`;
+        }
+        setTxt('#stageUnlockComicTitle', `${comic.issueNumber} · ${comic.title}`);
+        setTxt('#stageUnlockComicDesc', comic.description);
+        const readBtn = $('#btnStageUnlockReadComic');
+        if (readBtn) {
+          readBtn.onclick = () => {
+            this.closeStageUnlockModal({ skipSound: true });
+            this.openComicById(comic.id, { returnToComics: false });
+          };
+        }
+      }
     }
 
     modal.classList.remove('hidden');
-    sounds.up();
+    if (comic) sounds.comicUnlock();
+    else sounds.up();
     haptics.success();
   }
 
@@ -1574,7 +1734,7 @@ export class Reel {
 
   nextCycle() {
     sounds.init();
-    $('#summary').classList.add('hidden');
+    this.hideSummary();
     store.meta.cycle += 1;
     store.meta.cycleBase = 0;
     store.recordRunProgress(store.meta.cycle, store.meta.global);
@@ -1596,6 +1756,7 @@ export class Reel {
     const G = this.getCurrentGameClass();
     if (!G) return;
     this.mode = 'paused';
+    bgm.setDucked(true);
     sounds.whoosh();
     haptics.light();
 
@@ -1619,6 +1780,7 @@ export class Reel {
     $('#settingsModal').classList.add('hidden');
     this.mode = 'playing';
     this.last = performance.now();
+    bgm.setDucked(false);
     sounds.whoosh();
     haptics.light();
   }
@@ -1632,6 +1794,7 @@ export class Reel {
       $('#btnAbandon').classList.add('hidden');
     }
     sounds.init();
+    $('#settingEndingRow')?.classList.toggle('hidden', !(store.isComicUnlocked('ending_comic') || this.adminMode));
     $('#settingsModal').classList.remove('hidden');
     sounds.whoosh();
     haptics.light();
@@ -1657,6 +1820,8 @@ export class Reel {
     $('#hud').classList.add('hidden');
     $('#welcome').classList.remove('show');
     this.stage.classList.remove('urgent');
+    bgm.setDucked(false);
+    bgm.setTheme('plaza');
     this.buildMenuIcons();
     this.renderProfileUI();
   }
@@ -1826,6 +1991,38 @@ export class Reel {
     haptics.light();
   }
 
+  openEndingComic({ lockUntilComplete = false } = {}) {
+    sounds.init();
+    store.markComicSeen('ending_comic');
+    this.syncComicNotices();
+    this.storyComic.open({ scope: 'ending', lockUntilComplete });
+    sounds.whoosh();
+    haptics.light();
+  }
+
+  openComicById(comicId, { returnToComics = false } = {}) {
+    const comic = COMIC_COLLECTIBLES.find((c) => c.id === comicId);
+    if (!comic) return;
+    store.markComicSeen(comic.id);
+    this.syncComicNotices();
+    this._pendingBossUnlockModal = null;
+    this._returnToComicsAfterComic = Boolean(returnToComics);
+    if (comic.scope === 'ending') {
+      this.openEndingComic({ lockUntilComplete: false });
+    } else {
+      this.openHowTo({ scope: comic.scope || 'story', lockUntilComplete: false });
+    }
+  }
+
+  syncComicNotices() {
+    const hasUnseen = store.hasUnseenComics();
+    $('#plazaComicsDot')?.classList.toggle('hidden', !hasUnseen);
+    $('#worldComicsDot')?.classList.toggle('hidden', !hasUnseen);
+    if (!hasUnseen) {
+      $('#sumComicNoticeBtn')?.classList.add('hidden');
+    }
+  }
+
   closeHowTo({ skipSound = false } = {}) {
     $('#howToModal')?.classList.add('hidden');
     if (!skipSound) sounds.whoosh();
@@ -1890,15 +2087,19 @@ export class Reel {
       const readyCount = store.getClaimableQuestCount();
       qDot.classList.toggle('hidden', readyCount === 0);
     }
+
+    this.syncComicNotices();
   }
 
   openWorldMap() {
     sounds.init();
     sounds.whoosh();
     haptics.light();
+    bgm.setDucked(false);
+    bgm.setTheme('plaza');
     this.activeWorldNodeId = store.worlds.selectedNodeId || '1-1';
     $('#menu')?.classList.add('hidden');
-    $('#summary')?.classList.add('hidden');
+    this.hideSummary();
     $('#questsModal')?.classList.add('hidden');
     this.stopHomeBeanPreview();
     $('#worldMapOverlay')?.classList.remove('hidden');
@@ -1987,6 +2188,8 @@ export class Reel {
       const readyCount = store.getClaimableQuestCount();
       wqDot.classList.toggle('hidden', readyCount === 0);
     }
+
+    this.syncComicNotices();
 
     setTxt('#wmSelCode', curNode.code);
     setTxt('#wmSelTitle', curNode.title);
@@ -2144,6 +2347,93 @@ export class Reel {
     }
   }
 
+  /* ----------------------------------------------------------- Collectables · Comics Section */
+  openComicsModal({ skipMarkSeen = false } = {}) {
+    sounds.init();
+    const catalogBeforeSeen = store.getComicsCatalog();
+    const highlightNewIds = new Set(catalogBeforeSeen.filter((c) => c.isNew).map((c) => c.id));
+    if (!skipMarkSeen && highlightNewIds.size > 0) {
+      store.markComicsViewed();
+      this.syncComicNotices();
+    }
+    const doneBtn = $('#btnComicsDone');
+    if (doneBtn) {
+      const onMap = !$('#worldMapOverlay')?.classList.contains('hidden');
+      doneBtn.textContent = onMap ? 'BACK TO MAP ✓' : 'BACK TO PLAZA ✓';
+    }
+    this.renderComicsModal(highlightNewIds);
+    $('#comicsModal')?.classList.remove('hidden');
+    sounds.whoosh();
+    haptics.light();
+  }
+
+  closeComicsModal({ skipSound = false } = {}) {
+    $('#comicsModal')?.classList.add('hidden');
+    this.syncComicNotices();
+    if (!skipSound) sounds.whoosh();
+  }
+
+  renderComicsModal(highlightNewIds = null) {
+    const catalog = store.getComicsCatalog();
+    const unlockedCount = store.getUnlockedComicsCount();
+    const totalCount = catalog.length;
+
+    const countEl = $('#comicsCollectedCount');
+    if (countEl) {
+      const allDone = unlockedCount >= totalCount;
+      countEl.textContent = allDone ? `${unlockedCount} / ${totalCount} COMPLETE! 👑` : `${unlockedCount} / ${totalCount} COLLECTED`;
+      countEl.classList.toggle('complete', allDone);
+    }
+
+    const listEl = $('#comicsShelfList');
+    if (!listEl) return;
+
+    listEl.innerHTML = catalog.map((c) => {
+      const isNew = highlightNewIds ? highlightNewIds.has(c.id) : c.isNew;
+      const cls = c.unlocked ? (isNew ? 'is-new' : 'is-unlocked') : 'is-locked';
+      const statusText = !c.unlocked ? 'LOCKED 🔒' : isNew ? 'NEW UNLOCK ✨' : 'UNLOCKED ✓';
+      const descText = c.unlocked ? c.description : (c.lockedDescription || c.unlockHint);
+      const btnText = c.unlocked ? 'READ COMIC ▶' : '🔒 LOCKED';
+      return `
+        <article class="comic-issue-card ${cls}" data-comic-id="${c.id}">
+          <div class="cic-cover-wrap">
+            <img class="cic-cover-img" src="${c.cover}" alt="${c.unlocked ? c.title : 'Locked Comic Cover'}" />
+            ${!c.unlocked ? '<div class="cic-lock-badge" aria-hidden="true">🔒</div>' : ''}
+            ${c.unlocked && isNew ? '<span class="cic-new-badge">NEW!</span>' : ''}
+          </div>
+          <div class="cic-body">
+            <div>
+              <div class="cic-meta-row">
+                <span class="cic-issue-tag">${c.issueNumber} · ${c.tag}</span>
+                <span class="cic-status-pill">${statusText}</span>
+              </div>
+              <div class="cic-title">${c.title}</div>
+              <div class="cic-desc">${descText}</div>
+            </div>
+            <div class="cic-footer">
+              <span class="cic-panels-lbl">${c.panelCountLabel}</span>
+              <button type="button" class="cic-read-btn ${c.unlocked ? '' : 'locked'}" data-comic-read="${c.id}">${btnText}</button>
+            </div>
+          </div>
+        </article>`;
+    }).join('');
+
+    listEl.querySelectorAll('[data-comic-id]').forEach((cardEl) => {
+      cardEl.onclick = () => {
+        const comic = catalog.find((item) => item.id === cardEl.dataset.comicId);
+        if (!comic) return;
+        if (!comic.unlocked) {
+          sounds.fail();
+          haptics.medium();
+          this.banner('COMIC LOCKED 🔒', comic.lockedDescription || comic.unlockHint, 'fail');
+          return;
+        }
+        this.closeComicsModal({ skipSound: true });
+        this.openComicById(comic.id, { returnToComics: true });
+      };
+    });
+  }
+
   startWorldRun(nodeId = this.activeWorldNodeId) {
     const node = getWorldNodeById(nodeId || store.worlds.selectedNodeId || '1-1');
     if (!store.isNodeUnlocked(node.id)) {
@@ -2168,7 +2458,7 @@ export class Reel {
     $('#menu')?.classList.add('hidden');
     $('#worldMapOverlay')?.classList.add('hidden');
     $('#questsModal')?.classList.add('hidden');
-    $('#summary')?.classList.add('hidden');
+    this.hideSummary();
     this.stopHomeBeanPreview();
     this.worldMapScene?.stop();
     $('#hud')?.classList.remove('hidden');
@@ -2269,9 +2559,12 @@ export class Reel {
     if (secs !== this.lastSecs) {
       this.lastSecs = secs;
       $('#time').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+      if (secs <= 10 && secs > 0) {
+        bgm.setUrgent(true);
+      }
       if (secs <= 5 && secs > 0) {
         this.stage.classList.add('urgent');
-        sounds.tick();
+        sounds.tick(secs);
         haptics.light();
       }
     }
@@ -2518,6 +2811,18 @@ export class Reel {
       store.worlds.nodes = { '1-1': { unlocked: true, cleared: false, stars: 0, bestScore: 0 } };
       store.worlds.selectedNodeId = '1-1';
       store.worlds.world2Unlocked = false;
+      store.collectibles.unlockedComics.pub_call_comic = false;
+      store.collectibles.seenComics.pub_call_comic = false;
+      store.collectibles.unlockedComics.queen_40th_comic = false;
+      store.collectibles.seenComics.queen_40th_comic = false;
+      store.collectibles.unlockedComics.klarna_pizza_comic = false;
+      store.collectibles.seenComics.klarna_pizza_comic = false;
+      store.collectibles.unlockedComics.asbo_prep_comic = false;
+      store.collectibles.seenComics.asbo_prep_comic = false;
+      store.collectibles.unlockedComics.karate_pickup_comic = false;
+      store.collectibles.seenComics.karate_pickup_comic = false;
+      store.collectibles.unlockedComics.ending_comic = false;
+      store.collectibles.seenComics.ending_comic = false;
     } else {
       for (const n of WORLD_1_NODES) {
         const cur = store.worlds.nodes[n.id] || {};
@@ -2529,6 +2834,11 @@ export class Reel {
         };
       }
       store.worlds.world2Unlocked = Boolean(store.worlds.nodes['1-6']?.cleared);
+      store.unlockComic('pub_call_comic');
+      store.unlockComic('queen_40th_comic');
+      store.unlockComic('klarna_pizza_comic');
+      store.unlockComic('asbo_prep_comic');
+      store.unlockComic('karate_pickup_comic');
     }
     store.save();
     this.renderPlazaUI();

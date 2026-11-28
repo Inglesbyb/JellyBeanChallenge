@@ -559,7 +559,7 @@ export class SaveTheBean extends Game {
         if (this.points.length === 0) {
           // First point
           this.points.push({ x: mx, y: my });
-          this.sounds.tone({ f: 480, to: 620, dur: 0.05, vol: 0.08 });
+          this.sounds.scribble();
         } else {
           const last = this.points[this.points.length - 1];
           const d = Math.hypot(mx - last.x, my - last.y);
@@ -578,7 +578,7 @@ export class SaveTheBean extends Game {
               this.inkUsed += d;
               // Occasional scratch sound & ink dust
               if (Math.random() < 0.25) {
-                this.sounds.noise({ dur: 0.03, from: 2200, to: 800, vol: 0.06 });
+                this.sounds.scribble();
                 this.fx.burst(mx, my, '#2b2d42', 2, 30, 0.2, 1.8);
               }
             }

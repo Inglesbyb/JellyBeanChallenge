@@ -30,14 +30,14 @@ const SLING = { x: 108, y: 502 };
 const GRAVITY = 780;
 
 const AMMO_META = {
-  boulder: { id: 'boulder', label: 'ROCK', cost: 8, r: 16, dmg: 50, color: '#94a3b8', accent: '#f8fafc', tip: 'TAP MID-AIR: METEOR SLAM!' },
+  boulder: { id: 'boulder', label: 'ROCK', cost: 10, r: 16, dmg: 50, color: '#94a3b8', accent: '#f8fafc', tip: 'TAP MID-AIR: METEOR SLAM!' },
 };
 
 const MAT_STYLE = {
   wood:     { fill: '#d97706', rim: '#fbbf24', grain: '#92400e', hp: 65 },
   glass:    { fill: '#38bdf8', rim: '#bae6fd', grain: '#0284c7', hp: 28 },
-  stone:    { fill: '#64748b', rim: '#cbd5e1', grain: '#334155', hp: 140 },
-  obsidian: { fill: '#312e81', rim: '#818cf8', grain: '#1e1b4b', hp: 195 },
+  stone:    { fill: '#64748b', rim: '#cbd5e1', grain: '#334155', hp: 160 },
+  obsidian: { fill: '#312e81', rim: '#818cf8', grain: '#1e1b4b', hp: 220 },
   spire:    { fill: '#6d28d9', rim: '#fde047', grain: '#4c1d95', hp: 72 },
   tnt:      { fill: '#ef4444', rim: '#fde047', grain: '#991b1b', hp: 14 },
   crate:    { fill: '#f59e0b', rim: '#fef08a', grain: '#78350f', hp: 24 },
@@ -85,7 +85,7 @@ export class CitadelSiegeBoss extends Game {
     this.freezeTimer = true;
 
     // SINGLE UNIFIED RESOURCE: SCRAP!
-    this.scrap = 30;
+    this.scrap = 24;
     this.hearts = 5;
     this.maxHearts = 5;
     this.playerHurtT = 0;
@@ -259,7 +259,7 @@ export class CitadelSiegeBoss extends Game {
     this.addBlock(764, G - 52, 26, 104, 'obsidian', 'pillar');
     this.addBlock(705, G - 17, 30, 34, 'tnt', 'tnt');
     this.addBlock(705, G - 116, 148, 24, 'stone', 'battlement');
-    this.addBlock(646, G - 178, 22, 100, 'glass', 'wall');
+    this.addBlock(646, G - 178, 22, 100, 'wood', 'wall');
     this.addBlock(764, G - 178, 22, 100, 'wood', 'pillar');
     this.addBlock(705, G - 239, 152, 22, 'obsidian', 'battlement');
     this.addBlock(649, G - 266, 28, 32, 'crate', 'crate');
@@ -323,7 +323,7 @@ export class CitadelSiegeBoss extends Game {
       grade = this.heatStreak >= 2 ? `WHITE-HOT x${this.heatStreak}!` : 'ANVIL STRIKE!';
       col = '#fde047';
       this.fx.shake(6, 0.2);
-      this.sounds.up?.();
+      this.sounds.anvilClang?.();
       this.haptics.heavy?.();
     } else if (backFrac <= 0.42) {
       this.heatStreak = Math.min(4, this.heatStreak + 1);
@@ -336,7 +336,7 @@ export class CitadelSiegeBoss extends Game {
       this.haptics.medium?.();
     } else {
       this.heatStreak = 0;
-      this.sounds.stack?.(0.85);
+      this.sounds.stack?.(1);
       this.haptics.light?.();
     }
 
@@ -361,7 +361,7 @@ export class CitadelSiegeBoss extends Game {
     this.ammoQueue.push(type);
     this.selectedAmmoIdx = this.ammoQueue.length - 1; // Select newly forged ammo immediately!
     this.fx.text(130, 560, `+${am.label} CRAFTED!`, am.accent, 15, 0.85);
-    this.sounds.merge?.(1.15);
+    this.sounds.merge?.(1);
     this.haptics.light?.();
   }
 
@@ -693,7 +693,7 @@ export class CitadelSiegeBoss extends Game {
           s.impacts += 1;
           this.lastShotArc = s.recordedArc;
           if (h.stunT <= 0) {
-            h.stunT = 2.2;
+            h.stunT = 1.6;
             this.flyingScrap.push({ x: h.x - this.camX, y: h.y, t: 0, amount: 12 });
             this.fx.text(h.x - this.camX, h.y - 32, 'HAND DAZED! +12!', '#fde047', 16, 0.95);
             if (this.boss.phase >= 2 && s.type !== 'bomb') {
@@ -906,7 +906,7 @@ export class CitadelSiegeBoss extends Game {
 
     for (const h of this.hands) {
       if (Math.hypot(h.x - wx, h.y - wy) < rad + h.r) {
-        h.stunT = 2.2;
+        h.stunT = 1.6;
         h.flash = 1.0;
       }
     }
@@ -1015,7 +1015,7 @@ export class CitadelSiegeBoss extends Game {
 
   damageBoss(amount) {
     const b = this.boss;
-    const actual = Math.max(1, Math.round(amount * 0.8));
+    const actual = Math.max(1, Math.round(amount * 0.62));
     if (this.won || amount <= 0) return;
     b.hp = Math.max(0, b.hp - actual);
     b.hurtFlash = 1.0;
@@ -1030,14 +1030,19 @@ export class CitadelSiegeBoss extends Game {
       b.enraged2Fired = true;
       this.fx.text(sx, b.y - 82, 'PHASE 2: IRON GATE & LIGHTNING!', '#c084fc', 17, 1.3);
       this.addBlock(496, GROUND_Y - 40, 24, 80, 'obsidian', 'pillar');
-      this.imps.push({ x: b.x - 50, y: rand(265, 355), vx: -102, r: 16, bob: rand(0, TAU) });
-      this.boltCd = Math.min(this.boltCd, 2.2);
+      this.imps.push({ x: b.x - 50, y: rand(265, 355), vx: -115, r: 16, bob: rand(0, TAU) });
+      b.volleyCd = Math.min(b.volleyCd, 1.25);
+      this.boltCd = Math.min(this.boltCd, 1.8);
     }
     if (b.phase >= 3 && !b.enraged3Fired) {
       b.enraged3Fired = true;
       this.fx.text(sx, b.y - 82, 'PHASE 3: FURY OF LORD BRIM!', '#ef4444', 18, 1.3);
-      b.volleyCd = Math.min(b.volleyCd, 0.9);
-      this.boltCd = Math.min(this.boltCd, 1.1);
+      this.imps.push(
+        { x: b.x - 45, y: rand(245, 315), vx: -145, r: 16, bob: rand(0, TAU) },
+        { x: b.x - 75, y: rand(315, 375), vx: -135, r: 16, bob: rand(0, TAU) },
+      );
+      b.volleyCd = Math.min(b.volleyCd, 0.75);
+      this.boltCd = Math.min(this.boltCd, 0.95);
     }
 
     if (b.hp <= 0) {
@@ -1049,7 +1054,7 @@ export class CitadelSiegeBoss extends Game {
 
   updateBossAI(dt, scale) {
     const b = this.boss;
-    const pace = (b.phase === 1 ? 1.44 : b.phase === 2 ? 2.06 : 2.94) * scale;
+    const pace = (b.phase === 1 ? 1.62 : b.phase === 2 ? 2.38 : 3.40) * scale;
 
     // Determine clear horizontal bounds inside Keep Chamber (widen once columns break!)
     const hasLeftCol = this.blocks.some((k) => !k.dead && k.x < 658 && k.x > 634 && k.y < GROUND_Y - 110);
@@ -1059,11 +1064,11 @@ export class CitadelSiegeBoss extends Game {
 
     b.dashCd -= dt * pace;
     const incoming = this.shots.find((s) => s.x > 460 && s.vx > 60 && Math.abs(s.y - b.y) < 110);
-    if (b.dashCd <= 0 || (incoming && b.phase >= 2 && b.dashCd < 1.0)) {
+    if (b.dashCd <= 0 || (incoming && ((b.phase >= 2 && b.dashCd < 1.0) || b.dashCd < 0.35))) {
       b.patrolDir *= -1;
       const span = (maxX - minX) * 0.48;
       b.targetX = clamp((minX + maxX) * 0.5 + b.patrolDir * span + rand(-6, 6), minX, maxX);
-      b.dashCd = Math.max(0.75, 1.75 - b.phase * 0.36);
+      b.dashCd = Math.max(0.62, 1.55 - b.phase * 0.32);
       if (b.phase >= 2) b.castT = Math.max(b.castT, 0.25);
     }
     const targetX = clamp(b.targetX ?? b.baseX, minX, maxX);
@@ -1099,21 +1104,21 @@ export class CitadelSiegeBoss extends Game {
       h.z = h.oz + Math.sin(h.bob * 0.9) * 18 + (h.slamT > 0 ? 26 : 0);
     }
 
-    // Spawn Faster Balloon Imp Minions (+25% tempo!)
+    // Spawn Faster Balloon Imp Minions
     this.impSpawnT -= dt * scale;
     if (this.impSpawnT <= 0 && this.imps.length < (b.phase === 3 ? 4 : b.phase === 2 ? 3 : 2)) {
-      this.impSpawnT = b.phase >= 2 ? 3.7 : 5.1;
-      this.imps.push({ x: b.x - 60, y: rand(265, 360), vx: -98 - b.phase * 22, r: 16, bob: rand(0, TAU) });
+      this.impSpawnT = b.phase >= 2 ? 3.15 : 4.4;
+      this.imps.push({ x: b.x - 60, y: rand(265, 360), vx: -110 - b.phase * 24, r: 16, bob: rand(0, TAU) });
     }
 
-    // Phase 2+: Telegraphed Shadow Lightning Strikes ALWAYS target Defences First (+25% cadence)!
+    // Phase 2+: Telegraphed Shadow Lightning Strikes ALWAYS target Defences First
     if (b.phase >= 2) {
       this.boltCd -= dt * scale;
       if (this.boltCd <= 0) {
-        this.boltCd = b.phase === 3 ? 4.15 : 5.6;
+        this.boltCd = b.phase === 3 ? 3.5 : 4.75;
         const defTgt = this.getActiveDefenseTarget(true);
         const targetX = defTgt ? defTgt.x : SLING.x;
-        this.bolts.push({ x: targetX, warnT: 0.95, fireT: 0.35, hitApplied: false });
+        this.bolts.push({ x: targetX, warnT: 0.85, fireT: 0.35, hitApplied: false });
         this.sounds.drop?.();
       }
     }
@@ -1124,7 +1129,7 @@ export class CitadelSiegeBoss extends Game {
       this.sounds.drop?.();
     }
     if (b.volleyCd <= 0) {
-      b.volleyCd = Math.max(2.15, 4.15 - b.phase * 0.68);
+      b.volleyCd = Math.max(1.85, 3.65 - b.phase * 0.60);
       b.castT = 0.45;
       const caster = this.hands[1];
       if (caster.stunT <= 0) caster.slamT = 0.45;
@@ -1133,7 +1138,7 @@ export class CitadelSiegeBoss extends Game {
         const defTgt = this.getActiveDefenseTarget(k > 0);
         const targetX = defTgt ? defTgt.x + rand(-8, 8) : SLING.x + rand(-14, 14);
         const targetY = defTgt ? defTgt.y : GROUND_Y - 26;
-        const flightT = 0.92;
+        const flightT = b.phase >= 2 ? 0.84 : 0.90;
         const startX = caster.x - 16;
         const startY = caster.y - 10;
         const vx = (targetX - startX) / flightT;
@@ -1211,7 +1216,7 @@ export class CitadelSiegeBoss extends Game {
       const orderedRoofs = this.canopies.slice().sort((a, b) => b.x - a.x);
       for (const rf of orderedRoofs) {
         if (this.circleRectHit(imp.x, imp.y, imp.r, rf)) {
-          this.damageDefenseTarget({ isRoof: true, ref: rf }, 48, 'ROOF BLOCKED IMP!');
+          this.damageDefenseTarget({ isRoof: true, ref: rf }, 56, 'ROOF BLOCKED IMP!');
           hitRoof = true;
           break;
         }
@@ -1222,7 +1227,7 @@ export class CitadelSiegeBoss extends Game {
       const orderedWalls = this.playerBlocks.slice().sort((a, b) => b.x - a.x || a.y - b.y);
       for (const pb of orderedWalls) {
         if (this.circleRectHit(imp.x, imp.y, imp.r, pb)) {
-          this.damageDefenseTarget({ isRoof: false, ref: pb }, 48, 'IMP BLOCKED!');
+          this.damageDefenseTarget({ isRoof: false, ref: pb }, 56, 'IMP BLOCKED!');
           hitWall = true;
           break;
         }
@@ -1231,7 +1236,7 @@ export class CitadelSiegeBoss extends Game {
       if (imp.x <= SLING.x + 15) {
         this.imps.splice(i, 1);
         const remaining = this.getActiveDefenseTarget(false);
-        if (remaining) this.damageDefenseTarget(remaining, 48, 'CASTLE INTERCEPT!');
+        if (remaining) this.damageDefenseTarget(remaining, 56, 'CASTLE INTERCEPT!');
         else this.damagePlayer();
       }
     }
@@ -1248,18 +1253,18 @@ export class CitadelSiegeBoss extends Game {
           this.sounds.slice?.();
           const hitRf = this.canopies.find((c) => Math.abs(c.x - bt.x) < c.w * 0.58);
           if (hitRf) {
-            this.damageDefenseTarget({ isRoof: true, ref: hitRf }, 62, 'ROOF ABSORBED!');
+            this.damageDefenseTarget({ isRoof: true, ref: hitRf }, 72, 'ROOF ABSORBED!');
           } else {
             const topWall = this.playerBlocks
               .filter((p) => Math.abs(p.x - bt.x) < 32)
               .sort((a, b) => a.y - b.y)[0];
             if (topWall) {
-              this.damageDefenseTarget({ isRoof: false, ref: topWall }, 68, 'WALL ABSORBED!');
+              this.damageDefenseTarget({ isRoof: false, ref: topWall }, 78, 'WALL ABSORBED!');
             } else {
               const fallback = this.getActiveDefenseTarget(true);
               if (fallback) {
                 bt.x = fallback.x;
-                this.damageDefenseTarget(fallback, 65, 'CASTLE ABSORBED!');
+                this.damageDefenseTarget(fallback, 74, 'CASTLE ABSORBED!');
               } else {
                 this.damagePlayer();
               }
@@ -1296,7 +1301,7 @@ export class CitadelSiegeBoss extends Game {
         es.reflected = true;
         es.vx = rand(75, 135);
         es.vy = -rand(240, 310);
-        this.damageDefenseTarget({ isRoof: true, ref: hitRfObj }, 48, 'ROOF DEFLECTED!');
+        this.damageDefenseTarget({ isRoof: true, ref: hitRfObj }, 54, 'ROOF DEFLECTED!');
         continue;
       }
 
@@ -1304,7 +1309,7 @@ export class CitadelSiegeBoss extends Game {
       const frontOrdered = this.playerBlocks.slice().sort((a, b) => b.x - a.x || a.y - b.y);
       for (const pb of frontOrdered) {
         if (this.circleRectHit(es.x, es.y, es.r, pb)) {
-          this.damageDefenseTarget({ isRoof: false, ref: pb }, 62, 'WALL BLOCKED!');
+          this.damageDefenseTarget({ isRoof: false, ref: pb }, 70, 'WALL BLOCKED!');
           blocked = true;
           break;
         }
@@ -1315,7 +1320,7 @@ export class CitadelSiegeBoss extends Game {
         this.enemyShots.splice(i, 1);
         const remaining = this.getActiveDefenseTarget(false);
         if (remaining) {
-          this.damageDefenseTarget(remaining, 60, 'CASTLE DEFENDED!');
+          this.damageDefenseTarget(remaining, 68, 'CASTLE DEFENDED!');
         } else if (es.x < 195) {
           this.damagePlayer();
         }
@@ -2932,8 +2937,9 @@ export class CitadelSiegeBoss extends Game {
     const ammoFull = this.ammoQueue.length >= this.maxAmmo;
     const roofCount = this.canopies.length;
 
-    // Button 1: Craft Rock Boulder (`8 Scrap`)
-    const rockOk = !ammoFull && this.scrap >= 8;
+    // Button 1: Craft Rock Boulder
+    const rockCost = AMMO_META.boulder.cost;
+    const rockOk = !ammoFull && this.scrap >= rockCost;
     const rb = this.ui.buyRock;
     drawComicPanel(ctx, rb.x, rb.y, rb.w, rb.h, 10, rockOk ? '#475569' : '#1e293b', {
       stroke: rockOk ? '#facc15' : '#000000',
@@ -2946,7 +2952,7 @@ export class CitadelSiegeBoss extends Game {
       align: 'left', strokeWidth: 3,
     });
     this.drawScrapGear(ctx, rb.x + rb.w - 30, rb.y + 19, 5.8);
-    drawComicText(ctx, '8', rb.x + rb.w - 10, rb.y + 19, '900 13px Fredoka, sans-serif', rockOk ? '#facc15' : '#64748b', {
+    drawComicText(ctx, String(rockCost), rb.x + rb.w - 10, rb.y + 19, '900 13px Fredoka, sans-serif', rockOk ? '#facc15' : '#64748b', {
       align: 'right', strokeWidth: 3,
     });
 
